@@ -1,0 +1,26 @@
+@use "../../../styles/variables" as *;
+@use "../../../styles/mixins" as *;
+
+.ui-panel {
+  @include western-inset-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  &__header {
+    @include flex-between;
+    border-bottom: 1px solid $western-bg-panel;
+    padding-bottom: 4px;
+  }
+
+  &__title {
+    font-size: 11px;
+    font-weight: bold;
+    color: $western-text-gold;
+  }
+
+  &__body {
+    display: flex;
+    flex-direction: column;
+  }
+}

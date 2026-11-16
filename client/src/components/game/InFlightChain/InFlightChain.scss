@@ -1,0 +1,71 @@
+@use "../../../styles/variables" as *;
+
+@keyframes slideIntoChain {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.inflight-chain {
+  width: 100%;
+  max-width: 620px;
+  min-height: 185px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: transparent;
+  border: none;
+  padding: 4px 10px;
+  box-sizing: border-box;
+  overflow-x: auto;
+
+  &--empty {
+    min-height: 20px;
+    height: 20px;
+    padding: 0;
+    pointer-events: none;
+  }
+
+  &__fan {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 10px;
+  }
+
+  &__card-slot {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    z-index: 10;
+    animation: slideIntoChain 0.25s cubic-bezier(0.2, 0.8, 0.2, 1);
+    transition: transform 0.2s ease, margin 0.2s ease;
+
+    .game-card {
+      width: clamp(114px, 8.2vw, 134px);
+      height: auto;
+      aspect-ratio: 250 / 389;
+    }
+
+    & + & {
+      margin-left: var(--chain-overlap, 0px);
+    }
+
+    @for $i from 1 through 30 {
+      &:nth-child(#{$i}) {
+        z-index: #{9 + $i};
+      }
+    }
+
+    &:hover {
+      transform: translateY(-8px);
+      z-index: 100 !important;
+    }
+  }
+}

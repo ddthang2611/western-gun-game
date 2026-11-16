@@ -1,0 +1,76 @@
+@use "../../../styles/variables" as *;
+@use "../../../styles/mixins" as *;
+
+.ui-btn {
+  @include flex-center;
+  border: none;
+  border-radius: 4px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+
+  &--small {
+    padding: 4px 12px;
+    font-size: 11px;
+  }
+
+  &--medium {
+    padding: 6px 20px;
+    font-size: 12px;
+  }
+
+  &--large {
+    padding: 8px 24px;
+    font-size: 14px;
+  }
+
+  &--primary {
+    background-color: $western-text-gold;
+    color: $western-bg-table;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+
+    &:hover:not(:disabled) {
+      background-color: $western-border-focus;
+    }
+  }
+
+  &--secondary {
+    background-color: $western-bg-panel;
+    color: $western-text-main;
+    border: 1px solid $western-border-wood;
+
+    &:hover:not(:disabled) {
+      background-color: #45382f;
+      border-color: $western-border-gold;
+    }
+  }
+
+  &--danger {
+    background-color: $western-danger-dark;
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+
+    &:hover:not(:disabled) {
+      background-color: #b91c1c;
+    }
+  }
+
+  &--info {
+    background-color: $western-blue;
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+
+    &:hover:not(:disabled) {
+      background-color: #1d4ed8;
+    }
+  }
+
+  &:disabled {
+    background-color: $western-border-subtle;
+    color: $western-text-dim;
+    cursor: not-allowed;
+    box-shadow: none;
+    border-color: transparent;
+  }
+}

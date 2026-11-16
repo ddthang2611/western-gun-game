@@ -1,0 +1,118 @@
+@use "../../../styles/variables" as *;
+
+@keyframes bullet-meter-critical {
+  0% {
+    transform: rotate(-34deg) scale(1);
+    opacity: 0.92;
+  }
+
+  100% {
+    transform: rotate(-34deg) scale(1.08);
+    opacity: 1;
+  }
+}
+
+.bullet-meter {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+
+  &--vertical {
+    flex-direction: column;
+    gap: 2px;
+    padding: 3px 6px;
+
+    .bullet-meter__bullets {
+      flex-direction: column;
+      gap: 0;
+    }
+
+    .bullet-meter__bullet {
+      margin: -5px 0;
+    }
+
+    .bullet-meter__bullet--small {
+      width: 12px;
+      height: 34px;
+    }
+
+    .bullet-meter__bullet--medium {
+      width: 15px;
+      height: 42px;
+    }
+
+    .bullet-meter__text {
+      display: none;
+    }
+  }
+
+  &__bullets {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+
+  &__bullet {
+    object-fit: fill;
+    transform: rotate(-34deg);
+    transform-origin: center;
+    transition: transform 0.2s ease, opacity 0.2s ease;
+    user-select: none;
+    display: inline-block;
+
+    &--small {
+      width: 12px;
+      height: 34px;
+    }
+
+    &--medium {
+      width: 15px;
+      height: 42px;
+    }
+
+    &--large {
+      width: 22px;
+      height: 64px;
+    }
+
+    &--filled {
+      filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.65));
+
+      &.bullet-meter__bullet--near-death {
+        filter: drop-shadow(0 0 4px rgba(239, 68, 68, 0.85));
+
+        @media (prefers-reduced-motion: no-preference) {
+          animation: bullet-meter-critical 1.2s ease-in-out infinite alternate;
+        }
+      }
+    }
+
+    &--empty {
+      opacity: 0.55;
+    }
+  }
+
+  &__text {
+    font-weight: bold;
+    color: $western-text-main;
+    margin-left: 2px;
+
+    &--small {
+      font-size: 11px;
+    }
+
+    &--medium {
+      font-size: 13px;
+    }
+
+    &--large {
+      font-size: 16px;
+      font-weight: 900;
+      color: $western-text-gold;
+    }
+
+    &--near-death {
+      color: $western-danger;
+    }
+  }
+}

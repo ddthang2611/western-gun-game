@@ -1,0 +1,86 @@
+@use "../../../styles/variables" as *;
+
+.char-portrait {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  user-select: none;
+
+  &__frame {
+    width: 100%;
+    aspect-ratio: 250 / 389;
+    position: relative;
+    overflow: hidden;
+    border-radius: 6px;
+    border: none;
+    padding: 0;
+    background-color: transparent;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+    box-sizing: border-box;
+  }
+
+  &__img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    object-position: center;
+    display: block;
+    pointer-events: none;
+  }
+
+  &__badge {
+    position: absolute;
+    bottom: 3px;
+    right: 3px;
+    font-size: 9px;
+    font-weight: 700;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 3px;
+    background-color: rgba(15, 118, 110, 0.92);
+    color: #ffffff;
+    border: 1px solid #14b8a6;
+    letter-spacing: 0.4px;
+    pointer-events: none;
+    z-index: 2;
+  }
+
+  &--active .char-portrait__frame {
+    box-shadow: 0 0 0 2px #14b8a6, 0 0 10px rgba(20, 184, 166, 0.55);
+  }
+
+  &--seat {
+    width: 100%;
+    height: 100%;
+
+    .char-portrait__frame {
+      width: 100%;
+      height: 100%;
+      aspect-ratio: auto;
+      background-color: #ffffff;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+
+    .char-portrait__img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: 50% 15%;
+      transform: scale(1.24);
+      transform-origin: 46% 12%;
+    }
+  }
+
+  &--console {
+    width: clamp(110px, 7.8vw, 128px);
+  }
+
+  &--modal {
+    width: 100%;
+    max-width: 164px;
+  }
+}

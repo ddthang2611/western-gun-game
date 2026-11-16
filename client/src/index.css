@@ -1,0 +1,77 @@
+:root {
+  --bg-table: #16100c;
+  --bg-surface: #2b221d;
+  --bg-panel: #362c25;
+  --bg-card: #e8dcc8;
+  --border-wood: #5a4232;
+  --border-gold: #c9933b;
+  --text-main: #f5eedf;
+  --text-muted: #b8a698;
+  --text-dark: #221c16;
+  --accent-gold: #d4a34b;
+  --accent-red: #c23b22;
+  --accent-green: #3a8e41;
+  --accent-blue: #2c6e9e;
+  --in-oklab: ;
+  --in-oklch: ;
+  
+  --sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  font-family: var(--sans);
+  color-scheme: dark;
+  color: var(--text-main);
+  background-color: var(--bg-table);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@supports (linear-gradient(in oklab, white, black)) {
+  :root {
+    --in-oklab: in oklab;
+    --in-oklch: in oklch;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  background-color: var(--bg-table);
+}
+
+#root {
+  width: 100vw;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+button {
+  font-family: inherit;
+  user-select: none;
+}
+
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-wood);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-gold);
+}

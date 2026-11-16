@@ -1,0 +1,31 @@
+@use "../../../styles/variables" as *;
+
+.combat-log-modal {
+  &__list {
+    max-height: 340px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background-color: $western-bg-table;
+    border: 1px solid $western-border-wood;
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-family: monospace;
+    font-size: 12px;
+    line-height: 1.6;
+    color: $western-text-main;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  &__empty {
+    color: $western-text-dim;
+    text-align: center;
+    padding: 16px;
+  }
+
+  &__entry {
+    border-bottom: 1px solid rgba(90, 66, 50, 0.3);
+    padding-bottom: 3px;
+  }
+}

@@ -1,0 +1,276 @@
+@use "../../../styles/variables" as *;
+@use "../../../styles/mixins" as *;
+
+.opponent-seat {
+  width: 198px;
+  height: 274px;
+  background-color: rgba(36, 26, 20, 0.92);
+  border: 1px solid $western-border-wood;
+  border-radius: 4px;
+  padding: 5px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+  overflow: visible;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+  cursor: default;
+  transition: all 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-sizing: border-box;
+
+  &--targetable {
+    border: 2px solid $western-success;
+    box-shadow: 0 0 12px rgba(22, 163, 74, 0.6);
+    cursor: pointer;
+
+    &:hover {
+      transform: translateY(-2px);
+    }
+  }
+
+  &--selected {
+    border: 2px solid $western-border-focus;
+    box-shadow: 0 0 16px rgba(212, 163, 75, 0.9);
+    transform: translateY(-3px);
+  }
+
+  &--out-of-range {
+    opacity: 0.38;
+    cursor: not-allowed;
+  }
+
+  &--dead {
+    opacity: 0.25;
+    filter: grayscale(1);
+    cursor: default;
+  }
+
+  &__judgements {
+    position: absolute;
+    left: -10px;
+    top: 44px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 15;
+  }
+
+  &__header {
+    @include flex-between;
+    border-bottom: 1px solid $western-border-wood;
+    padding-bottom: 3px;
+    padding-right: 46px;
+    min-height: 24px;
+  }
+
+  &__player-meta {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+    flex: 1;
+  }
+
+  &__player-name {
+    font-weight: 800;
+    font-size: 12.5px;
+    line-height: 1.2;
+    color: $western-text-main;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__hand-count {
+    position: absolute;
+    top: 5px;
+    right: 6px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    z-index: 5;
+  }
+
+  &__hand-fan {
+    position: relative;
+    width: 22px;
+    height: 16px;
+    display: inline-block;
+  }
+
+  &__mini-card {
+    position: absolute;
+    top: 1px;
+    width: 9px;
+    height: 13px;
+    border-radius: 1.5px;
+    background: linear-gradient(145deg, #e5e7eb, #9ca3af);
+    border: 1px solid #374151;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+    transform-origin: bottom center;
+
+    &--left {
+      left: 1px;
+      transform: rotate(-16deg);
+    }
+
+    &--center {
+      left: 6px;
+      z-index: 2;
+      transform: rotate(0deg);
+    }
+
+    &--right {
+      left: 11px;
+      transform: rotate(16deg);
+    }
+  }
+
+  &__hand-num {
+    font-size: 12.5px;
+    font-weight: 900;
+    line-height: 1;
+    color: #e5e7eb;
+  }
+
+  // Hero portrait columns + diagonal HP
+  &__body {
+    display: flex;
+    align-items: stretch;
+    justify-content: space-between;
+    gap: 4px;
+    height: 150px;
+  }
+
+  &__hero-columns {
+    display: flex;
+    justify-content: stretch;
+    align-items: stretch;
+    gap: 4px;
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+
+    .ui-popover {
+      display: flex;
+      flex: 1;
+      min-width: 0;
+      height: 100%;
+    }
+  }
+
+  &__hero-slot {
+    display: flex;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+
+    &:hover {
+      transform: scale(1.02);
+    }
+  }
+
+  &__side-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  &--targetable:focus-visible {
+    outline: 2px solid $western-border-focus;
+    outline-offset: 2px;
+  }
+
+  &__distance {
+    font-size: 10px;
+    font-weight: 800;
+    padding: 1px 4px;
+    border-radius: 3px;
+    background-color: rgba(15, 11, 8, 0.85);
+    border: 1px solid $western-border-subtle;
+
+    &--in-range {
+      color: #86efac;
+    }
+
+    &--out-of-range {
+      color: #f87171;
+    }
+  }
+
+  // Fixed 2x4 equipment & green slots
+  &__equip-rows {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: repeat(4, 18px);
+    gap: 2px;
+    margin-top: auto;
+
+    .ui-popover {
+      display: flex;
+      min-width: 0;
+      height: 100%;
+    }
+  }
+
+  &__equip-row {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0 5px;
+    font-size: 10px;
+    line-height: 1;
+    border: 1px solid rgba(94, 67, 45, 0.42);
+    border-radius: 3px;
+    background-color: rgba(16, 11, 8, 0.55);
+    color: transparent;
+    font-weight: 600;
+    box-sizing: border-box;
+    min-width: 0;
+
+    &--occupied {
+      background-color: rgba(212, 163, 75, 0.2);
+      border-color: $western-border-gold;
+      color: $western-text-gold;
+      font-weight: 700;
+    }
+
+    &--green-ready {
+      background-color: rgba(34, 197, 94, 0.32);
+      border: 1.5px solid #4ade80;
+      color: #f0fdf4;
+      font-weight: 800;
+      box-shadow: 0 0 8px rgba(74, 222, 128, 0.42);
+    }
+
+    &--green-delay {
+      background-color: rgba(14, 22, 16, 0.88);
+      border: 1px solid rgba(74, 105, 82, 0.45);
+      color: #6b7280;
+      font-weight: 600;
+      filter: brightness(0.62);
+    }
+  }
+
+  &__equip-tag {
+    flex-shrink: 0;
+    font-size: 8.5px;
+    font-weight: 800;
+    padding: 1px 3px;
+    border-radius: 2px;
+    background-color: rgba(20, 14, 10, 0.85);
+    color: $western-text-muted;
+  }
+
+  &__equip-name {
+    min-width: 0;
+    @include text-truncate;
+  }
+}

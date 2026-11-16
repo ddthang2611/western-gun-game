@@ -1,0 +1,33 @@
+@use "../../../styles/variables" as *;
+
+.game-over-modal {
+  &__outcome {
+    font-size: 13px;
+    color: $western-text-main;
+    line-height: 1.5;
+  }
+
+  &__players {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  &__player-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 10px;
+    background-color: rgba(23, 18, 14, 0.7);
+    border: 1px solid $western-border-wood;
+    border-radius: 4px;
+    font-size: 12px;
+    color: $western-text-main;
+  }
+
+  &__player-role {
+    color: $western-text-gold;
+    text-transform: uppercase;
+    font-weight: bold;
+  }
+}

@@ -1,0 +1,39 @@
+@use "../../../styles/variables" as *;
+@use "../../../styles/mixins" as *;
+
+.general-store {
+  &__pool {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 16px 4px 6px;
+    justify-content: flex-start;
+    align-items: flex-start;
+  }
+
+  &__card {
+    @include flex-center;
+    flex: 0 0 auto;
+    border-radius: 6px;
+  }
+
+  &__empty {
+    width: 100%;
+    padding: 16px 8px;
+    text-align: center;
+    font-size: 12px;
+    color: $western-text-muted;
+    font-style: italic;
+  }
+
+  &__footer {
+    display: inline-block;
+    line-height: 1.35;
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+}

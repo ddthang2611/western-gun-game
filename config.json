@@ -1,0 +1,19 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 2611,
+    "enable_tunnel": true
+  },
+  "database": {
+    "path": "./data/western_gun.db"
+  },
+  "game_rules": {
+    "default_dual_character_enabled": true,
+    "default_dual_character_hp_rule": "strict",
+    "default_expansions": [
+      "base",
+      "dodge_city",
+      "high_noon"
+    ]
+  }
+}

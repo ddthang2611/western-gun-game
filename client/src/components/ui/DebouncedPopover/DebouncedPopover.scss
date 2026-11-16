@@ -1,0 +1,44 @@
+@use "../../../styles/variables" as *;
+
+.ui-popover {
+  display: inline-block;
+  position: relative;
+
+  &__panel {
+    position: fixed;
+    left: var(--popover-x, 0px);
+    top: var(--popover-y, 0px);
+    z-index: 100000;
+    background-color: #221c16;
+    color: $western-text-main;
+    border: 1px solid $western-border-gold;
+    border-radius: 6px;
+    padding: 8px 12px;
+    max-width: 280px;
+    min-width: 160px;
+    font-size: 12px;
+    line-height: 1.4;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.85);
+    pointer-events: none;
+
+    &--above {
+      transform: translate(-50%, -100%);
+    }
+
+    &--below {
+      transform: translate(-50%, 0);
+    }
+
+    &--top-pinned {
+      transform: translate(-50%, 0);
+    }
+  }
+
+  &__title {
+    font-weight: bold;
+    color: $western-text-gold;
+    margin-bottom: 4px;
+    border-bottom: 1px solid rgba(201, 147, 59, 0.3);
+    padding-bottom: 3px;
+  }
+}

@@ -1,0 +1,71 @@
+@use "variables" as *;
+
+// Full-bleed western backdrop with image-set
+@mixin western-backdrop(
+  $name,
+  $overlay: linear-gradient(180deg var(--in-oklab), rgba(16, 11, 8, 0.7) 0%, rgba(12, 8, 6, 0.88) 100%)
+) {
+  background-color: $western-bg-table;
+  background-image:
+    $overlay,
+    url("/assets/images/ui/#{$name}_1x.jpg");
+  background-image:
+    $overlay,
+    image-set(
+      url("/assets/images/ui/#{$name}_1x.webp") type("image/webp") 1x,
+      url("/assets/images/ui/#{$name}_2x.webp") type("image/webp") 2x,
+      url("/assets/images/ui/#{$name}_1x.jpg") type("image/jpeg") 1x,
+      url("/assets/images/ui/#{$name}_2x.jpg") type("image/jpeg") 2x
+    );
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+@mixin western-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.85);
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+@mixin western-dialog {
+  max-width: 100%;
+  background-color: $western-bg-surface;
+  border: 2px solid $western-border-gold;
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.7);
+}
+
+@mixin western-inset-box {
+  background-color: $western-bg-table;
+  border: 1px solid $western-border-subtle;
+  border-radius: 6px;
+  padding: 8px 12px;
+}
+
+@mixin flex-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+@mixin flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+@mixin text-truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -1,0 +1,87 @@
+@use "../../../styles/variables" as *;
+@use "../../../styles/mixins" as *;
+
+.ui-modal {
+  border: none;
+  padding: 0;
+  margin: auto;
+  background: transparent;
+  color: inherit;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
+  overflow: visible;
+  z-index: 99999;
+
+  &:modal {
+    overscroll-behavior: contain;
+  }
+
+  &::backdrop {
+    background-color: rgba(0, 0, 0, 0.72);
+    overflow: hidden;
+    overscroll-behavior: contain;
+  }
+
+  &__dialog {
+    @include western-dialog;
+    max-width: 100%;
+
+    &--medium {
+      width: 750px;
+    }
+
+    &--large {
+      width: 850px;
+      padding: 20px;
+      gap: 16px;
+      border-radius: 10px;
+    }
+  }
+
+  &__header {
+    @include flex-between;
+    border-bottom: 1px solid $western-border-wood;
+    padding-bottom: 8px;
+  }
+
+  &__title {
+    margin: 0;
+    font-size: 16px;
+    color: $western-text-gold;
+  }
+
+  &__subtitle {
+    font-size: 11px;
+    color: $western-text-muted;
+    margin-top: 2px;
+  }
+
+  &__body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 60dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  &__footer {
+    @include flex-between;
+    border-top: 1px solid $western-border-wood;
+    padding-top: 10px;
+    gap: 12px;
+  }
+
+  &__hint {
+    font-size: 11px;
+    color: $western-border-focus;
+    font-style: italic;
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: auto;
+  }
+}

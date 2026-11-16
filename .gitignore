@@ -1,0 +1,131 @@
+# ==========================================
+# HỆ ĐIỀU HÀNH (Linux Mint / Cinnamon / XFCE)
+# ==========================================
+*~
+.fuse_hidden*
+.directory
+.trash/
+.DS_Store
+Thumbs.db
+
+# ==========================================
+# TRÌNH QUẢN LÝ GÓI (Node.js & Bun)
+# ==========================================
+node_modules/
+/jspm_packages/
+.npm/
+.bun/
+
+# Đọc kỹ lưu ý bên dưới trước khi bỏ comment (uncomment) lockfile:
+# package-lock.json
+# bun.lock
+# bun.lockb
+# yarn.lock
+# pnpm-lock.yaml
+
+# ==========================================
+# LOGS & FILE TẠM THỜI (Logs & Caches)
+# ==========================================
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+bun-debug.log*
+
+.tmp/
+tmp/
+.eslintcache
+.parcel-cache
+.turbo/
+
+# ==========================================
+# THƯ MỤC BUILD OUTPUT & BINARIES
+# ==========================================
+build/
+out/
+.next/
+.nuxt/
+bin/
+/bin/
+dist/scripts/
+client/dist/assets/components/
+client/dist/assets/images/
+client/dist/assets/cards_manifest.json
+
+# ==========================================
+# FILE BẢO MẬT & MÔI TRƯỜNG (Tuyệt đối không commit!)
+# ==========================================
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+*.pem
+*.key
+*.cert
+
+# ==========================================
+# FILE Dữ liệu tạo tài nguyên và phương án game
+# ==========================================
+
+resources
+.resources
+/resources
+plan
+.plan
+/plan
+.data
+data/*
+!data/western_gun.db
+!data/mock/
+
+# ==========================================
+# FILE hỗ trợ AI dựng resouces
+# ==========================================
+
+scripts
+.scripts
+/scripts
+
+# ==========================================
+# ASTERMESH CODE KNOWLEDGE GRAPH & INDEX
+# ==========================================
+
+astermesh-graph
+astermesh-graph/
+/astermesh-graph
+/astermesh-graph/
+.astermesh
+.astermesh/
+/.astermesh
+/.astermesh/
+xml-graph
+xml-graph/
+/xml-graph
+/xml-graph/
+*.acn
+context_graph.xml
+GRAPH_REPORT.md
+astermesh_view.html
+
+# ==========================================
+# AI AGENTS, SKILLS & WORKSPACE RULES
+# ==========================================
+
+.agents
+.agents/
+/.agents
+/.agents/
+agents
+agents/
+/agents
+/agents/
+AGENTS.md
+/AGENTS.md
+GEMINI.md
+/GEMINI.md
+
+
+
