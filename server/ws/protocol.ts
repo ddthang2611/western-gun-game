@@ -38,7 +38,8 @@ export type ServerMessageType =
   | "GAME_EVENT"
   | "COMBAT_LOG_UPDATE"
   | "GAME_ACTION_SUCCESS"
-  | "GAME_OVER";
+  | "GAME_OVER"
+  | "DATABASE_UNLOCKED";
 
 export interface GameSettings {
   dualCharacterEnabled: boolean;
@@ -67,6 +68,9 @@ export interface GameActionPayload {
   skip?: boolean;
   skillType?: string;
   skill?: string;
+  checkSource?: "BARREL" | "JOURDONNAIS";
+  commandId?: string;
+  expectedStateSeq?: number;
   payload?: any;
 }
 
@@ -79,6 +83,12 @@ export interface LobbyPlayer {
   isOnline: boolean;
 }
 
+export interface ExpansionOptionInfo {
+  id: string;
+  label: string;
+  active: boolean;
+}
+
 export interface LobbyState {
   roomExists: boolean;
   roomId: string;
@@ -87,6 +97,7 @@ export interface LobbyState {
   status: "waiting" | "in_game";
   players: LobbyPlayer[];
   settings: GameSettings;
+  expansionCatalog?: ExpansionOptionInfo[];
   minPlayers: number;
   maxPlayers: number;
 }

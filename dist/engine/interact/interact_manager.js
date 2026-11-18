@@ -12,9 +12,11 @@ const heal_actions_1 = require("./handlers/heal_actions");
 const card_manipulation_1 = require("./handlers/card_manipulation");
 const duel_interaction_1 = require("./handlers/duel_interaction");
 const equipment_action_1 = require("./handlers/equipment_action");
+const active_skills_1 = require("./handlers/active_skills");
 const reaction_resolver_1 = require("./reaction_resolver");
 const skill_hooks_1 = require("./skill_hooks");
 const atomic_effects_1 = require("./primitives/atomic_effects");
+const inventory_1 = require("../utils/inventory");
 const GREEN_DEFENSE_ONLY = new Set([
     "SOMBRERO",
     "IRON PLATE",
@@ -94,6 +96,7 @@ class InteractManager {
                     targetPlayerId: command.targetPlayerId,
                     targetPlayerName: targetName,
                     card,
+                    isPlacement: card.border === "blue" || card.border === "green",
                 },
                 timestamp: Date.now(),
             });
@@ -295,6 +298,7 @@ class InteractManager {
                     targetPlayerId: targetPlayer?.id,
                     targetPlayerName: targetPlayer?.name,
                     card: greenEntry.card,
+                    isPlacement: false,
                 },
                 timestamp: Date.now(),
             });
@@ -330,7 +334,7 @@ class InteractManager {
         if (player.isDead)
             return { success: false, message: "Dead players cannot act." };
         const events = [];
-        const result = skill_hooks_1.SkillHooks.handleActiveSkill(state, command, events);
+        const result = active_skills_1.ActiveSkills.handleActiveSkill(state, command, events);
         if (result && typeof result === "object" && "success" in result) {
             return result;
         }
@@ -338,15 +342,8 @@ class InteractManager {
     }
     // Check whether target holds cards
     static playerHasAnyCard(player) {
-        const eq = player.equipments;
-        const hasEquip = Boolean(eq?.weapon ||
-            eq?.horseDef ||
-            eq?.horseOff ||
-            eq?.barrel ||
-            eq?.extra ||
-            (eq?.extras && eq.extras.length > 0));
         return (player.handCards.length > 0 ||
-            hasEquip ||
+            (0, inventory_1.getAllEquippedCards)(player).length > 0 ||
             (player.greenCards?.length ?? 0) > 0 ||
             (player.judgements?.length ?? 0) > 0);
     }
@@ -366,17 +363,9 @@ class InteractManager {
                 return false;
             }
             if (state.activeEvent?.effectCode === "EVENT_FOC_RICOCHET" &&
-                others.some((t) => {
-                    const eq = t.equipments;
-                    return Boolean(eq?.weapon ||
-                        eq?.horseDef ||
-                        eq?.horseOff ||
-                        eq?.barrel ||
-                        eq?.extra ||
-                        (eq?.extras && eq.extras.length > 0) ||
-                        (t.greenCards?.length ?? 0) > 0 ||
-                        (t.judgements?.length ?? 0) > 0);
-                })) {
+                others.some((t) => (0, inventory_1.getAllEquippedCards)(t).length > 0 ||
+                    (t.greenCards?.length ?? 0) > 0 ||
+                    (t.judgements?.length ?? 0) > 0)) {
                 return true;
             }
             if (!bang_limiter_1.BangLimiter.canPlayBang(state, player))
@@ -456,14 +445,7 @@ class InteractManager {
                 return !player.equipments.horseOff;
             if (card.name === "BARREL")
                 return !player.equipments.barrel;
-            const norm = card.name === "BINOCULARS" ? "BINOCULAR" : card.name;
-            const extras = player.equipments.extras || [];
-            const inExtras = extras.some((c) => (c.name === "BINOCULARS" ? "BINOCULAR" : c.name) === norm);
-            const inExtra = player.equipments.extra &&
-                (player.equipments.extra.name === "BINOCULARS"
-                    ? "BINOCULAR"
-                    : player.equipments.extra.name) === norm;
-            return !inExtras && !inExtra;
+            return !(0, inventory_1.hasEquippedCardByName)(player, card.name);
         }
         if (card.border === "green" ||
             card.category === "green_delayed" ||

@@ -1,5 +1,6 @@
 import React from "react";
 import type { Card, Character, GreenCard } from "../../../types/game";
+import "./TableActionBar.scss";
 
 export interface TableActionBarProps {
   myJudgements: { hasJail: boolean; hasDynamite: boolean };
@@ -14,6 +15,7 @@ export interface TableActionBarProps {
   isMyTurn?: boolean;
   isLocked?: boolean;
   excessCardsCount?: number;
+  phase3DiscardCount?: number;
   activeSkillHint?: string | null;
   canConfirmSelection?: boolean;
   isSkillMode?: boolean;
@@ -38,6 +40,7 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
   isMyTurn = true,
   isLocked = false,
   excessCardsCount = 0,
+  phase3DiscardCount = 0,
   activeSkillHint,
   canConfirmSelection,
   isSkillMode = false,
@@ -54,7 +57,11 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
   const isActionPhase = isMock || currentPhase === 2 || isPhase3Discard;
   const canActInTurn = !isLocked && isMyTurn && isActionPhase;
   const canUseSkill = !isLocked && isMyTurn && (isMock || currentPhase === 2);
-  const primaryLabel = isPhase3Discard ? "Discard" : "Play";
+  const primaryLabel = isPhase3Discard
+    ? phase3DiscardCount > 0
+      ? `Discard (${phase3DiscardCount})`
+      : "Discard"
+    : "Play";
   const hasSelection = Boolean(selectedCard || selectedGreenCard);
   const canPlayNow =
     canActInTurn &&
@@ -101,6 +108,7 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
               <button
                 key={hero.id}
                 type="button"
+                data-target-origin="skill"
                 onClick={() => onTriggerSkill(hero.id)}
                 disabled={!canUseSkill}
                 className={`game-table__btn game-table__btn--skill${
@@ -114,6 +122,7 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
           {isSkillMode ? (
             <button
               type="button"
+              data-target-origin="skill-confirm"
               onClick={onConfirmSkill}
               disabled={!canUseSkill || !canConfirmSkill}
               className="game-table__btn game-table__btn--skill-confirm"
@@ -145,7 +154,12 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
             onClick={onCancel}
             disabled={
               !canActInTurn ||
-              (!isSkillMode && !selectedCard && !selectedGreenCard && !selectedTargetId && !activeSkillHint)
+              (!isSkillMode &&
+                !selectedCard &&
+                !selectedGreenCard &&
+                !selectedTargetId &&
+                !activeSkillHint &&
+                phase3DiscardCount === 0)
             }
             className="game-table__btn game-table__btn--secondary"
           >

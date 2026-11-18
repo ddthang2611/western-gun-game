@@ -19,6 +19,8 @@ export interface TargetSelectionEntry {
 export interface PlayerCommand {
   playerId: string;
   type: CommandType;
+  commandId?: string;
+  expectedStateSeq?: number;
   cardId?: string;
   greenCardId?: string;
   characterIds?: string[];
@@ -34,6 +36,7 @@ export interface CommandResult {
   success: boolean;
   message?: string;
   events?: DomainEvent[];
+  deduplicated?: boolean;
 }
 
 export interface DomainEvent {

@@ -1,6 +1,7 @@
 import React from "react";
 import { Modal } from "../../../components/ui/Modal/Modal";
 import { Button } from "../../../components/ui/Button/Button";
+import { formatSimpleLog } from "../../../utils/formatters";
 import "./CombatLogModal.scss";
 
 export interface CombatLogModalProps {
@@ -8,12 +9,6 @@ export interface CombatLogModalProps {
   combatLog: string[];
   onClose: () => void;
 }
-
-const formatSimpleLog = (line: string): string =>
-  line
-    .replace(/^\[[^\]]+\]\s*/g, "")
-    .replace(/^\[Mock\]\s*/i, "")
-    .trim();
 
 export const CombatLogModal: React.FC<CombatLogModalProps> = ({
   isOpen,

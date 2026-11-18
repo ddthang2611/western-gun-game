@@ -1,0 +1,78 @@
+@use "sass:color";
+@use "../../../styles/variables" as *;
+
+.game-table__btn {
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: bold;
+  border-radius: 4px;
+  border: 1px solid $western-border-wood;
+  cursor: pointer;
+  background-color: $western-bg-surface;
+  color: $western-text-main;
+  transition: background-color 0.15s ease, opacity 0.15s ease;
+
+  &:hover {
+    background-color: color.adjust($western-bg-surface, $lightness: 6%);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  &--secondary {
+    background-color: #3b2a20;
+    color: #e5e7eb;
+    font-size: 12px;
+
+    &:hover {
+      background-color: color.adjust(#3b2a20, $lightness: 8%);
+    }
+  }
+
+  &--primary {
+    background-color: $western-text-gold;
+    color: #1a1512;
+    border-color: $western-border-gold;
+
+    &:hover {
+      background-color: color.adjust($western-text-gold, $lightness: 6%);
+    }
+  }
+
+  &--danger {
+    background-color: $western-danger-dark;
+    color: #ffffff;
+    border-color: $western-danger;
+
+    &:hover {
+      background-color: color.adjust($western-danger-dark, $lightness: 6%);
+    }
+  }
+
+  &--skill {
+    background-color: #0f766e;
+    color: #ffffff;
+    border-color: #14b8a6;
+
+    &:hover:not(:disabled) {
+      background-color: color.adjust(#0f766e, $lightness: 6%);
+    }
+  }
+
+  &--skill-active {
+    box-shadow: 0 0 0 2px #fde047;
+  }
+
+  &--skill-confirm {
+    background-color: #10b981;
+    color: #052e16;
+    border-color: #6ee7b7;
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.45);
+
+    &:hover:not(:disabled) {
+      background-color: color.adjust(#10b981, $lightness: 6%);
+    }
+  }
+}

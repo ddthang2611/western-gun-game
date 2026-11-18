@@ -46,7 +46,7 @@ class JudgementPhase {
                 player.judgements = player.judgements.filter((j) => j.id !== judgement.id);
                 const check = skill_hooks_1.SkillHooks.executeDrawCheck(state, player, "DYNAMITE", (card, st) => !this.isDynamiteExploded(card, st));
                 events.push(...check.events);
-                const exploded = !check.success;
+                const exploded = check.drawnCards.length > 0 && !check.success;
                 events.push({
                     type: "JUDGEMENT_RESOLVED",
                     payload: {
@@ -112,8 +112,8 @@ class JudgementPhase {
                     break;
                 }
                 player.judgements = player.judgements.filter((j) => j.id !== judgement.id);
-                this.discardJudgementCard(state, judgement.card);
                 const check = skill_hooks_1.SkillHooks.executeDrawCheck(state, player, "JAIL", (card, st) => this.isJailEscaped(card, st));
+                this.discardJudgementCard(state, judgement.card);
                 events.push(...check.events);
                 events.push({
                     type: "JUDGEMENT_RESOLVED",

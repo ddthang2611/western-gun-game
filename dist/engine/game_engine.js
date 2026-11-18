@@ -5,17 +5,19 @@ const deck_manager_1 = require("./deck/deck_manager");
 const setup_dealer_1 = require("./deck/setup_dealer");
 const turn_manager_1 = require("./phases/turn_manager");
 const event_engine_1 = require("./events/event_engine");
+const expansion_config_1 = require("./events/expansion_config");
 const fog_of_war_1 = require("./state/fog_of_war");
 const win_condition_1 = require("./elimination/win_condition");
 const interact_manager_1 = require("./interact/interact_manager");
-const skill_hooks_1 = require("./interact/skill_hooks");
-const atomic_effects_1 = require("./interact/primitives/atomic_effects");
 class GameEngine {
+    static MAX_PROCESSED_COMMANDS = 200;
     state;
     allRawCards;
     allEventCards;
     defaultEnableCharSelect;
     defaultEnable3PVariant;
+    processedCommandIds = [];
+    processedCommandSet = new Set();
     constructor(roomId, initialCards = [], eventCards = [], options) {
         this.allRawCards = [...initialCards];
         this.allEventCards = [...eventCards];
@@ -23,6 +25,7 @@ class GameEngine {
         this.defaultEnable3PVariant = options?.defaultEnable3PlayerVariant;
         this.state = {
             roomId,
+            stateSeq: 0,
             matchPhase: "PLAYING",
             roundNumber: 1,
             turnPlayerId: "",
@@ -38,7 +41,7 @@ class GameEngine {
             is3PlayerVariant: false,
             expansions: options?.expansions
                 ? [...options.expansions]
-                : ["base", "dodge_city", "high_noon", "fistful_of_cards"],
+                : (0, expansion_config_1.filterActiveExpansions)(["base", "dodge_city", "high_noon", "fistful_of_cards"]),
             players: new Map(),
             drawDeck: deck_manager_1.DeckManager.shuffleCards(this.allRawCards),
             discardPile: [],
@@ -63,6 +66,9 @@ class GameEngine {
         const enable3PVariant = playerList.length === 3 &&
             (options?.enable3PlayerVariant ?? this.defaultEnable3PVariant ?? true);
         this.state.expansions = expansions;
+        this.state.stateSeq = 0;
+        this.processedCommandIds = [];
+        this.processedCommandSet.clear();
         this.state.dualCharacterMode = dualCharacterMode;
         this.state.hpRule = hpRule;
         this.state.is3PlayerVariant = enable3PVariant;
@@ -137,15 +143,67 @@ class GameEngine {
     executeCommand(command) {
         return this.handleCommand(command);
     }
+    // Record processed command ID
+    recordCommandId(commandKey) {
+        if (!commandKey || this.processedCommandSet.has(commandKey))
+            return;
+        if (this.processedCommandIds.length >= GameEngine.MAX_PROCESSED_COMMANDS) {
+            const oldest = this.processedCommandIds.shift();
+            if (oldest) {
+                this.processedCommandSet.delete(oldest);
+            }
+        }
+        this.processedCommandIds.push(commandKey);
+        this.processedCommandSet.add(commandKey);
+    }
     // Authoritative command router
     handleCommand(command) {
         const player = this.state.players.get(command.playerId);
         if (!player)
             return { success: false, message: "Player not found." };
+        const rawCmdId = typeof command.commandId === "string" ? command.commandId.trim() : "";
+        const commandKey = rawCmdId ? `${command.playerId}:${rawCmdId}` : null;
+        if (commandKey && this.processedCommandSet.has(commandKey)) {
+            return { success: true, events: [], deduplicated: true };
+        }
         if (this.state.gameOver || this.state.matchPhase === "FINISHED") {
             return { success: false, message: "Match has already ended." };
         }
+        if (command.type !== "SELECT_CHARACTERS" &&
+            command.expectedStateSeq !== undefined &&
+            command.expectedStateSeq !== this.state.stateSeq) {
+            return {
+                success: false,
+                message: `Stale state sequence: expected ${command.expectedStateSeq}, current ${this.state.stateSeq}.`,
+            };
+        }
         const events = [];
+        const result = this.routeCommand(player, command, events);
+        if (!result.success) {
+            return result;
+        }
+        this.appendWinEventIfNeeded(events);
+        if (command.type === "RESOLVE_REACTION" ||
+            command.type === "SELECT_STOLEN_CARD" ||
+            command.type === "RESOLVE_TURN_START") {
+            this.resumePhase0IfReady(events);
+        }
+        if (this.state.matchPhase === "PLAYING" &&
+            !this.state.gameOver &&
+            this.state.pendingReactions.length === 0 &&
+            this.state.activeChain.length === 0) {
+            const turnPlayer = this.state.players.get(this.state.turnPlayerId);
+            if (turnPlayer?.isDead) {
+                turn_manager_1.TurnManager.advanceToNextTurn(this.state, turnPlayer.id, events);
+                this.appendWinEventIfNeeded(events);
+            }
+        }
+        this.state.stateSeq = (this.state.stateSeq ?? 0) + 1;
+        this.recordCommandId(commandKey);
+        return { success: true, events };
+    }
+    // Route validated command to handler
+    routeCommand(player, command, events) {
         if (command.type === "SELECT_CHARACTERS") {
             const rawIds = command.characterIds ?? command.payload?.characterIds ?? [];
             const selectRes = setup_dealer_1.SetupDealer.resolveCharacterSelection(this.state, command.playerId, rawIds, events);
@@ -158,7 +216,6 @@ class GameEngine {
                 if (sheriff) {
                     turn_manager_1.TurnManager.startTurn(this.state, sheriff, events);
                 }
-                this.appendWinEventIfNeeded(events);
             }
             return { success: true, events };
         }
@@ -180,8 +237,6 @@ class GameEngine {
             if (!res.success) {
                 return { success: false, message: res.message, events };
             }
-            this.appendWinEventIfNeeded(events);
-            this.resumePhase0IfReady(events);
             return { success: true, events };
         }
         if (command.type === "SELECT_STOLEN_CARD") {
@@ -190,8 +245,6 @@ class GameEngine {
             if (!res.success) {
                 return { success: false, message: res.message, events };
             }
-            this.appendWinEventIfNeeded(events);
-            this.resumePhase0IfReady(events);
             return { success: true, events };
         }
         interact_manager_1.InteractManager.pruneStaleReactions(this.state);
@@ -207,8 +260,6 @@ class GameEngine {
             if (!res.success) {
                 return { success: false, message: res.message, events };
             }
-            this.appendWinEventIfNeeded(events);
-            this.resumePhase0IfReady(events);
             return { success: true, events };
         }
         if (this.state.pendingTurnStartChoice) {
@@ -223,7 +274,6 @@ class GameEngine {
             if (!res.success) {
                 return { success: false, message: res.message, events };
             }
-            this.appendWinEventIfNeeded(events);
             return { success: true, events };
         }
         if (this.state.pendingPhase1Choice) {
@@ -238,7 +288,6 @@ class GameEngine {
             if (!res.success) {
                 return { success: false, message: res.message, events };
             }
-            this.appendWinEventIfNeeded(events);
             return { success: true, events };
         }
         if (command.type === "DISCARD_CARD") {
@@ -255,34 +304,7 @@ class GameEngine {
                 : singleCardId
                     ? [String(singleCardId)]
                     : [];
-            if (targetIds.length === 0) {
-                return { success: false, message: "Card ID required to discard." };
-            }
-            if (new Set(targetIds).size !== targetIds.length) {
-                return { success: false, message: "Duplicate card IDs cannot be discarded together." };
-            }
-            for (const id of targetIds) {
-                if (!player.handCards.some((c) => c.id === id)) {
-                    return { success: false, message: "Card not found in hand." };
-                }
-            }
-            for (const id of targetIds) {
-                const cIdx = player.handCards.findIndex((c) => c.id === id);
-                if (cIdx !== -1) {
-                    const discarded = player.handCards.splice(cIdx, 1)[0];
-                    atomic_effects_1.AtomicEffects.discardCard(this.state, discarded);
-                    if (player.forcedPlayCardId === discarded.id) {
-                        player.forcedPlayCardId = null;
-                    }
-                    events.push({
-                        type: "CARD_DISCARDED_PHASE_3",
-                        payload: { playerId: player.id, card: discarded },
-                        timestamp: Date.now(),
-                    });
-                }
-            }
-            skill_hooks_1.SkillHooks.checkSuzyLafayette(this.state, player, events);
-            return { success: true, events };
+            return turn_manager_1.TurnManager.discardExcessPhase3Cards(this.state, player, targetIds, events, { requireExactToLimit: false });
         }
         if (command.type === "PLAY_CARD") {
             if (this.state.turnPlayerId !== player.id || this.state.currentPhase !== 2) {
@@ -296,7 +318,6 @@ class GameEngine {
             if (!res.success) {
                 return { success: false, message: res.message, events };
             }
-            this.appendWinEventIfNeeded(events);
             return { success: true, events };
         }
         if (command.type === "ACTIVATE_GREEN_CARD") {
@@ -311,7 +332,6 @@ class GameEngine {
             if (!res.success) {
                 return { success: false, message: res.message, events };
             }
-            this.appendWinEventIfNeeded(events);
             return { success: true, events };
         }
         if (command.type === "USE_ACTIVE_SKILL") {
@@ -326,7 +346,6 @@ class GameEngine {
             if (!res.success) {
                 return { success: false, message: res.message, events };
             }
-            this.appendWinEventIfNeeded(events);
             return { success: true, events };
         }
         return {
@@ -427,6 +446,7 @@ class GameEngine {
         });
         engine.state = {
             ...cloned,
+            stateSeq: typeof cloned.stateSeq === "number" ? cloned.stateSeq : 0,
             players: new Map(Array.isArray(cloned.players) ? cloned.players : []),
             pendingCharacterSelect: new Map(Array.isArray(cloned.pendingCharacterSelect) ? cloned.pendingCharacterSelect : []),
             drawDeck: Array.isArray(cloned.drawDeck) ? cloned.drawDeck : [],

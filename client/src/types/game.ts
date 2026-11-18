@@ -117,6 +117,7 @@ export interface InFlightCard {
   sourcePlayerName: string;
   targetPlayerName?: string;
   actionText: string;
+  isFlipReveal?: boolean;
 }
 
 export interface PendingReactionInfo {
@@ -133,6 +134,71 @@ export interface PendingReactionInfo {
   canUseJourdonnais: boolean;
   barrelChecked: boolean;
   jourdonnaisChecked: boolean;
+  pendingDamage?: number;
+  ricochetTargetArea?: "EQUIPMENT" | "GREEN" | "JUDGEMENT";
+  ricochetTargetCardId?: string;
+  targetCard?: Card;
+  checkSource?: "BARREL" | "JOURDONNAIS";
+}
+
+export type TargetSelectionPayload = {
+  targetPlayerId: string;
+  targetArea?: "HAND" | "EQUIPMENT" | "GREEN" | "JUDGEMENT";
+  targetCardId?: string;
+};
+
+export type GameActionPayload = {
+  cardId?: string;
+  cardIds?: string[];
+  greenCardId?: string;
+  characterId?: string;
+  characterIds?: string[];
+  targetPlayerId?: string;
+  targetArea?: "HAND" | "EQUIPMENT" | "GREEN" | "JUDGEMENT";
+  targetCardId?: string;
+  discardCardIds?: string[];
+  targetSelections?: TargetSelectionPayload[];
+  action?: string;
+  choice?: string;
+  guess?: "RED" | "BLACK";
+  skip?: boolean;
+  skillType?: string;
+  skill?: string;
+  checkSource?: "BARREL" | "JOURDONNAIS";
+};
+
+export interface LobbyPlayer {
+  id: string;
+  name: string;
+  seatIndex: number;
+  isHost: boolean;
+  isReady: boolean;
+  isOnline: boolean;
+}
+
+export interface GameSettings {
+  dualCharacterEnabled: boolean;
+  dualCharacterHpRule: "strict" | "balanced" | "juggernaut";
+  expansions: string[];
+}
+
+export interface ExpansionOptionInfo {
+  id: string;
+  label: string;
+  active: boolean;
+}
+
+export interface LobbyState {
+  roomExists: boolean;
+  roomId: string;
+  roomName?: string;
+  hostId: string;
+  status: "waiting" | "in_game";
+  players: LobbyPlayer[];
+  settings: GameSettings;
+  expansionCatalog?: ExpansionOptionInfo[];
+  minPlayers: number;
+  maxPlayers: number;
 }
 
 export interface PublicPendingReaction {
@@ -163,6 +229,7 @@ export interface GameOverInfo {
 export interface TableState {
   roomId: string;
   hostInfo: string;
+  stateSeq?: number;
   matchPhase?: "CHARACTER_SELECT" | "PLAYING" | "FINISHED";
   roundNumber?: number;
   myPlayerId: string;

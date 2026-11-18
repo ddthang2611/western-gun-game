@@ -1,4 +1,5 @@
 import React, { useId, useLayoutEffect, useRef } from "react";
+import "./TargetingArrow.scss";
 
 export interface TargetingArrowProps {
   targetPlayerId: string | null;
@@ -27,9 +28,13 @@ export const TargetingArrow: React.FC<TargetingArrowProps> = ({
     const updateArrow = () => {
       const targetEl = document.getElementById(`seat-${targetPlayerId}`);
       const sourceEl = isSkillOrigin
-        ? document.querySelector<HTMLElement>(".game-table__btn--skill-confirm") ||
+        ? document.querySelector<HTMLElement>('[data-target-origin="skill-confirm"]') ||
+          document.querySelector<HTMLElement>('[data-target-origin="skill"]') ||
+          document.querySelector<HTMLElement>(".game-table__btn--skill-confirm") ||
           document.querySelector<HTMLElement>(".game-table__btn--skill")
-        : document.querySelector<HTMLElement>(".game-table__hand-card-wrapper--selected") ||
+        : document.querySelector<HTMLElement>('[data-target-origin="card"]') ||
+          document.querySelector<HTMLElement>('[data-target-origin="green"]') ||
+          document.querySelector<HTMLElement>(".game-table__hand-card-wrapper--selected") ||
           document.querySelector<HTMLElement>(".game-table__green-slot--selected");
 
       if (!targetEl || !sourceEl) {

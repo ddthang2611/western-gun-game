@@ -1,18 +1,21 @@
 import React from "react";
 import type { EquipmentSlot, Card } from "../../../../types/game";
 import { DebouncedPopover } from "../../../../components/ui";
+import { getExtraEquipments } from "../../../../utils/equipments";
 
 export interface EquipmentColumnProps {
   equipments: EquipmentSlot;
 }
 
 export const EquipmentColumn: React.FC<EquipmentColumnProps> = ({ equipments }) => {
+  const extraCards = getExtraEquipments(equipments);
   const slots: { key: string; card?: Card }[] = [
     { key: "weapon", card: equipments.weapon },
+    { key: "barrel", card: equipments.barrel },
     { key: "horseDef", card: equipments.horseDef },
     { key: "horseOff", card: equipments.horseOff },
-    { key: "barrel", card: equipments.barrel },
-    { key: "extra", card: equipments.extra },
+    { key: "extra_0", card: extraCards[0] },
+    { key: "extra_1", card: extraCards[1] },
   ];
 
   return (

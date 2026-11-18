@@ -14,6 +14,7 @@ import { SkillHooks } from "../interact/skill_hooks";
 import { WinConditionEvaluator } from "../elimination/win_condition";
 import { AtomicEffects } from "../interact/primitives/atomic_effects";
 import { InteractManager } from "../interact/interact_manager";
+import { getAllEquippedCards } from "../utils/inventory";
 
 const GREEN_MISSED_CARDS = new Set([
   "BIBLE",
@@ -28,6 +29,32 @@ export class TurnManager {
     state: SimulationState
   ): PendingTurnStartChoice | null {
     return state.pendingTurnStartChoice;
+  }
+
+  // Emit Fog-of-War Phase 1 draw event
+  private static pushPhase1DrawEvent(
+    player: EnginePlayer,
+    drawnCards: EngineCard[],
+    events: DomainEvent[]
+  ): void {
+    events.push({
+      type: "PHASE_CHANGED",
+      payload: {
+        phase: 1,
+        playerId: player.id,
+        playerName: player.name,
+        drawnCount: drawnCards.length,
+        drawnCards,
+      },
+      visibleTo: [player.id],
+      maskedPayload: {
+        phase: 1,
+        playerId: player.id,
+        playerName: player.name,
+        drawnCount: drawnCards.length,
+      },
+      timestamp: Date.now(),
+    });
   }
 
   // Draw single card with Mine support
@@ -74,18 +101,64 @@ export class TurnManager {
     return result;
   }
 
+  // Emit Fog-of-War CARDS_DRAWN event
+  private static emitPhase1CardsDrawn(
+    player: EnginePlayer,
+    cards: EngineCard[],
+    events: DomainEvent[]
+  ): void {
+    if (cards.length === 0) return;
+    events.push({
+      type: "CARDS_DRAWN",
+      visibleTo: [player.id],
+      payload: {
+        playerId: player.id,
+        playerName: player.name,
+        count: cards.length,
+        cards,
+      },
+      maskedPayload: {
+        playerId: player.id,
+        playerName: player.name,
+        count: cards.length,
+      },
+      timestamp: Date.now(),
+    });
+  }
+
+  // Execute Bill Noface or Pixie Pete draw
+  private static executeSpecialPhase1CountDraw(
+    state: SimulationState,
+    player: EnginePlayer,
+    skill: "Bill Noface" | "Pixie Pete",
+    count: number,
+    wounds: number,
+    events: DomainEvent[]
+  ): void {
+    const drawn = this.drawCardsWithMineSupport(state, player, count, events);
+    events.push({
+      type: "ACTIVE_SKILL_USED",
+      payload: {
+        playerId: player.id,
+        playerName: player.name,
+        skill,
+        detail:
+          skill === "Bill Noface"
+            ? `drew ${drawn.length} card(s) (${wounds} wound(s))`
+            : `drew ${drawn.length} card(s)`,
+      },
+      timestamp: Date.now(),
+    });
+    this.finalizePhase1(state, player, drawn, events);
+  }
+
   // Check if player has cards in play
   private static hasCardInPlay(player: EnginePlayer): boolean {
-    const eq = player.equipments || {};
-    const hasEquip = Boolean(
-      eq.weapon ||
-        eq.horseDef ||
-        eq.horseOff ||
-        eq.barrel ||
-        eq.extra ||
-        (eq.extras && eq.extras.length > 0)
+    return (
+      getAllEquippedCards(player).length > 0 ||
+      player.greenCards.length > 0 ||
+      player.judgements.length > 0
     );
-    return hasEquip || player.greenCards.length > 0 || player.judgements.length > 0;
   }
 
   // Infer area for card in play
@@ -93,16 +166,7 @@ export class TurnManager {
     target: EnginePlayer,
     cardId: string
   ): "EQUIPMENT" | "GREEN" | "JUDGEMENT" | undefined {
-    const eq = target.equipments || {};
-    const equipCards = [
-      eq.weapon,
-      eq.horseDef,
-      eq.horseOff,
-      eq.barrel,
-      eq.extra,
-      ...(eq.extras || []),
-    ];
-    if (equipCards.some((c) => c?.id === cardId)) return "EQUIPMENT";
+    if (getAllEquippedCards(target).some((c) => c.id === cardId)) return "EQUIPMENT";
     if (target.greenCards.some((g) => g.id === cardId || g.card.id === cardId)) return "GREEN";
     if (target.judgements.some((j) => j.id === cardId || j.card.id === cardId)) return "JUDGEMENT";
     return undefined;
@@ -300,11 +364,14 @@ export class TurnManager {
           });
         }
       }
-      events.push({
-        type: "PHASE_CHANGED",
-        payload: { phase: 1, drawnCount: drawn.length + extraCount },
-        timestamp: Date.now(),
-      });
+      this.pushPhase1DrawEvent(player, drawn, events);
+      if (extraCount > 0) {
+        events.push({
+          type: "PHASE_CHANGED",
+          payload: { phase: 1, playerId: player.id, drawnCount: extraCount },
+          timestamp: Date.now(),
+        });
+      }
       state.pendingPhase1Choice = null;
       state.currentPhase = 2;
       events.push({
@@ -382,24 +449,26 @@ export class TurnManager {
         if (hasBill) {
           const wounds = Math.max(0, player.maxHp - player.hp);
           const count = Math.max(1, 1 + wounds + ctx.drawDelta);
-          const drawn = this.drawCardsWithMineSupport(state, player, count, events);
-          events.push({
-            type: "PHASE_CHANGED",
-            payload: { phase: 1, drawnCount: drawn.length },
-            timestamp: Date.now(),
-          });
-          this.finalizePhase1(state, player, drawn, events);
+          this.executeSpecialPhase1CountDraw(
+            state,
+            player,
+            "Bill Noface",
+            count,
+            wounds,
+            events
+          );
           return;
         }
         if (hasPixie) {
           const count = Math.max(1, 3 + ctx.drawDelta);
-          const drawn = this.drawCardsWithMineSupport(state, player, count, events);
-          events.push({
-            type: "PHASE_CHANGED",
-            payload: { phase: 1, drawnCount: drawn.length },
-            timestamp: Date.now(),
-          });
-          this.finalizePhase1(state, player, drawn, events);
+          this.executeSpecialPhase1CountDraw(
+            state,
+            player,
+            "Pixie Pete",
+            count,
+            0,
+            events
+          );
           return;
         }
       }
@@ -428,11 +497,6 @@ export class TurnManager {
 
     const drawCount = Math.max(1, 2 + ctx.drawDelta);
     const drawn = this.drawCardsWithMineSupport(state, player, drawCount, events);
-    events.push({
-      type: "PHASE_CHANGED",
-      payload: { phase: 1, drawnCount: drawn.length },
-      timestamp: Date.now(),
-    });
     this.finalizePhase1(state, player, drawn, events);
   }
 
@@ -450,11 +514,6 @@ export class TurnManager {
     if (previewCards.length <= keepCount) {
       player.handCards.push(...previewCards);
       state.pendingPhase1Choice = null;
-      events.push({
-        type: "PHASE_CHANGED",
-        payload: { phase: 1, drawnCount: previewCards.length },
-        timestamp: Date.now(),
-      });
       this.finalizePhase1(state, player, previewCards, events);
       return;
     }
@@ -483,6 +542,7 @@ export class TurnManager {
     options?: { skipBlackJack?: boolean; ranchDone?: boolean }
   ): void {
     const ctx = EventRuleRegistry.buildDrawContext(state, player);
+    const allDrawn = [...drawnCards];
 
     if (
       !options?.skipBlackJack &&
@@ -496,6 +556,9 @@ export class TurnManager {
       let bonusCard: EngineCard | undefined;
       if (isRed) {
         bonusCard = this.drawSingleWithMineSupport(state, player, events);
+        if (bonusCard) {
+          allDrawn.push(bonusCard);
+        }
       }
 
       events.push({
@@ -509,6 +572,10 @@ export class TurnManager {
         },
         timestamp: Date.now(),
       });
+    }
+
+    if (allDrawn.length > 0) {
+      this.pushPhase1DrawEvent(player, allDrawn, events);
     }
 
     if (ctx.allowLawOfTheWest && drawnCards.length >= 2) {
@@ -740,16 +807,28 @@ export class TurnManager {
         state.pendingPhase1Choice = null;
         const wounds = Math.max(0, player.maxHp - player.hp);
         const count = Math.max(1, 1 + wounds + ctx.drawDelta);
-        const drawn = this.drawCardsWithMineSupport(state, player, count, events);
-        this.finalizePhase1(state, player, drawn, events);
+        this.executeSpecialPhase1CountDraw(
+          state,
+          player,
+          "Bill Noface",
+          count,
+          wounds,
+          events
+        );
         return { success: true, events };
       }
 
       if (option === "PIXIE_PETE") {
         state.pendingPhase1Choice = null;
         const count = Math.max(1, 3 + ctx.drawDelta);
-        const drawn = this.drawCardsWithMineSupport(state, player, count, events);
-        this.finalizePhase1(state, player, drawn, events);
+        this.executeSpecialPhase1CountDraw(
+          state,
+          player,
+          "Pixie Pete",
+          count,
+          0,
+          events
+        );
         return { success: true, events };
       }
 
@@ -777,6 +856,7 @@ export class TurnManager {
         }
 
         state.pendingPhase1Choice = null;
+        this.emitPhase1CardsDrawn(player, drawn, events);
         this.finalizePhase1(state, player, drawn, events);
         return { success: true, events };
       }
@@ -833,6 +913,7 @@ export class TurnManager {
         }
 
         state.pendingPhase1Choice = null;
+        this.emitPhase1CardsDrawn(player, drawn, events);
         this.finalizePhase1(state, player, drawn, events);
         return { success: true, events };
       }
@@ -889,12 +970,14 @@ export class TurnManager {
             targetPlayerId: target.id,
             targetPlayerName: target.name,
             targetArea: area,
+            card: drawn[0],
             cardName: drawn[0]?.name,
           },
           timestamp: Date.now(),
         });
 
         state.pendingPhase1Choice = null;
+        this.emitPhase1CardsDrawn(player, drawn, events);
         this.finalizePhase1(state, player, drawn, events);
         return { success: true, events };
       }
@@ -902,6 +985,7 @@ export class TurnManager {
       if (option === "NORMAL_DECK" || option === "NORMAL_DRAW") {
         state.pendingPhase1Choice = null;
         const drawn = this.drawCardsWithMineSupport(state, player, keepCount, events);
+        this.emitPhase1CardsDrawn(player, drawn, events);
         this.finalizePhase1(state, player, drawn, events);
         return { success: true, events };
       }
@@ -1023,6 +1107,82 @@ export class TurnManager {
     this.startTurn(state, nextPlayer, events, forceAdvanceRoundEvent);
   }
 
+  // Shared Phase 3 excess discard helper
+  public static discardExcessPhase3Cards(
+    state: SimulationState,
+    player: EnginePlayer,
+    targetIds: string[],
+    events: DomainEvent[],
+    options?: { requireExactToLimit?: boolean }
+  ): CommandResult {
+    if (player.isGhost) {
+      return {
+        success: false,
+        message: "Ghosts do not have a Phase 3 hand limit.",
+        events,
+      };
+    }
+    if (targetIds.length === 0) {
+      return { success: false, message: "Card ID required to discard.", events };
+    }
+    if (new Set(targetIds).size !== targetIds.length) {
+      return {
+        success: false,
+        message: "Duplicate card IDs cannot be discarded together.",
+        events,
+      };
+    }
+
+    for (const id of targetIds) {
+      if (!player.handCards.some((c) => c.id === id)) {
+        return { success: false, message: "Card not found in hand.", events };
+      }
+    }
+
+    const handLimit = SkillHooks.getPhase3HandLimit(player, state);
+    const excess = player.handCards.length - handLimit;
+    if (excess <= 0) {
+      return {
+        success: false,
+        message: `Hand size (${player.handCards.length}) does not exceed hand limit (${handLimit}).`,
+        events,
+      };
+    }
+    if (targetIds.length > excess) {
+      return {
+        success: false,
+        message: `Can discard at most ${excess} excess card(s) (hand limit ${handLimit}).`,
+        events,
+      };
+    }
+    if (options?.requireExactToLimit && targetIds.length < excess) {
+      return {
+        success: false,
+        message: `Discard ${excess - targetIds.length} more card(s) to meet hand limit (${handLimit}).`,
+        events,
+      };
+    }
+
+    for (const id of targetIds) {
+      const idx = player.handCards.findIndex((c) => c.id === id);
+      if (idx !== -1) {
+        const card = player.handCards.splice(idx, 1)[0];
+        AtomicEffects.discardCard(state, card);
+        if (player.forcedPlayCardId === card.id) {
+          player.forcedPlayCardId = null;
+        }
+        events.push({
+          type: "CARD_DISCARDED_PHASE_3",
+          payload: { playerId: player.id, card },
+          timestamp: Date.now(),
+        });
+      }
+    }
+
+    SkillHooks.checkSuzyLafayette(state, player, events);
+    return { success: true, events };
+  }
+
   // End turn or Phase 3
   public static endTurn(
     state: SimulationState,
@@ -1038,6 +1198,13 @@ export class TurnManager {
     }
     if (state.turnPlayerId !== player.id) {
       return { success: false, message: "It is not your turn.", events };
+    }
+    if (state.currentPhase !== 2 && state.currentPhase !== 3) {
+      return {
+        success: false,
+        message: "Can only end turn during Phase 2 or Phase 3.",
+        events,
+      };
     }
     if (state.pendingReactions.length > 0) {
       return {
@@ -1082,42 +1249,16 @@ export class TurnManager {
       const handLimit = SkillHooks.getPhase3HandLimit(player, state);
 
       if (batchDiscardIds && batchDiscardIds.length > 0) {
-        if (new Set(batchDiscardIds).size !== batchDiscardIds.length) {
-          return { success: false, message: "Duplicate card IDs in discard list.", events };
+        const discardRes = this.discardExcessPhase3Cards(
+          state,
+          player,
+          batchDiscardIds,
+          events,
+          { requireExactToLimit: true }
+        );
+        if (!discardRes.success) {
+          return discardRes;
         }
-        for (const id of batchDiscardIds) {
-          if (!player.handCards.some((c) => c.id === id)) {
-            return { success: false, message: "Discard card not found in hand.", events };
-          }
-        }
-        if (player.handCards.length - batchDiscardIds.length > handLimit) {
-          const remainingExcess =
-            player.handCards.length - batchDiscardIds.length - handLimit;
-          return {
-            success: false,
-            message: `Discard ${remainingExcess} more card(s) to meet hand limit (${handLimit}).`,
-            events,
-          };
-        }
-
-        const removedCards: EngineCard[] = [];
-        for (const id of batchDiscardIds) {
-          const idx = player.handCards.findIndex((c) => c.id === id);
-          if (idx !== -1) {
-            const card = player.handCards.splice(idx, 1)[0];
-            AtomicEffects.discardCard(state, card);
-            if (player.forcedPlayCardId === card.id) {
-              player.forcedPlayCardId = null;
-            }
-            removedCards.push(card);
-            events.push({
-              type: "CARD_DISCARDED_PHASE_3",
-              payload: { playerId: player.id, card },
-              timestamp: Date.now(),
-            });
-          }
-        }
-        SkillHooks.checkSuzyLafayette(state, player, events);
       }
 
       if (player.handCards.length > handLimit) {

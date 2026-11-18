@@ -1,0 +1,52 @@
+.game-table {
+  &__targeting-arrow {
+    position: fixed;
+    inset: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 940;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+
+    &[data-visible="true"] {
+      opacity: 1;
+    }
+  }
+
+  &__targeting-glow {
+    fill: none;
+    stroke: rgba(250, 204, 21, 0.35);
+    stroke-width: 10;
+    stroke-linecap: round;
+  }
+
+  &__targeting-path {
+    fill: none;
+    stroke-width: 4;
+    stroke-linecap: round;
+    stroke-dasharray: 10 6;
+    animation: targetFlow 0.8s linear infinite;
+  }
+
+  &__targeting-origin {
+    fill: #fde047;
+    stroke: #78350f;
+    stroke-width: 2;
+  }
+
+  &__targeting-reticle {
+    fill: rgba(239, 68, 68, 0.18);
+    stroke: #fde047;
+    stroke-width: 2.5;
+  }
+}
+
+@keyframes targetFlow {
+  from {
+    stroke-dashoffset: 32;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}

@@ -6,6 +6,7 @@ const elimination_handler_1 = require("../elimination/elimination_handler");
 const event_engine_1 = require("../events/event_engine");
 const skill_hooks_1 = require("./skill_hooks");
 const atomic_effects_1 = require("./primitives/atomic_effects");
+const inventory_1 = require("../utils/inventory");
 const GREEN_DEFENSE_CARDS = new Set([
     "SOMBRERO",
     "IRON PLATE",
@@ -31,61 +32,45 @@ class ReactionResolver {
     }
     // Check whether player has blue cards
     static hasAnyBlueCardInPlay(player) {
-        const eq = player.equipments;
-        if (eq?.weapon ||
-            eq?.horseDef ||
-            eq?.horseOff ||
-            eq?.barrel ||
-            eq?.extra ||
-            (eq?.extras && eq.extras.length > 0)) {
+        if ((0, inventory_1.getAllEquippedCards)(player).length > 0) {
             return true;
         }
         return (player.judgements || []).some((j) => j.card.border === "blue");
     }
     // Extract selected blue card from play
     static extractBlueCardInPlay(player, targetId) {
-        const eq = player.equipments;
-        if (eq) {
-            if (eq.weapon?.id === targetId) {
-                const removed = eq.weapon;
-                eq.weapon = undefined;
-                return removed;
-            }
-            if (eq.horseDef?.id === targetId) {
-                const removed = eq.horseDef;
-                eq.horseDef = undefined;
-                return removed;
-            }
-            if (eq.horseOff?.id === targetId) {
-                const removed = eq.horseOff;
-                eq.horseOff = undefined;
-                return removed;
-            }
-            if (eq.barrel?.id === targetId) {
-                const removed = eq.barrel;
-                eq.barrel = undefined;
-                return removed;
-            }
-            if (eq.extras && eq.extras.length > 0) {
-                const extraIdx = eq.extras.findIndex((c) => c.id === targetId);
-                if (extraIdx !== -1) {
-                    const removed = eq.extras.splice(extraIdx, 1)[0];
-                    eq.extra = eq.extras[0];
-                    return removed;
-                }
-            }
-            if (eq.extra?.id === targetId) {
-                const removed = eq.extra;
-                eq.extra = eq.extras?.[0];
-                return removed;
-            }
-        }
+        const equipped = (0, inventory_1.removeEquippedCardById)(player, targetId);
+        if (equipped)
+            return equipped;
         const judgements = player.judgements || [];
         const jIdx = judgements.findIndex((j) => (j.id === targetId || j.card.id === targetId) && j.card.border === "blue");
         if (jIdx !== -1) {
             return judgements.splice(jIdx, 1)[0].card;
         }
         return null;
+    }
+    // Emit private cards-drawn domain event
+    static emitCardsDrawn(player, sourceCard, drawn, events) {
+        if (drawn.length === 0)
+            return;
+        events.push({
+            type: "CARDS_DRAWN",
+            visibleTo: [player.id],
+            payload: {
+                playerId: player.id,
+                playerName: player.name,
+                sourceCard,
+                count: drawn.length,
+                cards: drawn,
+            },
+            maskedPayload: {
+                playerId: player.id,
+                playerName: player.name,
+                sourceCard,
+                count: drawn.length,
+            },
+            timestamp: Date.now(),
+        });
     }
     // Handle Sid Ketchum near-death rescue
     static resolveNearDeathRescue(state, player, reaction, reactionIdx, attacker, command, deckManager) {
@@ -254,18 +239,49 @@ class ReactionResolver {
                 };
             }
             const equipEffective = skill_hooks_1.SkillHooks.isEquipmentEffective(player, turnPlayer ?? attacker, state);
-            const hasBarrelCard = Boolean(player.equipments.barrel ||
-                player.equipments.extra?.name === "BARREL" ||
-                player.equipments.extras?.some((c) => c.name === "BARREL"));
             const canBarrelNow = reaction.canUseBarrel &&
                 !reaction.barrelChecked &&
                 equipEffective &&
-                hasBarrelCard;
+                (0, inventory_1.hasBarrelCard)(player);
             const canJourdonnaisNow = reaction.canUseJourdonnais &&
                 !reaction.jourdonnaisChecked &&
                 skill_hooks_1.SkillHooks.hasInnateBarrel(player, state);
+            const requestedSource = (command.payload?.checkSource ??
+                command.checkSource);
+            if (requestedSource !== undefined &&
+                requestedSource !== "BARREL" &&
+                requestedSource !== "JOURDONNAIS") {
+                return {
+                    success: false,
+                    message: "Invalid checkSource; expected BARREL or JOURDONNAIS.",
+                };
+            }
             let checkSource;
-            if (canBarrelNow) {
+            if (requestedSource === "BARREL") {
+                if (!canBarrelNow) {
+                    return {
+                        success: false,
+                        message: reaction.barrelChecked
+                            ? "Barrel check already used."
+                            : "Barrel check is not available.",
+                    };
+                }
+                reaction.barrelChecked = true;
+                checkSource = "BARREL";
+            }
+            else if (requestedSource === "JOURDONNAIS") {
+                if (!canJourdonnaisNow) {
+                    return {
+                        success: false,
+                        message: reaction.jourdonnaisChecked
+                            ? "Jourdonnais check already used."
+                            : "Jourdonnais check is not available.",
+                    };
+                }
+                reaction.jourdonnaisChecked = true;
+                checkSource = "JOURDONNAIS";
+            }
+            else if (canBarrelNow) {
                 reaction.barrelChecked = true;
                 checkSource = "BARREL";
             }
@@ -368,6 +384,7 @@ class ReactionResolver {
                 const { cards: drawn, events: drawEvents } = atomic_effects_1.AtomicEffects.drawCards(state, 1, deckManager);
                 player.handCards.push(...drawn);
                 events.push(...drawEvents);
+                this.emitCardsDrawn(player, greenEntry.card, drawn, events);
             }
             skill_hooks_1.SkillHooks.onPlayOutOfTurn(state, player, events);
             reaction.currentCount += 1;
@@ -428,10 +445,51 @@ class ReactionResolver {
             }
             player.handCards.splice(cardIdx, 1);
             atomic_effects_1.AtomicEffects.discardCard(state, card, deckManager);
+            if (reaction.requiredCard === "MISSED" && card.name !== "MISSED!" && card.name !== "DODGE") {
+                if (card.name === "BANG!" && skill_hooks_1.SkillHooks.hasSkill(player, "Calamity Janet", state)) {
+                    events.push({
+                        type: "ACTIVE_SKILL_USED",
+                        payload: {
+                            playerId: player.id,
+                            playerName: player.name,
+                            skill: "Calamity Janet",
+                            detail: "played BANG! as MISSED!",
+                        },
+                        timestamp: Date.now(),
+                    });
+                }
+                else if (skill_hooks_1.SkillHooks.hasSkill(player, "Elena Fuente", state)) {
+                    events.push({
+                        type: "ACTIVE_SKILL_USED",
+                        payload: {
+                            playerId: player.id,
+                            playerName: player.name,
+                            skill: "Elena Fuente",
+                            detail: "used hand card as MISSED!",
+                        },
+                        timestamp: Date.now(),
+                    });
+                }
+            }
+            else if (reaction.requiredCard === "BANG" &&
+                card.name === "MISSED!" &&
+                skill_hooks_1.SkillHooks.hasSkill(player, "Calamity Janet", state)) {
+                events.push({
+                    type: "ACTIVE_SKILL_USED",
+                    payload: {
+                        playerId: player.id,
+                        playerName: player.name,
+                        skill: "Calamity Janet",
+                        detail: "played MISSED! as BANG!",
+                    },
+                    timestamp: Date.now(),
+                });
+            }
             if (card.name === "DODGE") {
                 const { cards: dodgeCards, events: dodgeEvents } = atomic_effects_1.AtomicEffects.drawCards(state, 1, deckManager);
                 player.handCards.push(...dodgeCards);
                 events.push(...dodgeEvents);
+                this.emitCardsDrawn(player, card, dodgeCards, events);
             }
             skill_hooks_1.SkillHooks.onPlayOutOfTurn(state, player, events);
             skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, events);

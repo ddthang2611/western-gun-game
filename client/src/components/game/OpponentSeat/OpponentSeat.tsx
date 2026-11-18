@@ -1,5 +1,6 @@
 import React from "react";
-import type { Player, Card } from "../../../types/game";
+import type { Player } from "../../../types/game";
+import { getAllEquipments } from "../../../utils/equipments";
 import { BulletMeter } from "../BulletMeter/BulletMeter";
 import { CharacterPortrait } from "../CharacterPortrait/CharacterPortrait";
 import { DebouncedPopover } from "../../ui/DebouncedPopover/DebouncedPopover";
@@ -9,6 +10,7 @@ import "./OpponentSeat.scss";
 
 export interface OpponentSeatProps {
   player: Player;
+  isCurrentTurn?: boolean;
   isTargetSelected?: boolean;
   isTargetable?: boolean;
   isInRange?: boolean;
@@ -18,6 +20,7 @@ export interface OpponentSeatProps {
 
 export const OpponentSeat: React.FC<OpponentSeatProps> = ({
   player,
+  isCurrentTurn = false,
   isTargetSelected = false,
   isTargetable = false,
   isInRange = true,
@@ -30,6 +33,7 @@ export const OpponentSeat: React.FC<OpponentSeatProps> = ({
 
   const seatClasses = [
     "opponent-seat",
+    isCurrentTurn && !isDead ? "opponent-seat--active-turn" : "",
     isTargetSelected ? "opponent-seat--selected" : "",
     canSelect ? "opponent-seat--targetable" : "",
     isDead ? "opponent-seat--dead" : isDimmed ? "opponent-seat--out-of-range" : "",
@@ -73,138 +77,148 @@ export const OpponentSeat: React.FC<OpponentSeatProps> = ({
         hasDynamite={player.hasDynamite}
       />
 
-      <div
-        className="opponent-seat__hand-count"
-        aria-label={`${player.handCount} cards in hand`}
-        title={`${player.handCount} card(s) in hand`}
-      >
-        <span className="opponent-seat__hand-fan" aria-hidden="true">
-          <span className="opponent-seat__mini-card opponent-seat__mini-card--left" />
-          <span className="opponent-seat__mini-card opponent-seat__mini-card--center" />
-          <span className="opponent-seat__mini-card opponent-seat__mini-card--right" />
-        </span>
-        <span className="opponent-seat__hand-num">{player.handCount}</span>
-      </div>
-
-      {/* Header: sheriff badge and player name */}
-      <div className="opponent-seat__header">
-        <div className="opponent-seat__player-meta">
-          {player.isSheriff && (
-            <Badge variant="warning" shape="tag">
-              SHERIFF
-            </Badge>
-          )}
-          <span className="opponent-seat__player-name">{player.name}</span>
-        </div>
-      </div>
-
-      {/* Hero portraits, names, and vertical HP */}
-      <div className="opponent-seat__body">
-        <div className="opponent-seat__hero-columns">
-          {player.characters.slice(0, 2).map((hero) => (
-            <DebouncedPopover key={hero.id} title={hero.name} content={hero.desc}>
-              <div className="opponent-seat__hero-slot">
-                <CharacterPortrait character={hero} size="seat" />
-              </div>
-            </DebouncedPopover>
-          ))}
+      <div className="opponent-seat__main-pane">
+        <div
+          className="opponent-seat__hand-count"
+          aria-label={`${player.handCount} cards in hand`}
+          title={`${player.handCount} card(s) in hand`}
+        >
+          <span className="opponent-seat__hand-fan" aria-hidden="true">
+            <span className="opponent-seat__mini-card opponent-seat__mini-card--left" />
+            <span className="opponent-seat__mini-card opponent-seat__mini-card--center" />
+            <span className="opponent-seat__mini-card opponent-seat__mini-card--right" />
+          </span>
+          <span className="opponent-seat__hand-num">{player.handCount}</span>
         </div>
 
-        <div className="opponent-seat__side-meta">
-          <BulletMeter
-            currentHp={player.hp}
-            maxHp={player.maxHp}
-            size="small"
-            orientation="vertical"
-            showText={false}
-          />
-          {distance !== undefined && (
-            <span
-              className={`opponent-seat__distance ${
-                isInRange
-                  ? "opponent-seat__distance--in-range"
-                  : "opponent-seat__distance--out-of-range"
-              }`}
-              title={`Distance: ${distance}`}
-            >
-              D{distance}
-            </span>
-          )}
+        {/* Header: sheriff badge and player name */}
+        <div className="opponent-seat__header">
+          <div className="opponent-seat__player-meta">
+            {player.isSheriff && (
+              <Badge variant="warning" shape="tag">
+                SHERIFF
+              </Badge>
+            )}
+            <span className="opponent-seat__player-name">{player.name}</span>
+          </div>
         </div>
+
+        {/* Hero portraits, names, and vertical HP */}
+        <div className="opponent-seat__body">
+          <div className="opponent-seat__hero-columns">
+            {player.characters.slice(0, 2).map((hero) => (
+              <DebouncedPopover key={hero.id} title={hero.name} content={hero.desc}>
+                <div className="opponent-seat__hero-slot">
+                  <CharacterPortrait character={hero} size="seat" />
+                </div>
+              </DebouncedPopover>
+            ))}
+          </div>
+
+          <div className="opponent-seat__side-meta">
+            <BulletMeter
+              currentHp={player.hp}
+              maxHp={player.maxHp}
+              size="small"
+              orientation="vertical"
+              showText={false}
+            />
+            {distance !== undefined && (
+              <span
+                className={`opponent-seat__distance ${
+                  isInRange
+                    ? "opponent-seat__distance--in-range"
+                    : "opponent-seat__distance--out-of-range"
+                }`}
+                title={`Distance: ${distance}`}
+              >
+                D{distance}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Equipment 2x3 grid (6 slots) */}
+        {(() => {
+          const blueCards = getAllEquipments(player.equipments);
+
+          const equipSlots = Array.from({ length: Math.max(6, blueCards.length) }).map(
+            (_, idx) => blueCards[idx]
+          );
+
+          return (
+            <div className="opponent-seat__equip-rows">
+              {equipSlots.map((card, idx) => {
+                if (!card) {
+                  return (
+                    <div
+                      key={`eq_empty_${idx}`}
+                      className="opponent-seat__equip-row"
+                      aria-hidden="true"
+                    />
+                  );
+                }
+
+                const title = card.range ? `${card.name} (Range ${card.range})` : card.name;
+                return (
+                  <DebouncedPopover
+                    key={card.id || `eq_${idx}`}
+                    title={title}
+                    content={card.desc || card.name}
+                    delayMs={250}
+                  >
+                    <div className="opponent-seat__equip-row opponent-seat__equip-row--occupied">
+                      <span className="opponent-seat__equip-name">{card.name}</span>
+                    </div>
+                  </DebouncedPopover>
+                );
+              })}
+            </div>
+          );
+        })()}
       </div>
 
-      {/* Equipment (4) & Green Cards (4) fixed 2x4 grid */}
+      {/* Right pane: Scrollable Green Cards */}
       {(() => {
-        const blueCards = [
-          player.equipments.weapon,
-          player.equipments.barrel,
-          player.equipments.horseDef,
-          player.equipments.horseOff,
-          player.equipments.extra,
-        ].filter((c): c is Card => Boolean(c));
-
-        const equipSlots = Array.from({ length: 4 }).map((_, idx) => blueCards[idx]);
         const greens = player.greenCards || [];
-        const greenSlots = Array.from({ length: 4 }).map((_, idx) => greens[idx]);
+        const greenSlots = Array.from({ length: Math.max(6, greens.length) }).map(
+          (_, idx) => greens[idx]
+        );
 
         return (
-          <div className="opponent-seat__equip-rows">
-            {equipSlots.map((card, idx) => {
-              if (!card) {
+          <div className="opponent-seat__green-pane" aria-label="Green cards in play">
+            <div className="opponent-seat__green-list">
+              {greenSlots.map((gCard, idx) => {
+                if (!gCard) {
+                  return (
+                    <div
+                      key={`grn_empty_${idx}`}
+                      className="opponent-seat__equip-row"
+                      aria-hidden="true"
+                    />
+                  );
+                }
+
                 return (
-                  <div
-                    key={`eq_empty_${idx}`}
-                    className="opponent-seat__equip-row"
-                    aria-hidden="true"
-                  />
-                );
-              }
-
-              const title = card.range ? `${card.name} (Range ${card.range})` : card.name;
-              return (
-                <DebouncedPopover
-                  key={card.id || `eq_${idx}`}
-                  title={title}
-                  content={card.desc || card.name}
-                  delayMs={250}
-                >
-                  <div className="opponent-seat__equip-row opponent-seat__equip-row--occupied">
-                    <span className="opponent-seat__equip-name">{card.name}</span>
-                  </div>
-                </DebouncedPopover>
-              );
-            })}
-
-            {greenSlots.map((gCard, idx) => {
-              if (!gCard) {
-                return (
-                  <div
-                    key={`grn_empty_${idx}`}
-                    className="opponent-seat__equip-row"
-                    aria-hidden="true"
-                  />
-                );
-              }
-
-              return (
-                <DebouncedPopover
-                  key={gCard.id || `grn_${idx}`}
-                  title={gCard.card.name}
-                  content={gCard.card.desc || gCard.card.name}
-                  delayMs={250}
-                >
-                  <div
-                    className={`opponent-seat__equip-row ${
-                      gCard.isDelay
-                        ? "opponent-seat__equip-row--green-delay"
-                        : "opponent-seat__equip-row--green-ready"
-                    }`}
+                  <DebouncedPopover
+                    key={gCard.id || `grn_${idx}`}
+                    title={gCard.card.name}
+                    content={gCard.card.desc || gCard.card.name}
+                    delayMs={250}
                   >
-                    <span className="opponent-seat__equip-name">{gCard.card.name}</span>
-                  </div>
-                </DebouncedPopover>
-              );
-            })}
+                    <div
+                      className={`opponent-seat__equip-row ${
+                        gCard.isDelay
+                          ? "opponent-seat__equip-row--green-delay"
+                          : "opponent-seat__equip-row--green-ready"
+                      }`}
+                    >
+                      <span className="opponent-seat__equip-name">{gCard.card.name}</span>
+                    </div>
+                  </DebouncedPopover>
+                );
+              })}
+            </div>
           </div>
         );
       })()}

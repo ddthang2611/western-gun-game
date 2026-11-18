@@ -5,6 +5,7 @@ const target_validator_1 = require("../../combat/target_validator");
 const event_engine_1 = require("../../events/event_engine");
 const skill_hooks_1 = require("../skill_hooks");
 const atomic_effects_1 = require("../primitives/atomic_effects");
+const inventory_1 = require("../../utils/inventory");
 class CardManipulation {
     // Check target area availability
     static hasTargetCard(targetPlayer, targetArea, targetCardId) {
@@ -12,26 +13,7 @@ class CardManipulation {
             return targetPlayer.handCards.length > 0;
         }
         if (targetArea === "EQUIPMENT") {
-            const eq = targetPlayer.equipments;
-            if (!eq)
-                return false;
-            const list = [];
-            if (eq.weapon)
-                list.push(eq.weapon);
-            if (eq.horseDef)
-                list.push(eq.horseDef);
-            if (eq.horseOff)
-                list.push(eq.horseOff);
-            if (eq.barrel)
-                list.push(eq.barrel);
-            for (const item of eq.extras || []) {
-                if (item && !list.some((c) => c.id === item.id)) {
-                    list.push(item);
-                }
-            }
-            if (eq.extra && !list.some((c) => c.id === eq.extra.id)) {
-                list.push(eq.extra);
-            }
+            const list = (0, inventory_1.getAllEquippedCards)(targetPlayer);
             return targetCardId ? list.some((c) => c.id === targetCardId) : list.length > 0;
         }
         if (targetArea === "GREEN") {
@@ -180,6 +162,7 @@ class CardManipulation {
             return { success: false, message: "Target card not found." };
         }
         if (fromGreenEntryId) {
+            const hideTransferred = isSteal && targetArea === "HAND";
             events.push({
                 type: "GREEN_CARD_ACTIVATED",
                 payload: {
@@ -187,7 +170,7 @@ class CardManipulation {
                     playerName: player.name,
                     targetId: targetPlayer.id,
                     card,
-                    transferredCard: transferred,
+                    ...(hideTransferred ? {} : { transferredCard: transferred }),
                 },
                 timestamp: Date.now(),
             });

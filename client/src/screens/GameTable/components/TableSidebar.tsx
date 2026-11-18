@@ -1,6 +1,8 @@
 import React from "react";
 import type { RoleType, Card, Suit } from "../../../types/game";
 import { DebouncedPopover } from "../../../components/ui";
+import { formatSimpleLog } from "../../../utils/formatters";
+import "./TableSidebar.scss";
 
 export interface TableSidebarProps {
   myRole?: RoleType;
@@ -19,12 +21,6 @@ const SUIT_SYMBOLS: Record<Suit, string> = {
   clubs: "\u2663",
 };
 
-const formatSimpleLog = (line: string): string =>
-  line
-    .replace(/^\[[^\]]+\]\s*/g, "")
-    .replace(/^\[Mock\]\s*/i, "")
-    .trim();
-
 export const TableSidebar: React.FC<TableSidebarProps> = ({
   myRole,
   roleCounts,
@@ -34,7 +30,7 @@ export const TableSidebar: React.FC<TableSidebarProps> = ({
   topDiscard,
   onOpenCombatLog,
 }) => {
-  const recentLogs = combatLog.slice(0, 3);
+  const recentLogs = combatLog.slice(0, 6);
   const topDiscardLabel = topDiscard
     ? `${topDiscard.name} ${topDiscard.rank}${SUIT_SYMBOLS[topDiscard.suit] || ""}`
     : "None";
@@ -44,7 +40,11 @@ export const TableSidebar: React.FC<TableSidebarProps> = ({
       <div className="game-table__sidebar-box">
         <div className="game-table__deck-stats">
           <div className="game-table__deck-pile">
-            <div className="game-table__pile-card game-table__pile-card--stack" title={`Draw deck: ${deckCount} card(s)`}>
+            <div
+              className="game-table__pile-card game-table__pile-card--stack"
+              data-flight-anchor="draw-pile"
+              title={`Draw deck: ${deckCount} card(s)`}
+            >
               <img
                 src="/assets/images/ui/card_back.png"
                 alt="Face-down draw deck"
@@ -62,7 +62,10 @@ export const TableSidebar: React.FC<TableSidebarProps> = ({
                 content={topDiscard.desc}
                 delayMs={200}
               >
-                <div className="game-table__pile-card game-table__pile-card--discard">
+                <div
+                  className="game-table__pile-card game-table__pile-card--discard"
+                  data-flight-anchor="discard-pile"
+                >
                   {topDiscard.image ? (
                     <img
                       src={topDiscard.image}
@@ -76,7 +79,10 @@ export const TableSidebar: React.FC<TableSidebarProps> = ({
                 </div>
               </DebouncedPopover>
             ) : (
-              <div className="game-table__pile-card game-table__pile-card--empty">
+              <div
+                className="game-table__pile-card game-table__pile-card--empty"
+                data-flight-anchor="discard-pile"
+              >
                 <span className="game-table__pile-count">{discardCount}</span>
               </div>
             )}

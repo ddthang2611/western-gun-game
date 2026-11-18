@@ -79,7 +79,7 @@ export const initialMockState: TableState = {
       equipments: {
         weapon: {
           id: "w_winchester",
-          name: "Winchester",
+          name: "WINCHESTER",
           border: "blue",
           rank: "8",
           suit: "spades",
@@ -89,7 +89,7 @@ export const initialMockState: TableState = {
         },
         horseDef: {
           id: "eq_mustang",
-          name: "Mustang",
+          name: "MUSTANG",
           border: "blue",
           rank: "8",
           suit: "hearts",
@@ -98,7 +98,7 @@ export const initialMockState: TableState = {
         },
         barrel: {
           id: "eq_barrel",
-          name: "Barrel",
+          name: "BARREL",
           border: "blue",
           rank: "Q",
           suit: "spades",
@@ -111,7 +111,7 @@ export const initialMockState: TableState = {
           id: "g_iron_1",
           card: {
             id: "gc_iron",
-            name: "Iron Plate",
+            name: "IRON PLATE",
             border: "green",
             rank: "A",
             suit: "diamonds",
@@ -124,7 +124,7 @@ export const initialMockState: TableState = {
           id: "g_canteen_1",
           card: {
             id: "gc_canteen",
-            name: "Canteen",
+            name: "CANTEEN",
             border: "green",
             rank: "7",
             suit: "hearts",
@@ -132,6 +132,21 @@ export const initialMockState: TableState = {
             image: "/assets/images/cards/110_dc_canteen_7_hearts.png",
           },
           isDelay: true,
+        },
+      ],
+      judgements: [
+        {
+          id: "j_dynamite_sheriff",
+          type: "DYNAMITE",
+          card: {
+            id: "c_dynamite_sheriff",
+            name: "DYNAMITE",
+            border: "blue",
+            rank: "2",
+            suit: "hearts",
+            desc: "Draw Spades 2-9 at turn start to take 3 damage, otherwise pass left.",
+            image: "/assets/images/cards/066_base_dynamite_2_hearts.png",
+          },
         },
       ],
       hasJail: false,
@@ -162,7 +177,7 @@ export const initialMockState: TableState = {
       equipments: {
         horseOff: {
           id: "eq_scope",
-          name: "Scope",
+          name: "SCOPE",
           border: "blue",
           rank: "A",
           suit: "spades",
@@ -175,7 +190,7 @@ export const initialMockState: TableState = {
           id: "g_knife_1",
           card: {
             id: "gc_knife",
-            name: "Knife",
+            name: "KNIFE",
             border: "green",
             rank: "8",
             suit: "hearts",
@@ -188,7 +203,7 @@ export const initialMockState: TableState = {
           id: "g_derringer_bob",
           card: {
             id: "gc_derringer_bob",
-            name: "Derringer",
+            name: "DERRINGER",
             border: "green",
             rank: "7",
             suit: "spades",
@@ -201,7 +216,7 @@ export const initialMockState: TableState = {
           id: "g_pony_bob",
           card: {
             id: "gc_pony_bob",
-            name: "Pony Express",
+            name: "PONY EXPRESS",
             border: "green",
             rank: "Q",
             suit: "diamonds",
@@ -209,6 +224,21 @@ export const initialMockState: TableState = {
             image: "/assets/images/cards/118_dc_pony_express_Q_diamonds.png",
           },
           isDelay: true,
+        },
+      ],
+      judgements: [
+        {
+          id: "j_jail_bob",
+          type: "JAIL",
+          card: {
+            id: "c_jail_bob",
+            name: "JAIL",
+            border: "blue",
+            rank: "J",
+            suit: "spades",
+            desc: "Draw Hearts on check to escape, otherwise skip turn.",
+            image: "/assets/images/cards/067_base_jail_J_spades.png",
+          },
         },
       ],
       hasJail: true,
@@ -239,7 +269,7 @@ export const initialMockState: TableState = {
       equipments: {
         barrel: {
           id: "eq_barrel_2",
-          name: "Barrel",
+          name: "BARREL",
           border: "blue",
           rank: "K",
           suit: "spades",
@@ -248,6 +278,7 @@ export const initialMockState: TableState = {
         },
       },
       greenCards: [],
+      judgements: [],
       hasJail: false,
       hasDynamite: false,
       distanceFromMe: 3,
@@ -276,7 +307,7 @@ export const initialMockState: TableState = {
       equipments: {
         weapon: {
           id: "w_volcanic_jack",
-          name: "Volcanic",
+          name: "VOLCANIC",
           border: "blue",
           rank: "10",
           suit: "spades",
@@ -286,6 +317,7 @@ export const initialMockState: TableState = {
         },
       },
       greenCards: [],
+      judgements: [],
       hasJail: false,
       hasDynamite: false,
       distanceFromMe: 3,
@@ -314,7 +346,7 @@ export const initialMockState: TableState = {
       equipments: {
         weapon: {
           id: "w_schofield_suzy",
-          name: "Schofield",
+          name: "SCHOFIELD",
           border: "blue",
           rank: "J",
           suit: "clubs",
@@ -328,7 +360,7 @@ export const initialMockState: TableState = {
           id: "g_sombrero_suzy",
           card: {
             id: "gc_sombrero_suzy",
-            name: "Sombrero",
+            name: "SOMBRERO",
             border: "green",
             rank: "7",
             suit: "clubs",
@@ -341,7 +373,7 @@ export const initialMockState: TableState = {
           id: "g_pepperbox_suzy",
           card: {
             id: "gc_pepperbox_suzy",
-            name: "Pepperbox",
+            name: "PEPPERBOX",
             border: "green",
             rank: "A",
             suit: "clubs",
@@ -351,6 +383,7 @@ export const initialMockState: TableState = {
           isDelay: true,
         },
       ],
+      judgements: [],
       hasJail: false,
       hasDynamite: false,
       distanceFromMe: 2,
@@ -382,7 +415,7 @@ export const initialMockState: TableState = {
           id: "g_buffalo_kit",
           card: {
             id: "gc_buffalo_kit",
-            name: "Buffalo Rifle",
+            name: "BUFFALO RIFLE",
             border: "green",
             rank: "Q",
             suit: "clubs",
@@ -392,6 +425,7 @@ export const initialMockState: TableState = {
           isDelay: true,
         },
       ],
+      judgements: [],
       hasJail: false,
       hasDynamite: false,
       distanceFromMe: 1,
@@ -413,12 +447,13 @@ export const initialMockState: TableState = {
           id: "char_jesse",
           name: "Jesse Jones",
           baseHp: 4,
-          desc: "May draw first card from another player's hand.",
+          desc: "May steal first card from another player's hand.",
           image: "/assets/images/characters/char_jesse_jones.png",
         },
       ],
       equipments: {},
       greenCards: [],
+      judgements: [],
       hasJail: false,
       hasDynamite: false,
       distanceFromMe: 1,
@@ -509,7 +544,7 @@ export const initialMyHeroes: Character[] = [
 export const initialMyEquipments: EquipmentSlot = {
   weapon: {
     id: "eq_volcanic",
-    name: "Volcanic",
+    name: "VOLCANIC",
     border: "blue",
     rank: "10",
     suit: "spades",
@@ -528,7 +563,7 @@ export const initialMyGreenCards: GreenCard[] = [
     id: "my_g1",
     card: {
       id: "gc_bible",
-      name: "Bible",
+      name: "BIBLE",
       border: "green",
       rank: "10",
       suit: "hearts",
@@ -541,7 +576,7 @@ export const initialMyGreenCards: GreenCard[] = [
     id: "my_g2",
     card: {
       id: "gc_buffalo",
-      name: "Buffalo Rifle",
+      name: "BUFFALO RIFLE",
       border: "green",
       rank: "Q",
       suit: "clubs",
@@ -554,7 +589,7 @@ export const initialMyGreenCards: GreenCard[] = [
     id: "my_g3",
     card: {
       id: "gc_derringer",
-      name: "Derringer",
+      name: "DERRINGER",
       border: "green",
       rank: "7",
       suit: "spades",
@@ -656,7 +691,7 @@ export const mockCandidateHeroes: Character[] = [
     id: "c13",
     name: "Jesse Jones",
     baseHp: 4,
-    desc: "He may draw his first card from the hand of any other player.",
+    desc: "He may steal his first card from the hand of any other player.",
     image: "/assets/images/characters/char_jesse_jones.png",
   },
   {
@@ -670,7 +705,7 @@ export const mockCandidateHeroes: Character[] = [
     id: "c15",
     name: "El Gringo",
     baseHp: 3,
-    desc: "Each time he is hit by a player, he draws 1 card from that player's hand.",
+    desc: "Each time he is hit by a player, he steals 1 card from that player's hand.",
     image: "/assets/images/characters/char_el_gringo.png",
   },
   {

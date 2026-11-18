@@ -6,27 +6,12 @@ import { EventEngine } from "../../events/event_engine";
 import { TargetValidator } from "../../combat/target_validator";
 import { SkillHooks } from "../skill_hooks";
 import { AtomicEffects } from "../primitives/atomic_effects";
+import { hasEquippedCardByName } from "../../utils/inventory";
 
 export class EquipmentAction {
-  // Normalize paired extra equipment names
-  private static normalizeEquipName(name: string): string {
-    return name === "BINOCULARS" ? "BINOCULAR" : name;
-  }
-
   // Check if blue extra already equipped
   private static hasExtraEquipName(player: EnginePlayer, cardName: string): boolean {
-    const normalized = this.normalizeEquipName(cardName);
-    const extras = player.equipments.extras || [];
-    if (extras.some((c) => this.normalizeEquipName(c.name) === normalized)) {
-      return true;
-    }
-    if (
-      player.equipments.extra &&
-      this.normalizeEquipName(player.equipments.extra.name) === normalized
-    ) {
-      return true;
-    }
-    return false;
+    return hasEquippedCardByName(player, cardName);
   }
 
   // Equip blue, judgement, or green card

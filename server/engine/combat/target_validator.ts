@@ -2,6 +2,7 @@ import { EnginePlayer, SimulationState } from "../types/state";
 import { EngineCard } from "../types/cards";
 import { DistanceCalculator } from "../board/distance_calculator";
 import { SkillHooks } from "../interact/skill_hooks";
+import { getAllEquippedCards } from "../utils/inventory";
 
 export type TargetArea = "HAND" | "EQUIPMENT" | "GREEN" | "JUDGEMENT";
 
@@ -30,23 +31,6 @@ const AREA_CARDS = new Set([
 ]);
 
 export class TargetValidator {
-  // Collect equipped cards on player
-  private static getEquippedCards(player: EnginePlayer): EngineCard[] {
-    const eq = player.equipments || {};
-    const list: EngineCard[] = [];
-    if (eq.weapon) list.push(eq.weapon);
-    if (eq.horseDef) list.push(eq.horseDef);
-    if (eq.horseOff) list.push(eq.horseOff);
-    if (eq.barrel) list.push(eq.barrel);
-    if (eq.extra) list.push(eq.extra);
-    for (const item of eq.extras || []) {
-      if (item && !list.some((existing) => existing.id === item.id)) {
-        list.push(item);
-      }
-    }
-    return list;
-  }
-
   // Validate target card presence in area
   private static validateTargetArea(
     targetPlayer: EnginePlayer,
@@ -61,7 +45,7 @@ export class TargetValidator {
     }
 
     if (targetArea === "EQUIPMENT") {
-      const equipped = this.getEquippedCards(targetPlayer);
+      const equipped = getAllEquippedCards(targetPlayer);
       if (equipped.length === 0) {
         return { valid: false, reason: "Target player has no equipment in play." };
       }

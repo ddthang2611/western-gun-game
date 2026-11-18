@@ -7,6 +7,7 @@ import { DeckManager } from "../deck/deck_manager";
 import { SeatManager } from "../board/seat_manager";
 import { SkillHooks } from "../interact/skill_hooks";
 import { EventRuleRegistry } from "./event_rule_registry";
+import { getAllEquippedCards, hasBarrelCard } from "../utils/inventory";
 
 export interface TurnStartPrepResult {
   needsHighNoonDamage: boolean;
@@ -334,23 +335,8 @@ export class EventEngine {
       }
       player.handCards = [];
 
-      const seenEquipIds = new Set<string>();
-      const discardUniqueEquip = (card?: EngineCard) => {
-        if (!card || seenEquipIds.has(card.id)) return;
-        seenEquipIds.add(card.id);
-        DeckManager.discardCard(state, card);
-      };
-
-      const eq = player.equipments;
-      discardUniqueEquip(eq.weapon);
-      discardUniqueEquip(eq.horseDef);
-      discardUniqueEquip(eq.horseOff);
-      discardUniqueEquip(eq.barrel);
-      discardUniqueEquip(eq.extra);
-      if (eq.extras) {
-        for (const extraCard of eq.extras) {
-          discardUniqueEquip(extraCard);
-        }
+      for (const eqCard of getAllEquippedCards(player)) {
+        DeckManager.discardCard(state, eqCard);
       }
       player.equipments = { extras: [] };
 
@@ -472,13 +458,7 @@ export class EventEngine {
         );
 
     const equipEffective = SkillHooks.isEquipmentEffective(player, player, state);
-    const canUseBarrel =
-      equipEffective &&
-      Boolean(
-        player.equipments.barrel ||
-          player.equipments.extra?.name === "BARREL" ||
-          player.equipments.extras?.some((c) => c.name === "BARREL")
-      );
+    const canUseBarrel = equipEffective && hasBarrelCard(player);
     const canUseJourdonnais = SkillHooks.hasInnateBarrel(player, state);
 
     const reactions: PendingReaction[] = [];
@@ -608,15 +588,7 @@ export class EventEngine {
   }
 
   private static hasBlueCardInPlay(player: EnginePlayer): boolean {
-    const eq = player.equipments;
-    const hasEquip = Boolean(
-      eq.weapon ||
-        eq.horseDef ||
-        eq.horseOff ||
-        eq.barrel ||
-        eq.extra ||
-        (eq.extras && eq.extras.length > 0)
-    );
+    const hasEquip = getAllEquippedCards(player).length > 0;
     const hasBlueJudgement = player.judgements.some(
       (j) => j.card.border === "blue"
     );

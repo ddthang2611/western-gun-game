@@ -38,11 +38,15 @@ export default defineConfig({
         target: 'ws://localhost:2611',
         ws: true,
         configure: (proxy) => {
-          proxy.on('error', (err: Error & { code?: string }) => {
+          const ignoreResetError = (err: Error & { code?: string }) => {
             if (err?.code === 'EPIPE' || err?.code === 'ECONNRESET') {
               return;
             }
             console.error('[vite] ws proxy error:', err);
+          };
+          proxy.on('error', ignoreResetError);
+          proxy.on('proxyReqWs', (_proxyReq, _req, socket) => {
+            socket.on('error', ignoreResetError);
           });
         },
       },

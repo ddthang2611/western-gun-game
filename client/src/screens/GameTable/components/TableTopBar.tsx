@@ -1,6 +1,7 @@
 import React from "react";
 import type { ActiveEventInfo } from "../../../types/game";
 import { DebouncedPopover } from "../../../components/ui";
+import "./TableTopBar.scss";
 
 export interface TableTopBarProps {
   roomId: string;
@@ -16,10 +17,10 @@ export interface TableTopBarProps {
 }
 
 const PHASE_LABELS: Record<number, string> = {
-  0: "0 (Judgement)",
-  1: "1 (Draw)",
-  2: "2 (Action)",
-  3: "3 (Discard)",
+  0: "Judgement",
+  1: "Draw Cards",
+  2: "Play Cards",
+  3: "Discard Excess",
 };
 
 export const TableTopBar: React.FC<TableTopBarProps> = ({
@@ -51,10 +52,18 @@ export const TableTopBar: React.FC<TableTopBarProps> = ({
           Round: <strong>{roundNumber}</strong>
         </span>
         <span className="game-table__meta-tag">
-          Phase: <strong>{phaseLabel}</strong>
+          Stage: <strong>{phaseLabel}</strong>
         </span>
         {activeEvent && (
-          <DebouncedPopover title={`High Noon: ${activeEvent.name}`} content={activeEvent.desc} delayMs={200}>
+          <DebouncedPopover
+            title={`${
+              activeEvent.pack === "fistful" || activeEvent.pack === "fistful_of_cards"
+                ? "A Fistful of Cards"
+                : "High Noon"
+            }: ${activeEvent.name}`}
+            content={activeEvent.desc}
+            delayMs={200}
+          >
             <span className="game-table__meta-tag game-table__meta-tag--event">
               Event: <strong>{activeEvent.name}</strong>
             </span>

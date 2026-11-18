@@ -76,6 +76,7 @@ export interface PendingPhase1Choice {
 
 export interface SimulationState {
   roomId: string;
+  stateSeq: number;
   matchPhase: MatchPhase;
   roundNumber: number;
   turnPlayerId: string;

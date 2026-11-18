@@ -16,50 +16,62 @@ export function isDatabaseUnlocked(): boolean {
   return isCatalogUnlocked;
 }
 
+function readCatalogSecretMetadata(): { salt: string; storedHash: string } | null {
+  const inspectDb = new Database(CONFIG.DB_PATH, { readonly: true, fileMustExist: true });
+  try {
+    const row = inspectDb
+      .prepare("SELECT value FROM db_meta WHERE key = 'secret_key_scrypt_hash'")
+      .get() as { value: string } | undefined;
+    const saltRow = inspectDb
+      .prepare("SELECT value FROM db_meta WHERE key = 'secret_key_salt'")
+      .get() as { value: string } | undefined;
+
+    if (!row || !saltRow) {
+      return null;
+    }
+    return { salt: saltRow.value, storedHash: row.value };
+  } finally {
+    inspectDb.close();
+  }
+}
+
+function openUnlockedCatalog(): void {
+  if (!isCatalogUnlocked || !catalogDbInstance) {
+    catalogDbInstance = new Database(CONFIG.DB_PATH, { readonly: true, fileMustExist: true });
+    isCatalogUnlocked = true;
+    CatalogRepository.getInstance().initialize();
+  }
+}
+
+function verifySecretHash(computedBuf: Buffer, storedHash: string): boolean {
+  const expectedBuf = Buffer.from(storedHash, "hex");
+  return computedBuf.length === expectedBuf.length && crypto.timingSafeEqual(computedBuf, expectedBuf);
+}
+
 // Asynchronous unlock running on Libuv threadpool to prevent Event Loop starvation (VULN-03)
 export async function unlockCatalogDatabaseAsync(
   secretKey: string
 ): Promise<{ success: boolean; message: string }> {
   if (!fs.existsSync(CONFIG.DB_PATH)) {
-    return { success: false, message: `Catalog database file not found at: ${CONFIG.DB_PATH}` };
+    return { success: false, message: "Catalog database unavailable." };
   }
 
   try {
-    const inspectDb = new Database(CONFIG.DB_PATH, { readonly: true, fileMustExist: true });
-    const row = inspectDb.prepare("SELECT value FROM db_meta WHERE key = 'secret_key_scrypt_hash'").get() as
-      | { value: string }
-      | undefined;
-    const saltRow = inspectDb.prepare("SELECT value FROM db_meta WHERE key = 'secret_key_salt'").get() as
-      | { value: string }
-      | undefined;
-    inspectDb.close();
-
-    if (!row || !saltRow) {
+    const metadata = readCatalogSecretMetadata();
+    if (!metadata) {
       return { success: false, message: "Database metadata missing security keys." };
     }
 
-    const salt = saltRow.value;
-    const storedHash = row.value;
-
-    const computedBuf = (await scryptAsync(secretKey, salt, 32)) as Buffer;
-    const expectedBuf = Buffer.from(storedHash, "hex");
-
-    const isMatch =
-      computedBuf.length === expectedBuf.length && crypto.timingSafeEqual(computedBuf, expectedBuf);
-
-    if (isMatch) {
-      if (!isCatalogUnlocked || !catalogDbInstance) {
-        catalogDbInstance = new Database(CONFIG.DB_PATH, { readonly: true, fileMustExist: true });
-        isCatalogUnlocked = true;
-        CatalogRepository.getInstance().initialize();
-      }
+    const computedBuf = (await scryptAsync(secretKey, metadata.salt, 32)) as Buffer;
+    if (verifySecretHash(computedBuf, metadata.storedHash)) {
+      openUnlockedCatalog();
       return { success: true, message: "Database unlocked successfully." };
     }
 
     // Factory key auto-migration removed to prevent unauthorized override (VULN-01)
-    return { success: false, message: "Invalid DB_SECRET_KEY. Access to western_gun.db denied." };
-  } catch (err: any) {
-    return { success: false, message: err.message || "Failed to unlock catalog database." };
+    return { success: false, message: "Invalid secret key. Access denied." };
+  } catch {
+    return { success: false, message: "Catalog database unavailable." };
   }
 }
 
@@ -68,45 +80,25 @@ export function unlockCatalogDatabase(
   secretKey: string
 ): { success: boolean; message: string } {
   if (!fs.existsSync(CONFIG.DB_PATH)) {
-    return { success: false, message: `Catalog database file not found at: ${CONFIG.DB_PATH}` };
+    return { success: false, message: "Catalog database unavailable." };
   }
 
   try {
-    const inspectDb = new Database(CONFIG.DB_PATH, { readonly: true, fileMustExist: true });
-    const row = inspectDb.prepare("SELECT value FROM db_meta WHERE key = 'secret_key_scrypt_hash'").get() as
-      | { value: string }
-      | undefined;
-    const saltRow = inspectDb.prepare("SELECT value FROM db_meta WHERE key = 'secret_key_salt'").get() as
-      | { value: string }
-      | undefined;
-    inspectDb.close();
-
-    if (!row || !saltRow) {
+    const metadata = readCatalogSecretMetadata();
+    if (!metadata) {
       return { success: false, message: "Database metadata missing security keys." };
     }
 
-    const salt = saltRow.value;
-    const storedHash = row.value;
-
-    const computedBuf = crypto.scryptSync(secretKey, salt, 32);
-    const expectedBuf = Buffer.from(storedHash, "hex");
-
-    const isMatch =
-      computedBuf.length === expectedBuf.length && crypto.timingSafeEqual(computedBuf, expectedBuf);
-
-    if (isMatch) {
-      if (!isCatalogUnlocked || !catalogDbInstance) {
-        catalogDbInstance = new Database(CONFIG.DB_PATH, { readonly: true, fileMustExist: true });
-        isCatalogUnlocked = true;
-        CatalogRepository.getInstance().initialize();
-      }
+    const computedBuf = crypto.scryptSync(secretKey, metadata.salt, 32);
+    if (verifySecretHash(computedBuf, metadata.storedHash)) {
+      openUnlockedCatalog();
       return { success: true, message: "Database unlocked successfully." };
     }
 
     // Factory key auto-migration removed to prevent unauthorized override (VULN-01)
-    return { success: false, message: "Invalid DB_SECRET_KEY. Access to western_gun.db denied." };
-  } catch (err: any) {
-    return { success: false, message: err.message || "Failed to unlock catalog database." };
+    return { success: false, message: "Invalid secret key. Access denied." };
+  } catch {
+    return { success: false, message: "Catalog database unavailable." };
   }
 }
 
@@ -129,6 +121,7 @@ export function getRuntimeDatabase(): Database.Database {
   db.pragma("journal_mode = WAL");
   db.pragma("synchronous = NORMAL");
   db.pragma("foreign_keys = ON");
+  db.pragma("busy_timeout = 5000");
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS player_sessions (
@@ -160,12 +153,40 @@ export function getRuntimeDatabase(): Database.Database {
       created_at TEXT NOT NULL
     );
 
+    CREATE INDEX IF NOT EXISTS idx_match_events_match_seq ON match_events(match_id, seq);
+
     CREATE TABLE IF NOT EXISTS active_session (
       match_id TEXT PRIMARY KEY,
       state_json TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
   `);
+
+  const ensureUniquePlayerIndex = (indexName: string, columnName: "player_name" | "player_id") => {
+    try {
+      db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ${indexName} ON player_sessions(${columnName})`);
+    } catch {
+      try {
+        db.exec(`
+          DELETE FROM player_sessions
+          WHERE EXISTS (
+            SELECT 1 FROM player_sessions AS newer
+            WHERE newer.${columnName} = player_sessions.${columnName}
+              AND (
+                newer.last_seen > player_sessions.last_seen
+                OR (newer.last_seen = player_sessions.last_seen AND newer.rowid > player_sessions.rowid)
+              )
+          )
+        `);
+        db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ${indexName} ON player_sessions(${columnName})`);
+      } catch {
+        // Keep booting on legacy DB constraints
+      }
+    }
+  };
+
+  ensureUniquePlayerIndex("idx_player_sessions_name", "player_name");
+  ensureUniquePlayerIndex("idx_player_sessions_player_id", "player_id");
 
   runtimeDbInstance = db;
   return runtimeDbInstance;

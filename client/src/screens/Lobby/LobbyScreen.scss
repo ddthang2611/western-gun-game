@@ -102,6 +102,25 @@
     font-size: 14px;
   }
 
+  &__lock-notice {
+    background-color: rgba(120, 53, 15, 0.45);
+    border: 1px solid $western-amber-dark;
+    color: #fde68a;
+    padding: 10px 14px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+    font-size: 13.5px;
+  }
+
+  &__mode-notice {
+    padding: 8px 10px;
+    border-radius: 4px;
+    background-color: $western-bg-table;
+    border: 1px solid $western-border-subtle;
+    color: $western-text-muted;
+    font-size: 12.5px;
+  }
+
   &__auth-card {
     max-width: 400px;
     margin: 60px auto;
@@ -387,6 +406,11 @@
     font-size: 13.5px;
     color: $western-text-main;
     cursor: pointer;
+
+    &--disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
   }
 
   &__select {

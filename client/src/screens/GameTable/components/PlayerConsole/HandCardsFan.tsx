@@ -64,7 +64,11 @@ export const HandCardsFan: React.FC<HandCardsFanProps> = ({
   }, [cardCount]);
 
   return (
-    <div className="game-table__console-hand" aria-label={`Hand cards (${cardCount})`}>
+    <div
+      className="game-table__console-hand"
+      data-flight-anchor="my-hand"
+      aria-label={`Hand cards (${cardCount})`}
+    >
       <div ref={fanRef} className="game-table__hand-fan">
         {hand.map((card) => {
           const isSelected =
@@ -73,6 +77,7 @@ export const HandCardsFan: React.FC<HandCardsFanProps> = ({
           return (
             <div
               key={card.id}
+              data-target-origin={isSelected || isDiscardCost ? "card" : undefined}
               className={[
                 "game-table__hand-card-wrapper",
                 isSelected || isDiscardCost ? "game-table__hand-card-wrapper--selected" : "",

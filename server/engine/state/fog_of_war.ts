@@ -45,6 +45,7 @@ export interface PublicReactionSummary {
   type: string;
   sourcePlayerId: string;
   targetPlayerId: string;
+  sourceCard?: EngineCard;
   requiredCard: string;
   requiredCount: number;
   currentCount: number;
@@ -69,6 +70,7 @@ export interface SanitizedPendingCharacterChoice {
 
 export interface SanitizedGameState {
   roomId: string;
+  stateSeq: number;
   matchPhase: MatchPhase;
   roundNumber: number;
   turnPlayerId: string;
@@ -121,7 +123,12 @@ export class FogOfWarFilter {
     state.players.forEach((player: EnginePlayer, pId: string) => {
       const isMe = pId === targetPlayerId;
       const shouldRevealRole =
-        player.isSheriff || player.isDead || isMe || state.is3PlayerVariant;
+        player.isSheriff ||
+        player.isDead ||
+        isMe ||
+        state.is3PlayerVariant ||
+        state.matchPhase === "FINISHED" ||
+        Boolean(state.gameOver);
 
       const eq = player.equipments || {};
       const sanitizedEquipments: PlayerEquipments = {
@@ -185,6 +192,7 @@ export class FogOfWarFilter {
         type: r.type,
         sourcePlayerId: r.sourcePlayerId,
         targetPlayerId: r.targetPlayerId,
+        sourceCard: r.type === "NEAR_DEATH_RESCUE" ? undefined : r.sourceCard,
         requiredCard: r.requiredCard,
         requiredCount: r.requiredCount,
         currentCount: r.currentCount,
@@ -245,8 +253,53 @@ export class FogOfWarFilter {
             };
     }
 
+    let pendingTurnStartChoice: PendingTurnStartChoice | null = null;
+    if (state.pendingTurnStartChoice) {
+      const ts = state.pendingTurnStartChoice;
+      pendingTurnStartChoice =
+        ts.playerId === targetPlayerId
+          ? {
+              type: ts.type,
+              playerId: ts.playerId,
+              availableCharacters: ts.availableCharacters
+                ? [...ts.availableCharacters]
+                : undefined,
+              eligibleTargetIds: ts.eligibleTargetIds
+                ? [...ts.eligibleTargetIds]
+                : undefined,
+            }
+          : {
+              type: ts.type,
+              playerId: ts.playerId,
+            };
+    }
+
+    const sanitizedActiveChain = (state.activeChain || []).map((entry: any) => {
+      if (!entry || typeof entry !== "object") return entry;
+      if (Array.isArray(entry.storePool)) {
+        return {
+          type: "GENERAL_STORE_DRAFT",
+          originPlayerId: entry.originPlayerId,
+          poolCount: entry.storePool.length,
+          draftOrder: Array.isArray(entry.draftOrder) ? [...entry.draftOrder] : [],
+          currentPickerIndex: entry.currentPickerIndex,
+          currentPickerId: entry.draftOrder?.[entry.currentPickerIndex] || null,
+        };
+      }
+      const clean: Record<string, any> = { ...entry };
+      delete clean.card;
+      delete clean.cards;
+      delete clean.storePool;
+      delete clean.handCards;
+      delete clean.drawnCards;
+      delete clean.previewCards;
+      delete clean.drawnSoFar;
+      return clean;
+    });
+
     return {
       roomId: state.roomId,
+      stateSeq: state.stateSeq ?? 0,
       matchPhase: state.matchPhase,
       roundNumber: state.roundNumber,
       turnPlayerId: state.turnPlayerId,
@@ -266,9 +319,9 @@ export class FogOfWarFilter {
       players: playersList,
       myState,
       pendingCharacterSelect,
-      pendingTurnStartChoice: state.pendingTurnStartChoice,
+      pendingTurnStartChoice,
       pendingPhase1Choice,
-      activeChain: state.activeChain,
+      activeChain: sanitizedActiveChain,
       myPendingReaction,
       pendingReactionTargets,
       generalStore,
@@ -289,17 +342,32 @@ export class FogOfWarFilter {
       return event;
     }
 
+    if (event.maskedPayload) {
+      return {
+        type: event.type,
+        payload: event.maskedPayload,
+        timestamp: event.timestamp,
+      };
+    }
+
+    const secretCardStub = {
+      id: "SECRET",
+      name: "Hidden Card",
+      suit: "UNKNOWN",
+      rank: "UNKNOWN",
+    };
+    const redactedPayload: Record<string, any> = { ...(event.payload || {}) };
+    if ("card" in redactedPayload) {
+      redactedPayload.card = secretCardStub;
+    }
+    delete redactedPayload.cards;
+    delete redactedPayload.drawnCards;
+    delete redactedPayload.drawnCardId;
+    delete redactedPayload.transferredCard;
+
     return {
       type: event.type,
-      payload: event.maskedPayload ?? {
-        ...event.payload,
-        card: {
-          id: "SECRET",
-          name: "Hidden Card",
-          suit: "UNKNOWN",
-          rank: "UNKNOWN",
-        },
-      },
+      payload: redactedPayload,
       timestamp: event.timestamp,
     };
   }

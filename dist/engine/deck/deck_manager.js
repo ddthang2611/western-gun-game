@@ -82,18 +82,22 @@ class DeckManager {
     // Peek top cards without removing
     static peekTop(state, count) {
         if (count <= 0)
-            return { cards: [], reshuffled: false };
+            return { cards: [], reshuffled: false, events: [] };
         let reshuffled = false;
+        const events = [];
         if (state.drawDeck.length < count && state.discardPile.length > 0) {
-            this.reshuffleDiscardIntoDeck(state);
-            reshuffled = true;
+            const ev = this.reshuffleDiscardIntoDeck(state);
+            if (ev) {
+                events.push(ev);
+                reshuffled = true;
+            }
         }
         const available = Math.min(count, state.drawDeck.length);
         const cards = [];
         for (let i = 0; i < available; i++) {
             cards.push(state.drawDeck[state.drawDeck.length - 1 - i]);
         }
-        return { cards, reshuffled };
+        return { cards, reshuffled, events };
     }
     // Instance shuffle helper
     shuffle(cards) {

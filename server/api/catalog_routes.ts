@@ -3,16 +3,15 @@ import { isDatabaseUnlocked, unlockCatalogDatabaseAsync } from "../db/database";
 import { CatalogRepository } from "../db/catalog_repository";
 import { LobbyManager } from "../ws/lobby_handler";
 import { RateLimiter } from "./rate_limiter";
+import { getClientIp } from "./request_utils";
 
 export const catalogRouter = Router();
 
-function getClientIp(req: Request): string {
-  const cfIp = req.headers["cf-connecting-ip"];
-  if (typeof cfIp === "string" && cfIp.trim()) return cfIp.trim();
-  const xff = req.headers["x-forwarded-for"];
-  if (typeof xff === "string" && xff.trim()) return xff.split(",")[0].trim();
-  return req.socket.remoteAddress || "unknown";
-}
+const SAFE_UNLOCK_MESSAGES = new Set([
+  "Catalog database unavailable.",
+  "Database metadata missing security keys.",
+  "Invalid secret key. Access denied.",
+]);
 
 // Master DB Unlock endpoint with strict 3-attempt brute-force rate limiter (VULN-01/VULN-03)
 catalogRouter.post("/unlock", async (req: Request, res: Response) => {
@@ -28,20 +27,26 @@ catalogRouter.post("/unlock", async (req: Request, res: Response) => {
   }
 
   const { secretKey } = req.body || {};
-  if (!secretKey || typeof secretKey !== "string") {
+  if (!secretKey || typeof secretKey !== "string" || !secretKey.trim()) {
     return res.status(400).json({ success: false, message: "Secret key is required." });
   }
 
+  const wasAlreadyUnlocked = isDatabaseUnlocked();
   const result = await unlockCatalogDatabaseAsync(secretKey.trim());
   if (result.success) {
     rateLimiter.resetFailedAttempt("db_unlock", ip);
     const summary = CatalogRepository.getInstance().getSummary();
-    LobbyManager.getInstance().restoreFromPersistence();
-    LobbyManager.getInstance().broadcastMessage("DATABASE_UNLOCKED", summary);
+    if (!wasAlreadyUnlocked) {
+      LobbyManager.getInstance().restoreFromPersistence();
+      LobbyManager.getInstance().broadcastMessage("DATABASE_UNLOCKED", summary);
+    }
     return res.json({ success: true, message: result.message, summary });
   } else {
     rateLimiter.recordFailedAttempt("db_unlock", ip, 3, 30 * 60 * 1000);
-    return res.status(401).json({ success: false, message: result.message });
+    const message = SAFE_UNLOCK_MESSAGES.has(result.message)
+      ? result.message
+      : "Failed to unlock catalog database.";
+    return res.status(401).json({ success: false, message });
   }
 });
 

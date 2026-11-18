@@ -1,4 +1,6 @@
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
+import { GameSocketProvider } from "./hooks/useGameSocket";
+import { disconnectSocket } from "./services/wsClient";
 import "./App.scss";
 
 const AuthScreen = lazy(() =>
@@ -34,6 +36,7 @@ function App() {
   );
   const [currentUser, setCurrentUser] = useState<{ playerId: string; name: string } | null>(null);
   const [authNotice, setAuthNotice] = useState<string | null>(null);
+  const [returnedFromTable, setReturnedFromTable] = useState(false);
 
   useEffect(() => {
     document.title = SCREEN_TITLES[currentScreen];
@@ -65,23 +68,28 @@ function App() {
       });
   }, []);
 
-  const handleAuthenticated = (user: { playerId: string; name: string }) => {
+  const handleAuthenticated = useCallback((user: { playerId: string; name: string }) => {
     setAuthNotice(null);
+    setReturnedFromTable(false);
     setCurrentUser(user);
     setCurrentScreen("lobby");
-  };
+  }, []);
 
-  const handleLogout = () => {
+  const handleLogout = useCallback(() => {
+    disconnectSocket();
     setAuthNotice(null);
+    setReturnedFromTable(false);
     setCurrentUser(null);
     setCurrentScreen("auth");
-  };
+  }, []);
 
-  const handleKicked = (reason: string) => {
+  const handleKicked = useCallback((reason: string) => {
+    disconnectSocket();
+    setReturnedFromTable(false);
     setCurrentUser(null);
     setAuthNotice(reason);
     setCurrentScreen("auth");
-  };
+  }, []);
 
   return (
     <div className="app-shell">
@@ -92,21 +100,32 @@ function App() {
           <AuthScreen onAuthenticated={handleAuthenticated} noticeMessage={authNotice} />
         )}
 
-        {currentScreen === "lobby" && (
-          <LobbyScreen
-            currentUser={currentUser || undefined}
-            onStartGame={() => setCurrentScreen("table")}
-            onLogout={handleLogout}
-            onKicked={handleKicked}
-          />
-        )}
+        {(currentScreen === "lobby" || currentScreen === "table") && (
+          <GameSocketProvider>
+            {currentScreen === "lobby" && (
+              <LobbyScreen
+                currentUser={currentUser || undefined}
+                autoJoinInGame={!returnedFromTable}
+                onStartGame={() => {
+                  setReturnedFromTable(false);
+                  setCurrentScreen("table");
+                }}
+                onLogout={handleLogout}
+                onKicked={handleKicked}
+              />
+            )}
 
-        {currentScreen === "table" && (
-          <GameTableScreen
-            isMock={false}
-            onBackToLobby={() => setCurrentScreen("lobby")}
-            onKicked={handleKicked}
-          />
+            {currentScreen === "table" && (
+              <GameTableScreen
+                isMock={false}
+                onBackToLobby={() => {
+                  setReturnedFromTable(true);
+                  setCurrentScreen("lobby");
+                }}
+                onKicked={handleKicked}
+              />
+            )}
+          </GameSocketProvider>
         )}
       </Suspense>
     </div>

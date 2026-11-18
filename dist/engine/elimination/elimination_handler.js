@@ -5,28 +5,8 @@ const deck_manager_1 = require("../deck/deck_manager");
 const seat_manager_1 = require("../board/seat_manager");
 const skill_hooks_1 = require("../interact/skill_hooks");
 const win_condition_1 = require("./win_condition");
+const inventory_1 = require("../utils/inventory");
 class EliminationHandler {
-    // Collect unique equipment cards
-    static collectEquipmentCards(player) {
-        const eq = player.equipments || {};
-        const seen = new Set();
-        const cards = [];
-        const addIfNew = (card) => {
-            if (!card || seen.has(card.id))
-                return;
-            seen.add(card.id);
-            cards.push(card);
-        };
-        addIfNew(eq.weapon);
-        addIfNew(eq.horseDef);
-        addIfNew(eq.horseOff);
-        addIfNew(eq.barrel);
-        addIfNew(eq.extra);
-        for (const item of eq.extras || []) {
-            addIfNew(item);
-        }
-        return cards;
-    }
     // Discard cards via manager or state
     static discardCards(state, cards, deckManager) {
         if (cards.length === 0)
@@ -55,7 +35,7 @@ class EliminationHandler {
         // Collect all cards from player
         const cardsToTransfer = [
             ...deadPlayer.handCards,
-            ...this.collectEquipmentCards(deadPlayer),
+            ...(0, inventory_1.getAllEquippedCards)(deadPlayer),
             ...deadPlayer.greenCards.map((g) => g.card),
             ...deadPlayer.judgements.map((j) => j.card),
         ];
@@ -163,7 +143,7 @@ class EliminationHandler {
         if (killerPlayer && !killerPlayer.isDead && killerPlayer.isSheriff && deadPlayer.role === "deputy") {
             const sheriffLoss = [
                 ...killerPlayer.handCards,
-                ...this.collectEquipmentCards(killerPlayer),
+                ...(0, inventory_1.getAllEquippedCards)(killerPlayer),
                 ...killerPlayer.greenCards.map((g) => g.card),
             ];
             killerPlayer.handCards = [];

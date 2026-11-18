@@ -6,7 +6,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.SkillHooks = void 0;
 const crypto_1 = __importDefault(require("crypto"));
 const deck_manager_1 = require("../deck/deck_manager");
-const target_validator_1 = require("../combat/target_validator");
 const event_rule_registry_1 = require("../events/event_rule_registry");
 class SkillHooks {
     // Check character skill and suppression
@@ -131,6 +130,7 @@ class SkillHooks {
                 chosenCard,
                 effectiveSuit,
                 effectiveSuits: drawn.map((c) => SkillHooks.getEffectiveSuit(c, state)),
+                emptyDeck: drawn.length === 0,
                 success,
                 isSuccess: success,
             },
@@ -156,7 +156,6 @@ class SkillHooks {
             payload: {
                 playerId: player.id,
                 playerName: player.name,
-                drawnCardId: drawn[0].id,
                 drawnCount: drawn.length,
             },
             timestamp: Date.now(),
@@ -313,269 +312,10 @@ class SkillHooks {
         });
         return { success: true, events };
     }
-    // Active character skills handler
+    // Active character skills facade
     static handleActiveSkill(state, command, events) {
-        const player = state.players.get(command.playerId);
-        if (!player)
-            return { success: false, message: "Player not found." };
-        if (player.isDead)
-            return { success: false, message: "Dead players cannot act." };
-        const skillType = String(command.payload?.skillType ?? command.payload?.skill ?? "");
-        if (skillType === "SID_KETCHUM_HEAL") {
-            return SkillHooks.handleSidKetchumHeal(state, player, command, events);
-        }
-        if (skillType === "CHUCK_WENGAM_HP" || skillType === "CHUCK_WENGAM_SACRIFICE") {
-            return SkillHooks.handleChuckWengamHp(state, player, skillType, events);
-        }
-        if (skillType === "JOSE_DELGADO_DRAW") {
-            return SkillHooks.handleJoseDelgadoDraw(state, player, command, events);
-        }
-        if (skillType === "DOC_HOLYDAY_BANG") {
-            return SkillHooks.handleDocHolydayBang(state, player, command, events);
-        }
-        return { success: false, message: `Unknown active skill: ${skillType}` };
-    }
-    static handleSidKetchumHeal(state, player, command, events) {
-        if (player.isGhost) {
-            return { success: false, message: "Ghosts have no life points." };
-        }
-        if (!SkillHooks.hasSkill(player, "Sid Ketchum", state)) {
-            return { success: false, message: "Player does not have Sid Ketchum ability." };
-        }
-        if (player.hp >= player.maxHp) {
-            return { success: false, message: "Player already at maximum HP." };
-        }
-        const discardIds = SkillHooks.extractTwoDistinctIds(command.discardCardIds ?? command.payload?.discardCardIds);
-        if (!discardIds) {
-            return {
-                success: false,
-                message: "Exactly 2 distinct cards required for Sid Ketchum.",
-            };
-        }
-        const discarded = SkillHooks.removeHandCards(player, discardIds);
-        if (!discarded) {
-            return { success: false, message: "Selected cards not found in hand." };
-        }
-        for (const card of discarded) {
-            deck_manager_1.DeckManager.discardCard(state, card);
-        }
-        player.hp = Math.min(player.hp + 1, player.maxHp);
-        events.push({
-            type: "ACTIVE_SKILL_USED",
-            payload: {
-                playerId: player.id,
-                skill: "SID_KETCHUM_HEAL",
-                discardedCount: 2,
-                currentHp: player.hp,
-            },
-            timestamp: Date.now(),
-        });
-        SkillHooks.checkSuzyLafayette(state, player, events);
-        return { success: true, events };
-    }
-    static handleChuckWengamHp(state, player, skillName, events) {
-        if (!SkillHooks.hasSkill(player, "Chuck Wengam", state)) {
-            return { success: false, message: "Player does not have Chuck Wengam ability." };
-        }
-        if (state.turnPlayerId !== player.id || state.currentPhase !== 2) {
-            return {
-                success: false,
-                message: "Chuck Wengam ability requires Phase 2 of your turn.",
-            };
-        }
-        if (player.isGhost || player.hp <= 1) {
-            return { success: false, message: "Cannot sacrifice last HP." };
-        }
-        player.hp -= 1;
-        const { cards: drawn, events: drawEvents } = deck_manager_1.DeckManager.drawCards(state, 2);
-        events.push(...drawEvents);
-        player.handCards.push(...drawn);
-        events.push({
-            type: "ACTIVE_SKILL_USED",
-            payload: {
-                playerId: player.id,
-                skill: skillName,
-                currentHp: player.hp,
-                drawnCount: drawn.length,
-            },
-            timestamp: Date.now(),
-        });
-        SkillHooks.onTakeDamage(state, player, undefined, 1, events);
-        return { success: true, events };
-    }
-    static handleJoseDelgadoDraw(state, player, command, events) {
-        if (!SkillHooks.hasSkill(player, "Jose Delgado", state)) {
-            return { success: false, message: "Player does not have Jose Delgado ability." };
-        }
-        if (state.turnPlayerId !== player.id || state.currentPhase !== 2) {
-            return {
-                success: false,
-                message: "Jose Delgado ability requires Phase 2 of your turn.",
-            };
-        }
-        if (state.joseDelgadoCountThisTurn >= 2) {
-            return {
-                success: false,
-                message: "Jose Delgado can only be used twice per turn.",
-            };
-        }
-        const blueCardId = command.cardId ?? command.discardCardIds?.[0] ?? command.payload?.cardId;
-        if (typeof blueCardId !== "string" || !blueCardId) {
-            return { success: false, message: "Blue card ID required." };
-        }
-        const cardIdx = player.handCards.findIndex((c) => c.id === blueCardId);
-        if (cardIdx === -1)
-            return { success: false, message: "Card not in hand." };
-        const card = player.handCards[cardIdx];
-        if (card.border !== "blue") {
-            return { success: false, message: "Must discard a blue card." };
-        }
-        player.handCards.splice(cardIdx, 1);
-        deck_manager_1.DeckManager.discardCard(state, card);
-        state.joseDelgadoCountThisTurn += 1;
-        SkillHooks.checkSuzyLafayette(state, player, events);
-        const { cards: drawn, events: drawEvents } = deck_manager_1.DeckManager.drawCards(state, 2);
-        events.push(...drawEvents);
-        player.handCards.push(...drawn);
-        events.push({
-            type: "ACTIVE_SKILL_USED",
-            payload: {
-                playerId: player.id,
-                skill: "JOSE_DELGADO_DRAW",
-                discardedCardId: card.id,
-                drawnCount: drawn.length,
-                usesThisTurn: state.joseDelgadoCountThisTurn,
-            },
-            timestamp: Date.now(),
-        });
-        return { success: true, events };
-    }
-    static handleDocHolydayBang(state, player, command, events) {
-        if (!SkillHooks.hasSkill(player, "Doc Holyday", state)) {
-            return { success: false, message: "Player does not have Doc Holyday ability." };
-        }
-        if (state.turnPlayerId !== player.id || state.currentPhase !== 2) {
-            return {
-                success: false,
-                message: "Doc Holyday ability requires Phase 2 of your turn.",
-            };
-        }
-        if (state.docHolydayUsedThisTurn >= 1) {
-            return {
-                success: false,
-                message: "Doc Holyday ability can only be used once per turn.",
-            };
-        }
-        const discardIds = SkillHooks.extractTwoDistinctIds(command.discardCardIds ?? command.payload?.discardCardIds);
-        if (!discardIds) {
-            return {
-                success: false,
-                message: "Exactly 2 distinct cards required for Doc Holyday.",
-            };
-        }
-        const hasBoth = discardIds.every((id) => player.handCards.some((c) => c.id === id));
-        if (!hasBoth) {
-            return { success: false, message: "Selected discard cards not found in hand." };
-        }
-        const targetPlayerId = command.targetPlayerId ?? command.payload?.targetPlayerId;
-        if (typeof targetPlayerId !== "string" || !targetPlayerId) {
-            return { success: false, message: "Target player is required." };
-        }
-        const target = state.players.get(targetPlayerId);
-        const previewCard = {
-            id: `doc_holyday_${Date.now()}`,
-            seq: 0,
-            templateId: "base_bang",
-            pack: "base",
-            name: "BANG!",
-            border: "brown",
-            category: "action",
-            rank: "A",
-            suit: "clubs",
-            desc: "",
-        };
-        const validation = target_validator_1.TargetValidator.validate(state, previewCard, player, target, {
-            requiresRange: true,
-        });
-        if (!validation.valid || !target) {
-            return {
-                success: false,
-                message: validation.reason ?? "Invalid target for Doc Holyday.",
-            };
-        }
-        const discarded = SkillHooks.removeHandCards(player, discardIds);
-        if (!discarded) {
-            return { success: false, message: "Selected discard cards not found in hand." };
-        }
-        for (const card of discarded) {
-            deck_manager_1.DeckManager.discardCard(state, card);
-        }
-        state.docHolydayUsedThisTurn += 1;
-        SkillHooks.checkSuzyLafayette(state, player, events);
-        const requiredCount = SkillHooks.hasSkill(player, "Slab the Killer", state) ? 2 : 1;
-        const equipEffective = SkillHooks.isEquipmentEffective(target, player, state);
-        const canUseBarrel = equipEffective &&
-            Boolean(target.equipments.barrel ||
-                target.equipments.extra?.name === "BARREL" ||
-                target.equipments.extras?.some((c) => c.name === "BARREL"));
-        const canUseJourdonnais = SkillHooks.hasInnateBarrel(target, state);
-        // Suitless skill avoids Apache Kid
-        const sourceCard = {
-            ...discarded[0],
-            name: "BANG!",
-            suit: "clubs",
-        };
-        const reaction = {
-            id: `react_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-            type: "BANG_DEFENSE",
-            sourcePlayerId: player.id,
-            targetPlayerId: target.id,
-            sourceCard,
-            requiredCard: "MISSED",
-            requiredCount,
-            currentCount: 0,
-            canUseBarrel,
-            canUseJourdonnais,
-            barrelChecked: false,
-            jourdonnaisChecked: false,
-            createdAt: Date.now(),
-        };
-        state.pendingReactions.push(reaction);
-        events.push({
-            type: "DOC_HOLYDAY_BANG",
-            payload: {
-                playerId: player.id,
-                attackerId: player.id,
-                playerName: player.name,
-                targetId: target.id,
-                targetPlayerId: target.id,
-                targetName: target.name,
-                discardedCardIds: discarded.map((c) => c.id),
-                requiredMissedCount: requiredCount,
-                canUseBarrel,
-                canUseJourdonnais,
-            },
-            timestamp: Date.now(),
-        });
-        return { success: true, events };
-    }
-    static extractTwoDistinctIds(raw) {
-        if (!Array.isArray(raw) || raw.length !== 2)
-            return null;
-        const [first, second] = raw;
-        if (typeof first !== "string" || typeof second !== "string")
-            return null;
-        if (!first || !second || first === second)
-            return null;
-        return [first, second];
-    }
-    static removeHandCards(player, cardIds) {
-        const idSet = new Set(cardIds);
-        const matched = player.handCards.filter((c) => idSet.has(c.id));
-        if (matched.length !== cardIds.length)
-            return null;
-        player.handCards = player.handCards.filter((c) => !idSet.has(c.id));
-        return matched;
+        const { ActiveSkills } = require("./handlers/active_skills");
+        return ActiveSkills.handleActiveSkill(state, command, events);
     }
 }
 exports.SkillHooks = SkillHooks;

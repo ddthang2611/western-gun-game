@@ -6,27 +6,12 @@ const bang_limiter_1 = require("../../combat/bang_limiter");
 const event_engine_1 = require("../../events/event_engine");
 const skill_hooks_1 = require("../skill_hooks");
 const atomic_effects_1 = require("../primitives/atomic_effects");
+const inventory_1 = require("../../utils/inventory");
 class SingleTargetActions {
     // Resolve Ricochet target card ID
     static resolveRicochetTargetCardId(targetPlayer, area, requestedId) {
         if (area === "EQUIPMENT") {
-            const eq = targetPlayer.equipments;
-            const list = [];
-            if (eq.weapon)
-                list.push(eq.weapon);
-            if (eq.horseDef)
-                list.push(eq.horseDef);
-            if (eq.horseOff)
-                list.push(eq.horseOff);
-            if (eq.barrel)
-                list.push(eq.barrel);
-            for (const item of eq.extras || []) {
-                if (item && !list.some((c) => c.id === item.id))
-                    list.push(item);
-            }
-            if (eq.extra && !list.some((c) => c.id === eq.extra.id)) {
-                list.push(eq.extra);
-            }
+            const list = (0, inventory_1.getAllEquippedCards)(targetPlayer);
             if (requestedId) {
                 return list.find((c) => c.id === requestedId)?.id;
             }
@@ -151,6 +136,7 @@ class SingleTargetActions {
             }
             sniperExtraCard = candidate;
         }
+        const prevBangCount = state.bangCountThisTurn;
         const idsToDiscard = sniperExtraCard ? [card.id, sniperExtraCard.id] : [card.id];
         const removed = this.removeHandCardsById(player, idsToDiscard);
         atomic_effects_1.AtomicEffects.discardCards(state, removed, deckManager);
@@ -163,6 +149,48 @@ class SingleTargetActions {
             allowJourdonnais: true,
         });
         const events = [...reactionRes.events];
+        if (card.name === "MISSED!" && skill_hooks_1.SkillHooks.hasSkill(player, "Calamity Janet", state)) {
+            events.push({
+                type: "ACTIVE_SKILL_USED",
+                payload: {
+                    playerId: player.id,
+                    playerName: player.name,
+                    skill: "Calamity Janet",
+                    detail: "played MISSED! as BANG!",
+                },
+                timestamp: Date.now(),
+            });
+        }
+        if (prevBangCount >= 1 &&
+            player.equipments.weapon?.name !== "VOLCANIC" &&
+            skill_hooks_1.SkillHooks.hasSkill(player, "Willy the Kid", state)) {
+            events.push({
+                type: "ACTIVE_SKILL_USED",
+                payload: {
+                    playerId: player.id,
+                    playerName: player.name,
+                    skill: "Willy the Kid",
+                    detail: "unlimited BANG! per turn",
+                },
+                timestamp: Date.now(),
+            });
+        }
+        if (!reactionRes.isImmune &&
+            reactionRes.reaction &&
+            reactionRes.reaction.requiredCount >= 2 &&
+            !sniperExtraCard &&
+            skill_hooks_1.SkillHooks.hasSkill(player, "Slab the Killer", state)) {
+            events.push({
+                type: "ACTIVE_SKILL_USED",
+                payload: {
+                    playerId: player.id,
+                    playerName: player.name,
+                    skill: "Slab the Killer",
+                    detail: "requires 2 Missed! to evade",
+                },
+                timestamp: Date.now(),
+            });
+        }
         if (!reactionRes.isImmune && reactionRes.reaction) {
             events.push({
                 type: "BANG_ATTACK_LAUNCHED",

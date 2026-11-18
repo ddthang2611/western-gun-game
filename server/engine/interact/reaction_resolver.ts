@@ -8,6 +8,11 @@ import { EventEngine } from "../events/event_engine";
 import { SkillHooks } from "./skill_hooks";
 import { AtomicEffects } from "./primitives/atomic_effects";
 import { PendingReaction } from "./interact_types";
+import {
+  getAllEquippedCards,
+  hasBarrelCard,
+  removeEquippedCardById,
+} from "../utils/inventory";
 
 const GREEN_DEFENSE_CARDS = new Set([
   "SOMBRERO",
@@ -36,15 +41,7 @@ export class ReactionResolver {
 
   // Check whether player has blue cards
   private static hasAnyBlueCardInPlay(player: EnginePlayer): boolean {
-    const eq = player.equipments;
-    if (
-      eq?.weapon ||
-      eq?.horseDef ||
-      eq?.horseOff ||
-      eq?.barrel ||
-      eq?.extra ||
-      (eq?.extras && eq.extras.length > 0)
-    ) {
+    if (getAllEquippedCards(player).length > 0) {
       return true;
     }
     return (player.judgements || []).some((j) => j.card.border === "blue");
@@ -55,42 +52,8 @@ export class ReactionResolver {
     player: EnginePlayer,
     targetId: string
   ): EngineCard | null {
-    const eq = player.equipments;
-    if (eq) {
-      if (eq.weapon?.id === targetId) {
-        const removed = eq.weapon;
-        eq.weapon = undefined;
-        return removed;
-      }
-      if (eq.horseDef?.id === targetId) {
-        const removed = eq.horseDef;
-        eq.horseDef = undefined;
-        return removed;
-      }
-      if (eq.horseOff?.id === targetId) {
-        const removed = eq.horseOff;
-        eq.horseOff = undefined;
-        return removed;
-      }
-      if (eq.barrel?.id === targetId) {
-        const removed = eq.barrel;
-        eq.barrel = undefined;
-        return removed;
-      }
-      if (eq.extras && eq.extras.length > 0) {
-        const extraIdx = eq.extras.findIndex((c) => c.id === targetId);
-        if (extraIdx !== -1) {
-          const removed = eq.extras.splice(extraIdx, 1)[0];
-          eq.extra = eq.extras[0];
-          return removed;
-        }
-      }
-      if (eq.extra?.id === targetId) {
-        const removed = eq.extra;
-        eq.extra = eq.extras?.[0];
-        return removed;
-      }
-    }
+    const equipped = removeEquippedCardById(player, targetId);
+    if (equipped) return equipped;
 
     const judgements = player.judgements || [];
     const jIdx = judgements.findIndex(
@@ -101,6 +64,34 @@ export class ReactionResolver {
     }
 
     return null;
+  }
+
+  // Emit private cards-drawn domain event
+  private static emitCardsDrawn(
+    player: EnginePlayer,
+    sourceCard: EngineCard,
+    drawn: EngineCard[],
+    events: DomainEvent[]
+  ): void {
+    if (drawn.length === 0) return;
+    events.push({
+      type: "CARDS_DRAWN",
+      visibleTo: [player.id],
+      payload: {
+        playerId: player.id,
+        playerName: player.name,
+        sourceCard,
+        count: drawn.length,
+        cards: drawn,
+      },
+      maskedPayload: {
+        playerId: player.id,
+        playerName: player.name,
+        sourceCard,
+        count: drawn.length,
+      },
+      timestamp: Date.now(),
+    });
   }
 
   // Handle Sid Ketchum near-death rescue
@@ -344,23 +335,56 @@ export class ReactionResolver {
         turnPlayer ?? attacker,
         state
       );
-      const hasBarrelCard = Boolean(
-        player.equipments.barrel ||
-          player.equipments.extra?.name === "BARREL" ||
-          player.equipments.extras?.some((c) => c.name === "BARREL")
-      );
       const canBarrelNow =
         reaction.canUseBarrel &&
         !reaction.barrelChecked &&
         equipEffective &&
-        hasBarrelCard;
+        hasBarrelCard(player);
       const canJourdonnaisNow =
         reaction.canUseJourdonnais &&
         !reaction.jourdonnaisChecked &&
         SkillHooks.hasInnateBarrel(player, state);
 
+      const requestedSource = (command.payload?.checkSource ??
+        (command as Record<string, any>).checkSource) as
+        | "BARREL"
+        | "JOURDONNAIS"
+        | undefined;
+      if (
+        requestedSource !== undefined &&
+        requestedSource !== "BARREL" &&
+        requestedSource !== "JOURDONNAIS"
+      ) {
+        return {
+          success: false,
+          message: "Invalid checkSource; expected BARREL or JOURDONNAIS.",
+        };
+      }
+
       let checkSource: "BARREL" | "JOURDONNAIS";
-      if (canBarrelNow) {
+      if (requestedSource === "BARREL") {
+        if (!canBarrelNow) {
+          return {
+            success: false,
+            message: reaction.barrelChecked
+              ? "Barrel check already used."
+              : "Barrel check is not available.",
+          };
+        }
+        reaction.barrelChecked = true;
+        checkSource = "BARREL";
+      } else if (requestedSource === "JOURDONNAIS") {
+        if (!canJourdonnaisNow) {
+          return {
+            success: false,
+            message: reaction.jourdonnaisChecked
+              ? "Jourdonnais check already used."
+              : "Jourdonnais check is not available.",
+          };
+        }
+        reaction.jourdonnaisChecked = true;
+        checkSource = "JOURDONNAIS";
+      } else if (canBarrelNow) {
         reaction.barrelChecked = true;
         checkSource = "BARREL";
       } else if (canJourdonnaisNow) {
@@ -487,6 +511,7 @@ export class ReactionResolver {
         );
         player.handCards.push(...drawn);
         events.push(...drawEvents);
+        this.emitCardsDrawn(player, greenEntry.card, drawn, events);
       }
 
       SkillHooks.onPlayOutOfTurn(state, player, events);
@@ -559,6 +584,47 @@ export class ReactionResolver {
       player.handCards.splice(cardIdx, 1);
       AtomicEffects.discardCard(state, card, deckManager);
 
+      if (reaction.requiredCard === "MISSED" && card.name !== "MISSED!" && card.name !== "DODGE") {
+        if (card.name === "BANG!" && SkillHooks.hasSkill(player, "Calamity Janet", state)) {
+          events.push({
+            type: "ACTIVE_SKILL_USED",
+            payload: {
+              playerId: player.id,
+              playerName: player.name,
+              skill: "Calamity Janet",
+              detail: "played BANG! as MISSED!",
+            },
+            timestamp: Date.now(),
+          });
+        } else if (SkillHooks.hasSkill(player, "Elena Fuente", state)) {
+          events.push({
+            type: "ACTIVE_SKILL_USED",
+            payload: {
+              playerId: player.id,
+              playerName: player.name,
+              skill: "Elena Fuente",
+              detail: "used hand card as MISSED!",
+            },
+            timestamp: Date.now(),
+          });
+        }
+      } else if (
+        reaction.requiredCard === "BANG" &&
+        card.name === "MISSED!" &&
+        SkillHooks.hasSkill(player, "Calamity Janet", state)
+      ) {
+        events.push({
+          type: "ACTIVE_SKILL_USED",
+          payload: {
+            playerId: player.id,
+            playerName: player.name,
+            skill: "Calamity Janet",
+            detail: "played MISSED! as BANG!",
+          },
+          timestamp: Date.now(),
+        });
+      }
+
       if (card.name === "DODGE") {
         const { cards: dodgeCards, events: dodgeEvents } = AtomicEffects.drawCards(
           state,
@@ -567,6 +633,7 @@ export class ReactionResolver {
         );
         player.handCards.push(...dodgeCards);
         events.push(...dodgeEvents);
+        this.emitCardsDrawn(player, card, dodgeCards, events);
       }
 
       SkillHooks.onPlayOutOfTurn(state, player, events);

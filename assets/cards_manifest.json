@@ -2926,7 +2926,7 @@
       "pack": "base",
       "name": "El Gringo",
       "hp": 3,
-      "desc_en": "Each time he is hit by a player, he draws a card from the hand of that player.",
+      "desc_en": "Each time he is hit by a player, he steals a card from the hand of that player.",
       "image": "assets/images/characters/char_el_gringo.png"
     },
     {
@@ -2934,7 +2934,7 @@
       "pack": "base",
       "name": "Jesse Jones",
       "hp": 4,
-      "desc_en": "He may draw his first card from the hand of a player.",
+      "desc_en": "He may steal his first card from the hand of a player.",
       "image": "assets/images/characters/char_jesse_jones.png"
     },
     {
@@ -3110,7 +3110,7 @@
       "pack": "dodge_city",
       "name": "Pat Brennan",
       "hp": 4,
-      "desc_en": "He may draw only one card in play in front of any one player instead of drawing during phase 1.",
+      "desc_en": "He may steal only one card in play in front of any one player instead of drawing during phase 1.",
       "image": "assets/images/characters/char_pat_brennan.png"
     },
     {

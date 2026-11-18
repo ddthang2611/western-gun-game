@@ -10,6 +10,7 @@ const seat_manager_1 = require("../../board/seat_manager");
 const elimination_handler_1 = require("../../elimination/elimination_handler");
 const skill_hooks_1 = require("../skill_hooks");
 const event_rule_registry_1 = require("../../events/event_rule_registry");
+const inventory_1 = require("../../utils/inventory");
 class AtomicEffects {
     // Draw cards from state deck
     static drawCards(state, count, deckManager) {
@@ -56,76 +57,7 @@ class AtomicEffects {
             return victim.handCards.splice(randIdx, 1)[0];
         }
         if (targetArea === "EQUIPMENT") {
-            const eq = victim.equipments;
-            if (!eq)
-                return null;
-            if (targetCardId) {
-                if (eq.weapon?.id === targetCardId) {
-                    const card = eq.weapon;
-                    eq.weapon = undefined;
-                    return card;
-                }
-                if (eq.horseDef?.id === targetCardId) {
-                    const card = eq.horseDef;
-                    eq.horseDef = undefined;
-                    return card;
-                }
-                if (eq.horseOff?.id === targetCardId) {
-                    const card = eq.horseOff;
-                    eq.horseOff = undefined;
-                    return card;
-                }
-                if (eq.barrel?.id === targetCardId) {
-                    const card = eq.barrel;
-                    eq.barrel = undefined;
-                    return card;
-                }
-                if (eq.extras && eq.extras.length > 0) {
-                    const extraIdx = eq.extras.findIndex((c) => c.id === targetCardId);
-                    if (extraIdx !== -1) {
-                        const card = eq.extras.splice(extraIdx, 1)[0];
-                        eq.extra = eq.extras[0];
-                        return card;
-                    }
-                }
-                if (eq.extra?.id === targetCardId) {
-                    const card = eq.extra;
-                    eq.extra = eq.extras?.[0];
-                    return card;
-                }
-                return null;
-            }
-            if (eq.weapon) {
-                const card = eq.weapon;
-                eq.weapon = undefined;
-                return card;
-            }
-            if (eq.horseDef) {
-                const card = eq.horseDef;
-                eq.horseDef = undefined;
-                return card;
-            }
-            if (eq.horseOff) {
-                const card = eq.horseOff;
-                eq.horseOff = undefined;
-                return card;
-            }
-            if (eq.barrel) {
-                const card = eq.barrel;
-                eq.barrel = undefined;
-                return card;
-            }
-            if (eq.extras && eq.extras.length > 0) {
-                const card = eq.extras.shift();
-                eq.extra = eq.extras[0];
-                return card;
-            }
-            if (eq.extra) {
-                const card = eq.extra;
-                eq.extra = undefined;
-                return card;
-            }
-            return null;
+            return (0, inventory_1.removeEquippedCardById)(victim, targetCardId);
         }
         if (targetArea === "GREEN") {
             const greenCards = victim.greenCards || [];
@@ -300,7 +232,7 @@ class AtomicEffects {
                 type: "NEAR_DEATH_RESCUE",
                 sourcePlayerId: attacker?.id ?? "ENV_DAMAGE",
                 targetPlayerId: victim.id,
-                sourceCard: victim.handCards[0] ?? {
+                sourceCard: {
                     id: "sid_rescue",
                     seq: 0,
                     templateId: "sid_rescue",
@@ -404,10 +336,7 @@ class AtomicEffects {
         }
         const turnPlayer = state.players.get(state.turnPlayerId);
         const equipEffective = skill_hooks_1.SkillHooks.isEquipmentEffective(target, turnPlayer ?? attacker, state);
-        const hasBarrelCard = Boolean(target.equipments.barrel ||
-            target.equipments.extra?.name === "BARREL" ||
-            target.equipments.extras?.some((c) => c.name === "BARREL"));
-        const hasBarrel = Boolean(config.allowBarrel) && equipEffective && hasBarrelCard;
+        const hasBarrel = Boolean(config.allowBarrel) && equipEffective && (0, inventory_1.hasBarrelCard)(target);
         const hasJourdonnais = Boolean(config.allowJourdonnais) && skill_hooks_1.SkillHooks.hasInnateBarrel(target, state);
         let reqCount = config.requiredCount ?? 1;
         if (attacker &&

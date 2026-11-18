@@ -70,7 +70,7 @@ export class JudgementPhase {
           (card, st) => !this.isDynamiteExploded(card, st)
         );
         events.push(...check.events);
-        const exploded = !check.success;
+        const exploded = check.drawnCards.length > 0 && !check.success;
 
         events.push({
           type: "JUDGEMENT_RESOLVED",
@@ -142,7 +142,6 @@ export class JudgementPhase {
         }
 
         player.judgements = player.judgements.filter((j) => j.id !== judgement.id);
-        this.discardJudgementCard(state, judgement.card);
 
         const check = SkillHooks.executeDrawCheck(
           state,
@@ -150,6 +149,7 @@ export class JudgementPhase {
           "JAIL",
           (card, st) => this.isJailEscaped(card, st)
         );
+        this.discardJudgementCard(state, judgement.card);
         events.push(...check.events);
 
         events.push({

@@ -9,6 +9,7 @@ import { TargetArea } from "../../combat/target_validator";
 import { SkillHooks } from "../skill_hooks";
 import { PendingReaction, ReactionConfig } from "../interact_types";
 import { EventRuleRegistry } from "../../events/event_rule_registry";
+import { hasBarrelCard, removeEquippedCardById } from "../../utils/inventory";
 
 export interface DamageResult {
   events: DomainEvent[];
@@ -93,77 +94,7 @@ export class AtomicEffects {
     }
 
     if (targetArea === "EQUIPMENT") {
-      const eq = victim.equipments;
-      if (!eq) return null;
-
-      if (targetCardId) {
-        if (eq.weapon?.id === targetCardId) {
-          const card = eq.weapon;
-          eq.weapon = undefined;
-          return card;
-        }
-        if (eq.horseDef?.id === targetCardId) {
-          const card = eq.horseDef;
-          eq.horseDef = undefined;
-          return card;
-        }
-        if (eq.horseOff?.id === targetCardId) {
-          const card = eq.horseOff;
-          eq.horseOff = undefined;
-          return card;
-        }
-        if (eq.barrel?.id === targetCardId) {
-          const card = eq.barrel;
-          eq.barrel = undefined;
-          return card;
-        }
-        if (eq.extras && eq.extras.length > 0) {
-          const extraIdx = eq.extras.findIndex((c) => c.id === targetCardId);
-          if (extraIdx !== -1) {
-            const card = eq.extras.splice(extraIdx, 1)[0];
-            eq.extra = eq.extras[0];
-            return card;
-          }
-        }
-        if (eq.extra?.id === targetCardId) {
-          const card = eq.extra;
-          eq.extra = eq.extras?.[0];
-          return card;
-        }
-        return null;
-      }
-
-      if (eq.weapon) {
-        const card = eq.weapon;
-        eq.weapon = undefined;
-        return card;
-      }
-      if (eq.horseDef) {
-        const card = eq.horseDef;
-        eq.horseDef = undefined;
-        return card;
-      }
-      if (eq.horseOff) {
-        const card = eq.horseOff;
-        eq.horseOff = undefined;
-        return card;
-      }
-      if (eq.barrel) {
-        const card = eq.barrel;
-        eq.barrel = undefined;
-        return card;
-      }
-      if (eq.extras && eq.extras.length > 0) {
-        const card = eq.extras.shift()!;
-        eq.extra = eq.extras[0];
-        return card;
-      }
-      if (eq.extra) {
-        const card = eq.extra;
-        eq.extra = undefined;
-        return card;
-      }
-      return null;
+      return removeEquippedCardById(victim, targetCardId);
     }
 
     if (targetArea === "GREEN") {
@@ -389,19 +320,18 @@ export class AtomicEffects {
         type: "NEAR_DEATH_RESCUE",
         sourcePlayerId: attacker?.id ?? "ENV_DAMAGE",
         targetPlayerId: victim.id,
-        sourceCard:
-          victim.handCards[0] ?? {
-            id: "sid_rescue",
-            seq: 0,
-            templateId: "sid_rescue",
-            pack: "base",
-            name: "SID_RESCUE",
-            border: "brown",
-            category: "reaction",
-            rank: "A",
-            suit: "hearts",
-            desc: "Sid Ketchum rescue",
-          },
+        sourceCard: {
+          id: "sid_rescue",
+          seq: 0,
+          templateId: "sid_rescue",
+          pack: "base",
+          name: "SID_RESCUE",
+          border: "brown",
+          category: "reaction",
+          rank: "A",
+          suit: "hearts",
+          desc: "Sid Ketchum rescue",
+        },
         requiredCard: "SID_RESCUE",
         requiredCount: 1,
         currentCount: 0,
@@ -531,12 +461,8 @@ export class AtomicEffects {
       turnPlayer ?? attacker,
       state
     );
-    const hasBarrelCard = Boolean(
-      target.equipments.barrel ||
-        target.equipments.extra?.name === "BARREL" ||
-        target.equipments.extras?.some((c) => c.name === "BARREL")
-    );
-    const hasBarrel = Boolean(config.allowBarrel) && equipEffective && hasBarrelCard;
+    const hasBarrel =
+      Boolean(config.allowBarrel) && equipEffective && hasBarrelCard(target);
     const hasJourdonnais =
       Boolean(config.allowJourdonnais) && SkillHooks.hasInnateBarrel(target, state);
 

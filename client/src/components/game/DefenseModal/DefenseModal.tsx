@@ -4,6 +4,7 @@ import { Modal } from "../../ui/Modal/Modal";
 import { Panel } from "../../ui/Panel/Panel";
 import { Button } from "../../ui/Button/Button";
 import { CardView } from "../CardView/CardView";
+import { DefenseCardSection, type DefenseCardItem } from "./DefenseCardSection";
 import "./DefenseModal.scss";
 
 export interface BlueCardInPlayItem {
@@ -18,8 +19,10 @@ export interface DefenseModalProps {
   heroes: Character[];
   myGreenCards?: GreenCard[];
   myBlueCardsInPlay?: BlueCardInPlayItem[];
+  myHp?: number;
   disabled?: boolean;
-  onBarrelCheck: () => void;
+  onDrawCheck?: (source: "BARREL" | "JOURDONNAIS") => void;
+  onBarrelCheck?: () => void;
   onJourdonnaisCheck?: () => void;
   onPlayCard: (cardId: string) => void;
   onUseGreenDefense?: (greenCardId: string) => void;
@@ -29,6 +32,12 @@ export interface DefenseModalProps {
 }
 
 const GREEN_MISSED_NAMES = new Set(["SOMBRERO", "IRON PLATE", "TEN GALLON HAT", "BIBLE"]);
+
+const AREA_LABELS: Record<string, string> = {
+  EQUIPMENT: "Equipment",
+  GREEN: "Green Card",
+  JUDGEMENT: "Judgement",
+};
 
 function isCardEligible(
   card: Card,
@@ -53,13 +62,35 @@ function isCardEligible(
   return false;
 }
 
+function resolveRicochetTargetCard(
+  reaction: PendingReactionInfo,
+  myBlueCardsInPlay: BlueCardInPlayItem[],
+  myGreenCards: GreenCard[]
+): Card | undefined {
+  if (reaction.targetCard) return reaction.targetCard;
+  const targetId = reaction.ricochetTargetCardId;
+  if (!targetId) return undefined;
+
+  const blueMatch = myBlueCardsInPlay.find(
+    (item) => item.id === targetId || item.card.id === targetId
+  );
+  if (blueMatch) return blueMatch.card;
+
+  const greenMatch = myGreenCards.find(
+    (g) => g.id === targetId || g.card.id === targetId
+  );
+  return greenMatch?.card;
+}
+
 export const DefenseModal: React.FC<DefenseModalProps> = ({
   reaction,
   myHand,
   heroes,
   myGreenCards = [],
   myBlueCardsInPlay = [],
+  myHp,
   disabled = false,
+  onDrawCheck,
   onBarrelCheck,
   onJourdonnaisCheck,
   onPlayCard,
@@ -86,6 +117,8 @@ export const DefenseModal: React.FC<DefenseModalProps> = ({
   const isDaltonsDiscard =
     reaction.requiredCard === "BLUE_EQUIP" || reaction.type === "EVENT_DALTONS_DISCARD";
   const isRussianRoulette = reaction.type === "EVENT_RUSSIAN_ROULETTE";
+  const isRicochet =
+    reaction.type === "EVENT_RICOCHET_DEFENSE" || reaction.type === "RICOCHET_HIT";
 
   const showBarrelButton = !isRussianRoulette && reaction.canUseBarrel && !reaction.barrelChecked;
   const showJourdonnaisButton =
@@ -96,6 +129,22 @@ export const DefenseModal: React.FC<DefenseModalProps> = ({
       ? myGreenCards.filter((g) => !g.isDelay && GREEN_MISSED_NAMES.has(g.card.name))
       : [];
 
+  const deficit =
+    reaction.pendingDamage && reaction.pendingDamage > 0
+      ? reaction.pendingDamage
+      : myHp !== undefined && myHp <= 0
+      ? Math.abs(myHp) + 1
+      : 1;
+  const cardsNeeded = deficit * 2;
+  const sidHint = `Need at least ${cardsNeeded} cards to heal ${deficit} lethal damage`;
+
+  const ricochetTargetCard = isRicochet
+    ? resolveRicochetTargetCard(reaction, myBlueCardsInPlay, myGreenCards)
+    : undefined;
+  const ricochetAreaLabel = reaction.ricochetTargetArea
+    ? AREA_LABELS[reaction.ricochetTargetArea] || reaction.ricochetTargetArea
+    : "In Play";
+
   const actionLabel =
     isSidRescue
       ? "Near-Death Sid Ketchum Rescue"
@@ -103,14 +152,16 @@ export const DefenseModal: React.FC<DefenseModalProps> = ({
       ? "The Daltons: Discard 1 Blue Card"
       : isRussianRoulette
       ? "Russian Roulette"
-      : reaction.type === "EVENT_RICOCHET_DEFENSE"
-      ? "Ricochet Shot on Equipment"
+      : isRicochet
+      ? "Ricochet Shot on In-Play Card"
       : reaction.type === "DUEL_RESPONSE"
       ? "Duel Challenge"
       : reaction.type === "INDIANS_DEFENSE"
       ? "Indians! Ambush"
       : reaction.type === "GATLING_DEFENSE"
-      ? "Gatling Volley"
+      ? reaction.sourceCard?.name === "HOWITZER"
+        ? "Howitzer Volley"
+        : "Gatling Volley"
       : "Incoming Attack";
 
   const remainingNeeded = Math.max(1, reaction.requiredCount - reaction.currentCount);
@@ -118,6 +169,35 @@ export const DefenseModal: React.FC<DefenseModalProps> = ({
     isSidRescue || isDaltonsDiscard
       ? undefined
       : `${remainingNeeded}x ${reaction.requiredCard} (${reaction.currentCount}/${reaction.requiredCount})`;
+
+  const handleDrawCheck = (source: "BARREL" | "JOURDONNAIS") => {
+    if (disabled) return;
+    if (onDrawCheck) {
+      onDrawCheck(source);
+      return;
+    }
+    if (source === "JOURDONNAIS") {
+      (onJourdonnaisCheck || onBarrelCheck)?.();
+    } else {
+      onBarrelCheck?.();
+    }
+  };
+
+  const handItems: DefenseCardItem[] = myHand.map((card) => ({
+    id: card.id,
+    card,
+    eligible: isSidRescue ? true : isCardEligible(card, reaction.requiredCard, heroes),
+  }));
+
+  const blueItems: DefenseCardItem[] = myBlueCardsInPlay.map((item) => ({
+    id: item.id,
+    card: item.card,
+  }));
+
+  const greenItems: DefenseCardItem[] = readyGreenDefenses.map((g) => ({
+    id: g.id,
+    card: g.card,
+  }));
 
   return (
     <Modal isOpen={true} size="medium">
@@ -132,148 +212,116 @@ export const DefenseModal: React.FC<DefenseModalProps> = ({
             <CardView card={reaction.sourceCard} isMini={true} isPlayable={false} />
             <div className="defense-modal__source-meta">
               <strong>{reaction.sourceCard.name}</strong> ({reaction.sourceCard.rank} {reaction.sourceCard.suit})
+              {reaction.sourceCard.desc && (
+                <div className="defense-modal__source-desc">{reaction.sourceCard.desc}</div>
+              )}
             </div>
           </div>
         </Panel>
 
-        {isDaltonsDiscard ? (
+        {isRicochet && (
           <Panel>
-            <div className="card-picker__region-list">
-              {myBlueCardsInPlay.map((item) => (
-                <CardView
-                  key={item.id}
-                  card={item.card}
-                  isMini={true}
-                  isPlayable={!disabled}
-                  isDisabled={disabled}
-                  isSelected={selectedBlueCardId === item.id}
-                  onClick={() => {
-                    if (disabled) return;
-                    setSelectionState((prev) => ({
-                      key: selectionKey,
-                      cardId: null,
-                      greenId: null,
-                      blueCardId:
-                        prev.key === selectionKey && prev.blueCardId === item.id ? null : item.id,
-                      rescueIds: [],
-                    }));
-                  }}
-                />
-              ))}
-            </div>
-          </Panel>
-        ) : isSidRescue ? (
-          <Panel>
-            <div className="card-picker__region-list">
-              {myHand.map((card) => {
-                const picked = rescueIds.includes(card.id);
-                return (
-                  <CardView
-                    key={card.id}
-                    card={card}
-                    isMini={true}
-                    isPlayable={!disabled}
-                    isDisabled={disabled}
-                    isSelected={picked}
-                    onClick={() => {
-                      if (disabled) return;
-                      setSelectionState((prev) => {
-                        const base = prev.key === selectionKey ? prev.rescueIds : [];
-                        const next = base.includes(card.id)
-                          ? base.filter((id) => id !== card.id)
-                          : [...base, card.id];
-                        return {
-                          key: selectionKey,
-                          cardId: null,
-                          greenId: null,
-                          blueCardId: null,
-                          rescueIds: next,
-                        };
-                      });
-                    }}
-                  />
-                );
-              })}
-            </div>
-          </Panel>
-        ) : (
-          <Panel>
-            <div className="card-picker__region-list">
-              {myHand.map((card) => {
-                const eligible = isCardEligible(card, reaction.requiredCard, heroes);
-                return (
-                  <CardView
-                    key={card.id}
-                    card={card}
-                    isMini={true}
-                    isPlayable={!disabled && eligible}
-                    isDisabled={disabled || !eligible}
-                    isSelected={selectedCardId === card.id}
-                    onClick={() => {
-                      if (disabled || !eligible) return;
-                      setSelectionState((prev) => ({
-                        key: selectionKey,
-                        cardId: prev.key === selectionKey && prev.cardId === card.id ? null : card.id,
-                        greenId: null,
-                        blueCardId: null,
-                        rescueIds: [],
-                      }));
-                    }}
-                  />
-                );
-              })}
+            <div className="defense-modal__ricochet-target">
+              {ricochetTargetCard && (
+                <CardView card={ricochetTargetCard} isMini={true} isPlayable={false} />
+              )}
+              <div className="defense-modal__ricochet-meta">
+                <span className="defense-modal__ricochet-area">
+                  Target ({ricochetAreaLabel})
+                </span>
+                <strong>
+                  {ricochetTargetCard
+                    ? `${ricochetTargetCard.name} (${ricochetTargetCard.rank} ${ricochetTargetCard.suit})`
+                    : reaction.ricochetTargetCardId || "In-Play Card"}
+                </strong>
+                <span className="defense-modal__source-desc">
+                  Play a Missed! card to protect this card, or allow it to be destroyed.
+                </span>
+              </div>
             </div>
           </Panel>
         )}
 
-        {readyGreenDefenses.length > 0 && (
-          <Panel>
-            <div className="card-picker__region-list">
-              {readyGreenDefenses.map((gCard) => (
-                <CardView
-                  key={gCard.id}
-                  card={gCard.card}
-                  isMini={true}
-                  isPlayable={!disabled}
-                  isDisabled={disabled}
-                  isSelected={selectedGreenId === gCard.id}
-                  onClick={() => {
-                    if (disabled) return;
-                    setSelectionState((prev) => ({
-                      key: selectionKey,
-                      cardId: null,
-                      greenId: prev.key === selectionKey && prev.greenId === gCard.id ? null : gCard.id,
-                      blueCardId: null,
-                      rescueIds: [],
-                    }));
-                  }}
-                />
-              ))}
-            </div>
-          </Panel>
+        {isDaltonsDiscard ? (
+          <DefenseCardSection
+            items={blueItems}
+            selectedIds={selectedBlueCardId ? [selectedBlueCardId] : []}
+            disabled={disabled}
+            onSelect={(id) =>
+              setSelectionState((prev) => ({
+                key: selectionKey,
+                cardId: null,
+                greenId: null,
+                blueCardId: prev.key === selectionKey && prev.blueCardId === id ? null : id,
+                rescueIds: [],
+              }))
+            }
+          />
+        ) : isSidRescue ? (
+          <DefenseCardSection
+            hint={`${sidHint} (${rescueIds.length} selected)`}
+            items={handItems}
+            selectedIds={rescueIds}
+            disabled={disabled}
+            onSelect={(id) =>
+              setSelectionState((prev) => {
+                const base = prev.key === selectionKey ? prev.rescueIds : [];
+                const next = base.includes(id) ? base.filter((x) => x !== id) : [...base, id];
+                return {
+                  key: selectionKey,
+                  cardId: null,
+                  greenId: null,
+                  blueCardId: null,
+                  rescueIds: next,
+                };
+              })
+            }
+          />
+        ) : (
+          <DefenseCardSection
+            items={handItems}
+            emptyText="No cards in hand."
+            selectedIds={selectedCardId ? [selectedCardId] : []}
+            disabled={disabled}
+            onSelect={(id) =>
+              setSelectionState((prev) => ({
+                key: selectionKey,
+                cardId: prev.key === selectionKey && prev.cardId === id ? null : id,
+                greenId: null,
+                blueCardId: null,
+                rescueIds: [],
+              }))
+            }
+          />
+        )}
+
+        {greenItems.length > 0 && (
+          <DefenseCardSection
+            title="Ready Green Defense Cards"
+            items={greenItems}
+            selectedIds={selectedGreenId ? [selectedGreenId] : []}
+            disabled={disabled}
+            onSelect={(id) =>
+              setSelectionState((prev) => ({
+                key: selectionKey,
+                cardId: null,
+                greenId: prev.key === selectionKey && prev.greenId === id ? null : id,
+                blueCardId: null,
+                rescueIds: [],
+              }))
+            }
+          />
         )}
       </Modal.Body>
 
-      <Modal.Footer>
+      <Modal.Footer hint={isSidRescue ? sidHint : undefined}>
         {showBarrelButton && (
-          <Button
-            variant="info"
-            disabled={disabled}
-            onClick={() => {
-              if (!disabled) onBarrelCheck();
-            }}
-          >
+          <Button variant="info" disabled={disabled} onClick={() => handleDrawCheck("BARREL")}>
             Draw! (Barrel)
           </Button>
         )}
         {showJourdonnaisButton && (
-          <Button
-            variant="info"
-            disabled={disabled}
-            onClick={() => {
-              if (!disabled) (onJourdonnaisCheck || onBarrelCheck)();
-            }}
-          >
+          <Button variant="info" disabled={disabled} onClick={() => handleDrawCheck("JOURDONNAIS")}>
             Draw! (Jourdonnais)
           </Button>
         )}
@@ -327,7 +375,7 @@ export const DefenseModal: React.FC<DefenseModalProps> = ({
           >
             {isSidRescue
               ? "Accept Elimination"
-              : reaction.type === "EVENT_RICOCHET_DEFENSE"
+              : isRicochet
               ? "Allow Destroy"
               : isRussianRoulette
               ? "Take 2 Damage"

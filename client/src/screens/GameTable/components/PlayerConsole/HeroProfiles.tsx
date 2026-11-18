@@ -17,7 +17,7 @@ export const HeroProfiles: React.FC<HeroProfilesProps> = ({
   const displayHeroes = heroes.slice(0, 2);
 
   return (
-    <div className="game-table__console-heroes">
+    <div className="game-table__console-heroes" data-flight-anchor="my-heroes">
       <div className="game-table__hero-columns-player">
         {displayHeroes.map((hero) => (
           <div key={hero.id} className="game-table__hero-card">

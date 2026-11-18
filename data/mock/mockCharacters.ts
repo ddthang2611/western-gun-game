@@ -35,7 +35,7 @@ export const allMockCharacters: CatalogCharacter[] = [
     pack: "base",
     name: "El Gringo",
     baseHp: 3,
-    desc: "Each time he is hit by a player, he draws a card from the hand of that player.",
+    desc: "Each time he is hit by a player, he steals a card from the hand of that player.",
     image: "/assets/images/characters/char_el_gringo.png",
   },
   {
@@ -43,7 +43,7 @@ export const allMockCharacters: CatalogCharacter[] = [
     pack: "base",
     name: "Jesse Jones",
     baseHp: 4,
-    desc: "He may draw his first card from the hand of a player.",
+    desc: "He may steal his first card from the hand of a player.",
     image: "/assets/images/characters/char_jesse_jones.png",
   },
   {
@@ -227,7 +227,7 @@ export const allMockCharacters: CatalogCharacter[] = [
     pack: "dodge_city",
     name: "Pat Brennan",
     baseHp: 4,
-    desc: "He may draw only one card in play in front of any one player instead of drawing during phase 1.",
+    desc: "He may steal only one card in play in front of any one player instead of drawing during phase 1.",
     image: "/assets/images/characters/char_pat_brennan.png",
   },
   {

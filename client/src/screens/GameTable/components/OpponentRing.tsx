@@ -1,9 +1,17 @@
 import React from "react";
 import type { Player, Card, GreenCard } from "../../../types/game";
 import { OpponentSeat } from "../../../components/game";
+import {
+  MANIPULATE_CARDS,
+  TARGETED_CARD_NAMES,
+  countInPlayCards,
+  hasStealableCards,
+} from "../utils/cardRules";
+import "./OpponentRing.scss";
 
 export interface OpponentRingProps {
   opponents: Player[];
+  activePlayerId?: string;
   selectedCard?: Card;
   selectedGreenCard?: GreenCard;
   forcedTargetMode?: string | null;
@@ -16,44 +24,9 @@ export interface OpponentRingProps {
   centerNode?: React.ReactNode;
 }
 
-const TARGETED_CARD_NAMES = new Set([
-  "BANG!",
-  "PUNCH",
-  "SPRINGFIELD",
-  "DUEL",
-  "PANIC!",
-  "CAT BALOU",
-  "RAG TIME",
-  "CONESTOGA",
-  "CAN CAN",
-  "JAIL",
-  "TEQUILA",
-  "KNIFE",
-  "DERRINGER",
-  "PEPPERBOX",
-  "BUFFALO RIFLE",
-]);
-
-const MANIPULATION_CARDS = new Set([
-  "PANIC!",
-  "CAT BALOU",
-  "RAG TIME",
-  "CONESTOGA",
-  "CAN CAN",
-]);
-
-function hasInPlayCards(opp: Player): boolean {
-  const eq = opp.equipments;
-  const hasEquip = Boolean(eq.weapon || eq.horseDef || eq.horseOff || eq.barrel || eq.extra);
-  return hasEquip || opp.greenCards.length > 0 || opp.hasJail || opp.hasDynamite;
-}
-
-function hasStealableCards(opp: Player): boolean {
-  return opp.handCount > 0 || hasInPlayCards(opp);
-}
-
 export const OpponentRing: React.FC<OpponentRingProps> = ({
   opponents,
+  activePlayerId,
   selectedCard,
   selectedGreenCard,
   forcedTargetMode,
@@ -90,12 +63,16 @@ export const OpponentRing: React.FC<OpponentRingProps> = ({
       return (opp.distanceFromMe ?? 1) <= 1;
     }
     if (activeCardName === "BANG!" || activeCardName === "PEPPERBOX") {
-      if (activeCardName === "BANG!" && ricochetActive && hasInPlayCards(opp)) {
+      if (
+        activeCardName === "BANG!" &&
+        ricochetActive &&
+        countInPlayCards(opp) > 0
+      ) {
         return true;
       }
       return (opp.distanceFromMe ?? 1) <= weaponRange;
     }
-    if (MANIPULATION_CARDS.has(activeCardName)) {
+    if (MANIPULATE_CARDS.has(activeCardName)) {
       return hasStealableCards(opp);
     }
     return true;
@@ -123,6 +100,7 @@ export const OpponentRing: React.FC<OpponentRingProps> = ({
       <OpponentSeat
         key={opp.id}
         player={opp}
+        isCurrentTurn={Boolean(activePlayerId && opp.id === activePlayerId)}
         isTargetSelected={selectedTargetId === opp.id}
         isTargetable={isCardTargeted}
         isInRange={inRange}
@@ -146,7 +124,7 @@ export const OpponentRing: React.FC<OpponentRingProps> = ({
           {leftOpps.map(renderSeat)}
         </div>
 
-        <div className="game-table__center-stage">
+        <div className="game-table__center-stage" data-flight-anchor="center-stage">
           {centerNode}
         </div>
 

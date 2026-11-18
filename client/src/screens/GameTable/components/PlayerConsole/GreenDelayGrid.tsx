@@ -28,7 +28,7 @@ export const GreenDelayGrid: React.FC<GreenDelayGridProps> = ({
   selectedGreenCardId,
   onTriggerGreenCard,
 }) => {
-  const slotCount = Math.max(5, greenCards.length);
+  const slotCount = Math.max(12, greenCards.length);
 
   return (
     <div className="game-table__console-green">
@@ -57,6 +57,7 @@ export const GreenDelayGrid: React.FC<GreenDelayGridProps> = ({
               <button
                 type="button"
                 aria-pressed={isSelected}
+                data-target-origin={isSelected ? "green" : undefined}
                 onClick={() => onTriggerGreenCard(gCard)}
                 className={[
                   "game-table__green-slot",

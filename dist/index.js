@@ -21,6 +21,7 @@ const auth_routes_1 = require("./api/auth_routes");
 const catalog_routes_1 = require("./api/catalog_routes");
 const cookie_utils_1 = require("./api/cookie_utils");
 Object.defineProperty(exports, "parseCookies", { enumerable: true, get: function () { return cookie_utils_1.parseCookies; } });
+const request_utils_1 = require("./api/request_utils");
 function getLocalLanIps() {
     const interfaces = os_1.default.networkInterfaces();
     const ips = [];
@@ -76,10 +77,14 @@ async function startServer() {
     const app = (0, express_1.default)();
     app.disable("x-powered-by");
     // Security Headers (SEC-02 & OWASP Top 10)
-    app.use((_req, res, next) => {
+    app.use((req, res, next) => {
         res.setHeader("X-Content-Type-Options", "nosniff");
         res.setHeader("X-Frame-Options", "DENY");
-        res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; frame-ancestors 'none';");
+        res.setHeader("Referrer-Policy", "no-referrer");
+        res.setHeader("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; frame-ancestors 'none'; object-src 'none'; base-uri 'self';");
+        if ((0, request_utils_1.isHttpsRequest)(req)) {
+            res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+        }
         next();
     });
     // Dynamic origin validation preventing credential theft via reflected CORS (VULN-02)
@@ -132,14 +137,40 @@ async function startServer() {
         }
         res.status(404).send("Client build not found. Run npm --prefix client run build or open Vite dev server at /dev-test.");
     });
+    // Mask internal error details in JSON responses
+    app.use((err, _req, res, next) => {
+        if (res.headersSent) {
+            return next(err);
+        }
+        if (typeof err?.message === "string" && err.message.includes("CORS policy violation")) {
+            return res.status(403).json({ success: false, message: "Origin not allowed." });
+        }
+        if (err?.type === "entity.parse.failed" || (err instanceof SyntaxError && "body" in err)) {
+            return res.status(400).json({ success: false, message: "Malformed JSON request body." });
+        }
+        if (err?.type === "entity.too.large") {
+            return res.status(413).json({ success: false, message: "Request payload too large." });
+        }
+        const status = typeof err?.status === "number" && err.status >= 400 && err.status < 500 ? err.status : 500;
+        return res.status(status).json({
+            success: false,
+            message: status < 500 ? "Invalid request." : "Internal server error.",
+        });
+    });
     const server = http_1.default.createServer(app);
     const wss = new ws_1.WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
     const lobbyManager = lobby_handler_1.LobbyManager.getInstance();
     const tunnelManager = tunnel_manager_1.TunnelManager.getInstance();
     // Validate Origin and authenticate WebSocket upgrade (SEC-02)
     server.on("upgrade", (req, socket, head) => {
+        const reqPath = (req.url || "/").split("?")[0];
+        if (reqPath !== "/" && reqPath !== "/ws") {
+            socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
+            socket.destroy();
+            return;
+        }
         const origin = req.headers.origin;
-        if (!tunnelManager.isOriginAllowed(origin)) {
+        if (!origin || !tunnelManager.isOriginAllowed(origin)) {
             socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
             socket.destroy();
             return;
@@ -150,19 +181,24 @@ async function startServer() {
     });
     const aliveSockets = new WeakMap();
     wss.on("connection", (ws, req) => {
-        aliveSockets.set(ws, true);
-        ws.on("pong", () => {
+        try {
             aliveSockets.set(ws, true);
-        });
-        const cfIp = req.headers["cf-connecting-ip"];
-        const xff = req.headers["x-forwarded-for"];
-        const ip = (typeof cfIp === "string" && cfIp.trim()) ||
-            (typeof xff === "string" && xff.split(",")[0].trim()) ||
-            req.socket.remoteAddress ||
-            "unknown";
-        const cookies = (0, cookie_utils_1.parseCookies)(req.headers.cookie);
-        const cookieToken = cookies.session_token;
-        lobbyManager.handleConnection(ws, ip, cookieToken);
+            ws.on("pong", () => {
+                aliveSockets.set(ws, true);
+            });
+            const ip = (0, request_utils_1.getClientIp)(req);
+            const cookies = (0, cookie_utils_1.parseCookies)(req.headers.cookie);
+            const cookieToken = cookies.session_token;
+            lobbyManager.handleConnection(ws, ip, cookieToken);
+        }
+        catch {
+            try {
+                ws.close(1008, "Connection rejected.");
+            }
+            catch {
+                ws.terminate();
+            }
+        }
     });
     // Reclaim stale half-open WebSocket connections
     const heartbeatInterval = setInterval(() => {
@@ -181,6 +217,41 @@ async function startServer() {
     wss.on("close", () => {
         clearInterval(heartbeatInterval);
     });
+    server.on("error", (err) => {
+        console.error("Server error:", err.code || err.message);
+        tunnelManager.stopTunnel();
+        process.exit(1);
+    });
+    let shuttingDown = false;
+    const shutdown = (signal) => {
+        if (shuttingDown)
+            return;
+        shuttingDown = true;
+        console.log(`[Western Gun] Received ${signal}. Shutting down cleanly...`);
+        clearInterval(heartbeatInterval);
+        tunnelManager.stopTunnel();
+        for (const client of wss.clients) {
+            try {
+                client.close(1001, "Server shutting down");
+            }
+            catch {
+                client.terminate();
+            }
+        }
+        const forceExitTimer = setTimeout(() => {
+            process.exit(0);
+        }, 3000);
+        forceExitTimer.unref?.();
+        wss.close(() => {
+            server.close(() => {
+                clearTimeout(forceExitTimer);
+                process.exit(0);
+            });
+            server.closeIdleConnections?.();
+        });
+    };
+    process.once("SIGINT", () => shutdown("SIGINT"));
+    process.once("SIGTERM", () => shutdown("SIGTERM"));
     server.listen(config_1.CONFIG.PORT, config_1.CONFIG.HOST, async () => {
         const lanIps = getLocalLanIps();
         console.log("=======================================================");
@@ -202,4 +273,7 @@ async function startServer() {
         console.log("=======================================================");
     });
 }
-startServer();
+startServer().catch((err) => {
+    console.error("Failed to start server:", err?.message || err);
+    process.exit(1);
+});

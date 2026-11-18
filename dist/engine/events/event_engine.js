@@ -9,6 +9,7 @@ const deck_manager_1 = require("../deck/deck_manager");
 const seat_manager_1 = require("../board/seat_manager");
 const skill_hooks_1 = require("../interact/skill_hooks");
 const event_rule_registry_1 = require("./event_rule_registry");
+const inventory_1 = require("../utils/inventory");
 class EventEngine {
     // Build event deck with final card
     static setupEventDeck(eventCards, packs) {
@@ -244,23 +245,8 @@ class EventEngine {
                 deck_manager_1.DeckManager.discardCard(state, card);
             }
             player.handCards = [];
-            const seenEquipIds = new Set();
-            const discardUniqueEquip = (card) => {
-                if (!card || seenEquipIds.has(card.id))
-                    return;
-                seenEquipIds.add(card.id);
-                deck_manager_1.DeckManager.discardCard(state, card);
-            };
-            const eq = player.equipments;
-            discardUniqueEquip(eq.weapon);
-            discardUniqueEquip(eq.horseDef);
-            discardUniqueEquip(eq.horseOff);
-            discardUniqueEquip(eq.barrel);
-            discardUniqueEquip(eq.extra);
-            if (eq.extras) {
-                for (const extraCard of eq.extras) {
-                    discardUniqueEquip(extraCard);
-                }
+            for (const eqCard of (0, inventory_1.getAllEquippedCards)(player)) {
+                deck_manager_1.DeckManager.discardCard(state, eqCard);
             }
             player.equipments = { extras: [] };
             for (const green of player.greenCards) {
@@ -343,10 +329,7 @@ class EventEngine {
             ? EventEngine.createEventSourceCard(state.activeEvent, "BANG!")
             : EventEngine.createFallbackEventCard("foc_fistful_of_cards", "fistful_of_cards", "BANG!");
         const equipEffective = skill_hooks_1.SkillHooks.isEquipmentEffective(player, player, state);
-        const canUseBarrel = equipEffective &&
-            Boolean(player.equipments.barrel ||
-                player.equipments.extra?.name === "BARREL" ||
-                player.equipments.extras?.some((c) => c.name === "BARREL"));
+        const canUseBarrel = equipEffective && (0, inventory_1.hasBarrelCard)(player);
         const canUseJourdonnais = skill_hooks_1.SkillHooks.hasInnateBarrel(player, state);
         const reactions = [];
         for (let i = 0; i < count; i++) {
@@ -443,13 +426,7 @@ class EventEngine {
         }
     }
     static hasBlueCardInPlay(player) {
-        const eq = player.equipments;
-        const hasEquip = Boolean(eq.weapon ||
-            eq.horseDef ||
-            eq.horseOff ||
-            eq.barrel ||
-            eq.extra ||
-            (eq.extras && eq.extras.length > 0));
+        const hasEquip = (0, inventory_1.getAllEquippedCards)(player).length > 0;
         const hasBlueJudgement = player.judgements.some((j) => j.card.border === "blue");
         return hasEquip || hasBlueJudgement;
     }

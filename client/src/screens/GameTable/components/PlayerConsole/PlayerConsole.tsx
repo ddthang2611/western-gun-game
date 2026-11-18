@@ -4,6 +4,7 @@ import { EquipmentColumn } from "./EquipmentColumn";
 import { HandCardsFan } from "./HandCardsFan";
 import { GreenDelayGrid } from "./GreenDelayGrid";
 import { HeroProfiles } from "./HeroProfiles";
+import "./PlayerConsole.scss";
 
 export interface PlayerConsoleProps {
   equipments: EquipmentSlot;
@@ -16,6 +17,7 @@ export interface PlayerConsoleProps {
   selectedCardIds?: string[];
   discardCardIds?: string[];
   selectedGreenCardId?: string | null;
+  isCurrentTurn?: boolean;
   isLocked?: boolean;
   onSelectCard: (card: Card) => void;
   onTriggerGreenCard: (card: GreenCard) => void;
@@ -32,13 +34,16 @@ export const PlayerConsole: React.FC<PlayerConsoleProps> = ({
   selectedCardIds,
   discardCardIds,
   selectedGreenCardId,
+  isCurrentTurn = false,
   isLocked = false,
   onSelectCard,
   onTriggerGreenCard,
 }) => {
   return (
     <footer
-      className={`game-table__player-console${isLocked ? " game-table__player-console--locked" : ""}`}
+      className={`game-table__player-console${
+        isCurrentTurn ? " game-table__player-console--active-turn" : ""
+      }${isLocked ? " game-table__player-console--locked" : ""}`}
     >
       {/* Left: 5 stacked equipment bars */}
       <EquipmentColumn equipments={equipments} />

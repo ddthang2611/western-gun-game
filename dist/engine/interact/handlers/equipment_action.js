@@ -5,23 +5,11 @@ const event_engine_1 = require("../../events/event_engine");
 const target_validator_1 = require("../../combat/target_validator");
 const skill_hooks_1 = require("../skill_hooks");
 const atomic_effects_1 = require("../primitives/atomic_effects");
+const inventory_1 = require("../../utils/inventory");
 class EquipmentAction {
-    // Normalize paired extra equipment names
-    static normalizeEquipName(name) {
-        return name === "BINOCULARS" ? "BINOCULAR" : name;
-    }
     // Check if blue extra already equipped
     static hasExtraEquipName(player, cardName) {
-        const normalized = this.normalizeEquipName(cardName);
-        const extras = player.equipments.extras || [];
-        if (extras.some((c) => this.normalizeEquipName(c.name) === normalized)) {
-            return true;
-        }
-        if (player.equipments.extra &&
-            this.normalizeEquipName(player.equipments.extra.name) === normalized) {
-            return true;
-        }
-        return false;
+        return (0, inventory_1.hasEquippedCardByName)(player, cardName);
     }
     // Equip blue, judgement, or green card
     static handleEquip(state, player, targetPlayer, card, cardIndex, deckManager) {

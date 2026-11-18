@@ -5,31 +5,9 @@ import { DeckManager } from "../deck/deck_manager";
 import { SeatManager } from "../board/seat_manager";
 import { SkillHooks } from "../interact/skill_hooks";
 import { WinConditionEvaluator } from "./win_condition";
+import { getAllEquippedCards } from "../utils/inventory";
 
 export class EliminationHandler {
-  // Collect unique equipment cards
-  private static collectEquipmentCards(player: EnginePlayer): EngineCard[] {
-    const eq = player.equipments || {};
-    const seen = new Set<string>();
-    const cards: EngineCard[] = [];
-
-    const addIfNew = (card?: EngineCard) => {
-      if (!card || seen.has(card.id)) return;
-      seen.add(card.id);
-      cards.push(card);
-    };
-
-    addIfNew(eq.weapon);
-    addIfNew(eq.horseDef);
-    addIfNew(eq.horseOff);
-    addIfNew(eq.barrel);
-    addIfNew(eq.extra);
-    for (const item of eq.extras || []) {
-      addIfNew(item);
-    }
-
-    return cards;
-  }
 
   // Discard cards via manager or state
   private static discardCards(
@@ -74,7 +52,7 @@ export class EliminationHandler {
     // Collect all cards from player
     const cardsToTransfer: EngineCard[] = [
       ...deadPlayer.handCards,
-      ...this.collectEquipmentCards(deadPlayer),
+      ...getAllEquippedCards(deadPlayer),
       ...deadPlayer.greenCards.map((g) => g.card),
       ...deadPlayer.judgements.map((j) => j.card),
     ];
@@ -194,7 +172,7 @@ export class EliminationHandler {
     if (killerPlayer && !killerPlayer.isDead && killerPlayer.isSheriff && deadPlayer.role === "deputy") {
       const sheriffLoss: EngineCard[] = [
         ...killerPlayer.handCards,
-        ...this.collectEquipmentCards(killerPlayer),
+        ...getAllEquippedCards(killerPlayer),
         ...killerPlayer.greenCards.map((g) => g.card),
       ];
 

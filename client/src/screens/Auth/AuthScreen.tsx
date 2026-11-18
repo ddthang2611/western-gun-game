@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { wsClient } from "../../services/wsClient";
 import "./AuthScreen.scss";
 
 export interface AuthScreenProps {
@@ -20,42 +21,81 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated, noticeM
   const [unlockLoading, setUnlockLoading] = useState(false);
   const [lanIps, setLanIps] = useState<string[]>([]);
 
+  const checkSession = useCallback(async () => {
+    if (noticeMessage) return;
+    try {
+      const meRes = await fetch("/api/auth/me");
+      if (meRes.ok) {
+        const meData = await meRes.json();
+        if (meData.authenticated && meData.user) {
+          onAuthenticated(meData.user);
+        }
+      }
+    } catch {
+      // No active session found
+    }
+  }, [noticeMessage, onAuthenticated]);
+
+  const syncServerStatus = useCallback(async (): Promise<boolean | null> => {
+    try {
+      const statusRes = await fetch("/api/status");
+      if (!statusRes.ok) return null;
+      const statusData = await statusRes.json();
+      const locked = statusData.status === "locked" || statusData.requiresUnlock === true;
+      setIsDbLocked(locked);
+      if (Array.isArray(statusData.lanIps)) {
+        setLanIps(statusData.lanIps);
+      }
+      return locked;
+    } catch {
+      return null;
+    }
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
 
     async function initAuth() {
-      try {
-        const statusRes = await fetch("/api/status");
-        if (statusRes.ok && isMounted) {
-          const statusData = await statusRes.json();
-          setIsDbLocked(statusData.status === "locked" || statusData.requiresUnlock === true);
-          if (statusData.lanIps) {
-            setLanIps(statusData.lanIps);
-          }
-        }
-      } catch {
-        // Server offline or network error
-      }
-
-      try {
-        const meRes = await fetch("/api/auth/me");
-        if (meRes.ok && isMounted) {
-          const meData = await meRes.json();
-          if (meData.authenticated && meData.user) {
-            onAuthenticated(meData.user);
-          }
-        }
-      } catch {
-        // No active session found
+      const locked = await syncServerStatus();
+      if (!isMounted) return;
+      if (locked === false || locked === null) {
+        await checkSession();
       }
     }
 
     void initAuth();
 
+    const unsubscribe = wsClient.subscribe((msg) => {
+      if (msg.type === "DATABASE_UNLOCKED" && isMounted) {
+        setIsDbLocked(false);
+        setUnlockMessage("");
+        void syncServerStatus();
+        void checkSession();
+      }
+    });
+
     return () => {
       isMounted = false;
+      unsubscribe();
     };
-  }, [onAuthenticated]);
+  }, [checkSession, syncServerStatus]);
+
+  useEffect(() => {
+    if (!isDbLocked) return;
+    let active = true;
+    const timer = window.setInterval(async () => {
+      const locked = await syncServerStatus();
+      if (active && locked === false) {
+        setUnlockMessage("");
+        void checkSession();
+      }
+    }, 2500);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [isDbLocked, checkSession, syncServerStatus]);
 
   const handleUnlockDatabase = async (e: React.FormEvent) => {
     e.preventDefault();

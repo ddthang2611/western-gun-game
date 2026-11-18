@@ -12,9 +12,14 @@ import { HealActions } from "./handlers/heal_actions";
 import { CardManipulation } from "./handlers/card_manipulation";
 import { DuelInteraction } from "./handlers/duel_interaction";
 import { EquipmentAction } from "./handlers/equipment_action";
+import { ActiveSkills } from "./handlers/active_skills";
 import { ReactionResolver } from "./reaction_resolver";
 import { SkillHooks } from "./skill_hooks";
 import { AtomicEffects } from "./primitives/atomic_effects";
+import {
+  getAllEquippedCards,
+  hasEquippedCardByName,
+} from "../utils/inventory";
 
 const GREEN_DEFENSE_ONLY = new Set([
   "SOMBRERO",
@@ -136,6 +141,7 @@ export class InteractManager {
           targetPlayerId: command.targetPlayerId,
           targetPlayerName: targetName,
           card,
+          isPlacement: card.border === "blue" || card.border === "green",
         },
         timestamp: Date.now(),
       });
@@ -521,6 +527,7 @@ export class InteractManager {
           targetPlayerId: targetPlayer?.id,
           targetPlayerName: targetPlayer?.name,
           card: greenEntry.card,
+          isPlacement: false,
         },
         timestamp: Date.now(),
       });
@@ -570,7 +577,7 @@ export class InteractManager {
     if (player.isDead) return { success: false, message: "Dead players cannot act." };
 
     const events: DomainEvent[] = [];
-    const result = SkillHooks.handleActiveSkill(state, command, events);
+    const result = ActiveSkills.handleActiveSkill(state, command, events);
     if (result && typeof result === "object" && "success" in result) {
       return result as CommandResult;
     }
@@ -579,18 +586,9 @@ export class InteractManager {
 
   // Check whether target holds cards
   private static playerHasAnyCard(player: EnginePlayer): boolean {
-    const eq = player.equipments;
-    const hasEquip = Boolean(
-      eq?.weapon ||
-        eq?.horseDef ||
-        eq?.horseOff ||
-        eq?.barrel ||
-        eq?.extra ||
-        (eq?.extras && eq.extras.length > 0)
-    );
     return (
       player.handCards.length > 0 ||
-      hasEquip ||
+      getAllEquippedCards(player).length > 0 ||
       (player.greenCards?.length ?? 0) > 0 ||
       (player.judgements?.length ?? 0) > 0
     );
@@ -623,19 +621,12 @@ export class InteractManager {
       }
       if (
         state.activeEvent?.effectCode === "EVENT_FOC_RICOCHET" &&
-        others.some((t) => {
-          const eq = t.equipments;
-          return Boolean(
-            eq?.weapon ||
-              eq?.horseDef ||
-              eq?.horseOff ||
-              eq?.barrel ||
-              eq?.extra ||
-              (eq?.extras && eq.extras.length > 0) ||
-              (t.greenCards?.length ?? 0) > 0 ||
-              (t.judgements?.length ?? 0) > 0
-          );
-        })
+        others.some(
+          (t) =>
+            getAllEquippedCards(t).length > 0 ||
+            (t.greenCards?.length ?? 0) > 0 ||
+            (t.judgements?.length ?? 0) > 0
+        )
       ) {
         return true;
       }
@@ -760,17 +751,7 @@ export class InteractManager {
       if (card.name === "MUSTANG") return !player.equipments.horseDef;
       if (card.name === "SCOPE") return !player.equipments.horseOff;
       if (card.name === "BARREL") return !player.equipments.barrel;
-      const norm = card.name === "BINOCULARS" ? "BINOCULAR" : card.name;
-      const extras = player.equipments.extras || [];
-      const inExtras = extras.some(
-        (c) => (c.name === "BINOCULARS" ? "BINOCULAR" : c.name) === norm
-      );
-      const inExtra =
-        player.equipments.extra &&
-        (player.equipments.extra.name === "BINOCULARS"
-          ? "BINOCULAR"
-          : player.equipments.extra.name) === norm;
-      return !inExtras && !inExtra;
+      return !hasEquippedCardByName(player, card.name);
     }
 
     if (

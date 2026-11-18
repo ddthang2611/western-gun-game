@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import type { Player, Card, GreenCard } from "../../../types/game";
+import type { Player, GreenCard } from "../../../types/game";
+import { getAllEquipments } from "../../../utils/equipments";
 import { CardView } from "../CardView/CardView";
 import { Modal } from "../../ui/Modal/Modal";
 import { Button } from "../../ui/Button/Button";
@@ -21,6 +22,7 @@ export interface CardPickerModalProps {
   action: CardPickerAction;
   cardName?: string;
   allowHand?: boolean;
+  allowInPlay?: boolean;
   onConfirm: (selected: SelectedTargetCard) => void;
   onCancel?: () => void;
 }
@@ -30,6 +32,7 @@ export const CardPickerModal: React.FC<CardPickerModalProps> = ({
   action,
   cardName,
   allowHand = true,
+  allowInPlay = true,
   onConfirm,
   onCancel,
 }) => {
@@ -41,13 +44,7 @@ export const CardPickerModal: React.FC<CardPickerModalProps> = ({
   const confirmButtonText =
     action === "destroy" ? "Confirm Discard" : "Confirm Steal";
 
-  const equippedCards: { label: string; card?: Card }[] = [
-    { label: "Weapon", card: targetPlayer.equipments.weapon },
-    { label: "Mustang +1", card: targetPlayer.equipments.horseDef },
-    { label: "Scope -1", card: targetPlayer.equipments.horseOff },
-    { label: "Barrel", card: targetPlayer.equipments.barrel },
-    { label: "Extra", card: targetPlayer.equipments.extra },
-  ].filter((item) => item.card !== undefined);
+  const equippedCards = getAllEquipments(targetPlayer.equipments);
 
   const judgementEntries =
     targetPlayer.judgements && targetPlayer.judgements.length > 0
@@ -93,80 +90,83 @@ export const CardPickerModal: React.FC<CardPickerModalProps> = ({
           )}
 
           {/* Box 2: Equipped cards */}
-          <div
-            className={`card-picker__zone${equippedCards.length === 0 ? " card-picker__zone--empty" : ""}`}
-            aria-label="Equipped cards"
-          >
-            <div className="card-picker__card-list">
-              {equippedCards.map((item, idx) => {
-                const card = item.card!;
-                const isCardSelected =
-                  selected?.region === "equipment" && selected.cardId === card.id;
-                return (
-                  <CardView
-                    key={card.id || idx}
-                    card={card}
-                    isMini={true}
-                    isSelected={isCardSelected}
-                    onClick={() =>
-                      setSelected({
-                        region: "equipment",
-                        cardId: card.id,
-                        label: card.name,
-                      })
-                    }
-                  />
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Box 3: Judgement traps & green cards */}
-          <div
-            className={`card-picker__zone${!hasInPlayTraps ? " card-picker__zone--empty" : ""}`}
-            aria-label="Judgement and green cards"
-          >
-            <div className="card-picker__card-list">
-              {targetPlayer.greenCards &&
-                targetPlayer.greenCards.map((gCard: GreenCard) => {
+          {allowInPlay && (
+            <div
+              className={`card-picker__zone${equippedCards.length === 0 ? " card-picker__zone--empty" : ""}`}
+              aria-label="Equipped cards"
+            >
+              <div className="card-picker__card-list">
+                {equippedCards.map((card, idx) => {
                   const isCardSelected =
-                    selected?.region === "green" && selected.cardId === gCard.id;
+                    selected?.region === "equipment" && selected.cardId === card.id;
                   return (
                     <CardView
-                      key={gCard.id}
-                      card={gCard.card}
+                      key={card.id || idx}
+                      card={card}
                       isMini={true}
                       isSelected={isCardSelected}
                       onClick={() =>
                         setSelected({
-                          region: "green",
-                          cardId: gCard.id,
-                          label: gCard.card.name,
+                          region: "equipment",
+                          cardId: card.id,
+                          label: card.name,
                         })
                       }
                     />
                   );
                 })}
-              {judgementEntries.map((j) => {
-                const trapType = j.type === "JAIL" ? "jail" : "dynamite";
-                const label = j.type === "JAIL" ? "Jail" : "Dynamite";
-                return (
-                  <JudgementTrapItem
-                    key={j.id}
-                    id={j.id}
-                    type={trapType}
-                    label={label}
-                    isSelected={
-                      selected?.region === "judgement" && selected.cardId === j.id
-                    }
-                    onSelect={(cardId, trapLabel) =>
-                      setSelected({ region: "judgement", cardId, label: trapLabel })
-                    }
-                  />
-                );
-              })}
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Box 3: Judgement traps & green cards */}
+          {allowInPlay && (
+            <div
+              className={`card-picker__zone${!hasInPlayTraps ? " card-picker__zone--empty" : ""}`}
+              aria-label="Judgement and green cards"
+            >
+              <div className="card-picker__card-list">
+                {targetPlayer.greenCards &&
+                  targetPlayer.greenCards.map((gCard: GreenCard) => {
+                    const isCardSelected =
+                      selected?.region === "green" && selected.cardId === gCard.id;
+                    return (
+                      <CardView
+                        key={gCard.id}
+                        card={gCard.card}
+                        isMini={true}
+                        isSelected={isCardSelected}
+                        onClick={() =>
+                          setSelected({
+                            region: "green",
+                            cardId: gCard.id,
+                            label: gCard.card.name,
+                          })
+                        }
+                      />
+                    );
+                  })}
+                {judgementEntries.map((j) => {
+                  const trapType = j.type === "JAIL" ? "jail" : "dynamite";
+                  const label = j.type === "JAIL" ? "Jail" : "Dynamite";
+                  return (
+                    <JudgementTrapItem
+                      key={j.id}
+                      id={j.id}
+                      type={trapType}
+                      label={label}
+                      isSelected={
+                        selected?.region === "judgement" && selected.cardId === j.id
+                      }
+                      onSelect={(cardId, trapLabel) =>
+                        setSelected({ region: "judgement", cardId, label: trapLabel })
+                      }
+                    />
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </Modal.Body>
 

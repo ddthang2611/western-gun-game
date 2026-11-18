@@ -6,6 +6,7 @@ import { TargetValidator, TargetArea } from "../../combat/target_validator";
 import { EventEngine } from "../../events/event_engine";
 import { SkillHooks } from "../skill_hooks";
 import { AtomicEffects } from "../primitives/atomic_effects";
+import { getAllEquippedCards } from "../../utils/inventory";
 
 export class CardManipulation {
   // Check target area availability
@@ -19,21 +20,7 @@ export class CardManipulation {
     }
 
     if (targetArea === "EQUIPMENT") {
-      const eq = targetPlayer.equipments;
-      if (!eq) return false;
-      const list: EngineCard[] = [];
-      if (eq.weapon) list.push(eq.weapon);
-      if (eq.horseDef) list.push(eq.horseDef);
-      if (eq.horseOff) list.push(eq.horseOff);
-      if (eq.barrel) list.push(eq.barrel);
-      for (const item of eq.extras || []) {
-        if (item && !list.some((c) => c.id === item.id)) {
-          list.push(item);
-        }
-      }
-      if (eq.extra && !list.some((c) => c.id === eq.extra!.id)) {
-        list.push(eq.extra);
-      }
+      const list = getAllEquippedCards(targetPlayer);
       return targetCardId ? list.some((c) => c.id === targetCardId) : list.length > 0;
     }
 
@@ -230,6 +217,7 @@ export class CardManipulation {
     }
 
     if (fromGreenEntryId) {
+      const hideTransferred = isSteal && targetArea === "HAND";
       events.push({
         type: "GREEN_CARD_ACTIVATED",
         payload: {
@@ -237,7 +225,7 @@ export class CardManipulation {
           playerName: player.name,
           targetId: targetPlayer.id,
           card,
-          transferredCard: transferred,
+          ...(hideTransferred ? {} : { transferredCard: transferred }),
         },
         timestamp: Date.now(),
       });

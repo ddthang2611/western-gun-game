@@ -3,7 +3,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.LobbyManager = void 0;
 const ws_1 = require("ws");
 const session_repository_1 = require("../db/session_repository");
+const rate_limiter_1 = require("../api/rate_limiter");
+const cookie_utils_1 = require("../api/cookie_utils");
 const game_handler_1 = require("./game_handler");
+const expansion_config_1 = require("../engine/events/expansion_config");
+const ws_utils_1 = require("./ws_utils");
 class LobbyManager {
     static instance;
     connections = new Map();
@@ -11,6 +15,8 @@ class LobbyManager {
     socketMeta = new Map();
     tokenToPlayerId = new Map();
     kickedPlayerIds = new Set();
+    disconnectTimers = new Map();
+    wsRateLimiter = new ws_utils_1.SocketRateLimiter(30, 2000, 20);
     playerNames = new Map();
     state = {
         roomExists: false,
@@ -22,14 +28,72 @@ class LobbyManager {
         settings: {
             dualCharacterEnabled: false,
             dualCharacterHpRule: "strict",
-            expansions: ["base", "dodge_city", "fistful_of_cards"],
+            expansions: ["base", "dodge_city"],
         },
+        expansionCatalog: expansion_config_1.EXPANSION_CONFIG,
         minPlayers: Number(process.env.MIN_PLAYERS || 3),
         maxPlayers: 8,
     };
+    clearDisconnectTimer(playerId) {
+        const timer = this.disconnectTimers.get(playerId);
+        if (timer) {
+            clearTimeout(timer);
+            this.disconnectTimers.delete(playerId);
+        }
+    }
+    hasOpenSocket(playerId) {
+        const set = this.playerSockets.get(playerId);
+        if (!set)
+            return false;
+        for (const sock of set) {
+            if (sock.readyState === ws_1.WebSocket.OPEN) {
+                return true;
+            }
+        }
+        return false;
+    }
+    releaseTokenMapping(ws, token) {
+        if (this.connections.get(token) !== ws)
+            return;
+        let replacement = null;
+        for (const [otherWs, otherMeta] of this.socketMeta.entries()) {
+            if (otherWs !== ws && otherMeta.token === token && otherWs.readyState === ws_1.WebSocket.OPEN) {
+                replacement = otherWs;
+                break;
+            }
+        }
+        if (replacement) {
+            this.connections.set(token, replacement);
+        }
+        else {
+            this.connections.delete(token);
+            this.tokenToPlayerId.delete(token);
+        }
+    }
+    collectPlayerSockets(playerId) {
+        const recipients = new Set(this.playerSockets.get(playerId) || []);
+        for (const [token, pId] of this.tokenToPlayerId.entries()) {
+            if (pId === playerId) {
+                const sock = this.connections.get(token);
+                if (sock) {
+                    recipients.add(sock);
+                }
+            }
+        }
+        for (const [sock, meta] of this.socketMeta.entries()) {
+            if (meta.playerId === playerId) {
+                recipients.add(sock);
+            }
+        }
+        return recipients;
+    }
     // Bind socket to player session
     bindSocket(ws, token, playerId) {
+        this.clearDisconnectTimer(playerId);
         const prev = this.socketMeta.get(ws);
+        if (prev?.token && prev.token !== token) {
+            this.releaseTokenMapping(ws, prev.token);
+        }
         if (prev?.playerId && prev.playerId !== playerId) {
             const prevSet = this.playerSockets.get(prev.playerId);
             if (prevSet) {
@@ -53,21 +117,8 @@ class LobbyManager {
     unbindSocket(ws) {
         const meta = this.socketMeta.get(ws) || { token: null, playerId: null };
         this.socketMeta.delete(ws);
-        if (meta.token && this.connections.get(meta.token) === ws) {
-            let replacement = null;
-            for (const [otherWs, otherMeta] of this.socketMeta.entries()) {
-                if (otherMeta.token === meta.token && otherWs.readyState === ws_1.WebSocket.OPEN) {
-                    replacement = otherWs;
-                    break;
-                }
-            }
-            if (replacement) {
-                this.connections.set(meta.token, replacement);
-            }
-            else {
-                this.connections.delete(meta.token);
-                this.tokenToPlayerId.delete(meta.token);
-            }
+        if (meta.token) {
+            this.releaseTokenMapping(ws, meta.token);
         }
         if (meta.playerId) {
             const set = this.playerSockets.get(meta.playerId);
@@ -117,7 +168,6 @@ class LobbyManager {
                     this.persistLobbyState();
                 }
                 this.send(ws, "AUTH_SUCCESS", {
-                    sessionToken: cookieToken,
                     playerId: existingPlayer.player_id,
                     name: existingPlayer.player_name,
                 });
@@ -135,14 +185,33 @@ class LobbyManager {
                 });
             }
         }
-        ws.on("message", async (data) => {
-            try {
-                const msg = JSON.parse(data.toString());
-                currentToken = await this.handleMessage(ws, msg, ip, currentToken, cookieToken);
-            }
-            catch (err) {
-                this.send(ws, "ERROR", { message: err.message || "Invalid message format" });
-            }
+        let messageQueue = Promise.resolve();
+        ws.on("message", (data) => {
+            messageQueue = messageQueue
+                .then(async () => {
+                if (ws.readyState !== ws_1.WebSocket.OPEN)
+                    return;
+                let parsed;
+                try {
+                    parsed = JSON.parse(data.toString());
+                }
+                catch {
+                    this.send(ws, "ERROR", { message: "Invalid message format" });
+                    return;
+                }
+                if (!(0, ws_utils_1.isValidClientMessage)(parsed)) {
+                    this.send(ws, "ERROR", { message: "Invalid message format" });
+                    return;
+                }
+                if (!this.wsRateLimiter.allow(ws, parsed.type)) {
+                    this.send(ws, "ERROR", { message: "Rate limit exceeded. Slow down." });
+                    return;
+                }
+                currentToken = await this.handleMessage(ws, parsed, ip, currentToken, cookieToken);
+            })
+                .catch((err) => {
+                this.send(ws, "ERROR", { message: err?.message || "Invalid message format" });
+            });
         });
         ws.on("error", () => {
             this.handleDisconnect(ws);
@@ -154,12 +223,44 @@ class LobbyManager {
     async handleMessage(ws, msg, ip, currentToken, cookieToken) {
         switch (msg.type) {
             case "AUTH_JOIN": {
-                const { name, pin, sessionToken } = msg.payload || {};
-                const effectiveToken = sessionToken || cookieToken;
-                if (!name || typeof name !== "string" || !pin || typeof pin !== "string") {
-                    throw new Error("Player name and 4-digit PIN are required.");
+                const rateLimiter = rate_limiter_1.RateLimiter.getInstance();
+                if (rateLimiter.isRateLimited("pin_auth", ip)) {
+                    const remaining = rateLimiter.getRemainingLockSeconds("pin_auth", ip);
+                    throw new Error(`Too many failed PIN attempts. Locked for ${remaining} seconds.`);
                 }
-                const session = await session_repository_1.SessionRepository.getInstance().authenticatePlayer(name.trim(), pin.trim(), effectiveToken, ip);
+                const { name, pin, sessionToken } = msg.payload || {};
+                if (typeof name !== "string" || typeof pin !== "string") {
+                    throw new Error("Player name and PIN are required.");
+                }
+                const cleanName = name.trim();
+                const cleanPin = pin.trim();
+                if (cleanName.length < 1 || cleanName.length > 24) {
+                    throw new Error("Player name must be 1-24 characters.");
+                }
+                if (cleanPin.length < 1 || cleanPin.length > 16) {
+                    throw new Error("PIN must be 1-16 characters.");
+                }
+                const effectiveToken = (0, cookie_utils_1.extractSessionToken)(sessionToken) || cookieToken;
+                let session;
+                try {
+                    session = await session_repository_1.SessionRepository.getInstance().authenticatePlayer(cleanName, cleanPin, effectiveToken, ip);
+                    rateLimiter.resetFailedAttempt("pin_auth", ip);
+                }
+                catch (err) {
+                    rateLimiter.recordFailedAttempt("pin_auth", ip, 5, 15 * 60 * 1000);
+                    throw err;
+                }
+                if (ws.readyState !== ws_1.WebSocket.OPEN) {
+                    if (!this.hasOpenSocket(session.playerId)) {
+                        try {
+                            session_repository_1.SessionRepository.getInstance().setPlayerOffline(session.playerId);
+                        }
+                        catch {
+                            // Ignore DB cleanup error
+                        }
+                    }
+                    return currentToken;
+                }
                 currentToken = session.sessionToken;
                 this.kickedPlayerIds.delete(session.playerId);
                 this.playerNames.set(session.playerId, session.name);
@@ -168,7 +269,10 @@ class LobbyManager {
                     this.addOrRestorePlayer(session.playerId, session.name);
                     this.persistLobbyState();
                 }
-                this.send(ws, "AUTH_SUCCESS", session);
+                this.send(ws, "AUTH_SUCCESS", {
+                    playerId: session.playerId,
+                    name: session.name,
+                });
                 this.broadcastLobbyState();
                 // If game is in progress, sync game state immediately
                 const gameManager = game_handler_1.GameSessionManager.getInstance();
@@ -179,38 +283,50 @@ class LobbyManager {
                 return currentToken;
             }
             case "RESTORE_SESSION": {
-                const token = msg.payload?.sessionToken || cookieToken || currentToken;
-                if (!token)
-                    return null;
-                const player = session_repository_1.SessionRepository.getInstance().getPlayerByToken(token);
-                if (player) {
-                    if (this.kickedPlayerIds.has(player.player_id)) {
-                        this.send(ws, "PLAYER_KICKED", {
-                            playerId: player.player_id,
-                            reason: "You were removed from the room by the Host.",
+                const payloadToken = (0, cookie_utils_1.extractSessionToken)(msg.payload?.sessionToken);
+                const token = payloadToken || cookieToken || currentToken;
+                if (!token) {
+                    if (!currentToken) {
+                        this.send(ws, "AUTH_REQUIRED", {
+                            reason: "Session expired or invalid. Please sign in again.",
                         });
-                        ws.close(4003, "Kicked by Host");
-                        return null;
                     }
-                    currentToken = token;
-                    this.playerNames.set(player.player_id, player.player_name);
-                    this.bindSocket(ws, token, player.player_id);
-                    if (this.state.roomExists && this.state.players.some((p) => p.id === player.player_id)) {
-                        this.addOrRestorePlayer(player.player_id, player.player_name);
-                        this.persistLobbyState();
+                    return currentToken;
+                }
+                const player = session_repository_1.SessionRepository.getInstance().getPlayerByToken(token);
+                if (!player) {
+                    if (!currentToken) {
+                        this.send(ws, "AUTH_REQUIRED", {
+                            reason: "Session expired or invalid. Please sign in again.",
+                        });
                     }
-                    this.send(ws, "AUTH_SUCCESS", {
-                        sessionToken: token,
+                    return currentToken;
+                }
+                if (this.kickedPlayerIds.has(player.player_id)) {
+                    this.send(ws, "PLAYER_KICKED", {
                         playerId: player.player_id,
-                        name: player.player_name,
+                        reason: "You were removed from the room by the Host.",
                     });
-                    this.broadcastLobbyState();
-                    // If game is in progress, sync game state immediately to all players
-                    const gameManager = game_handler_1.GameSessionManager.getInstance();
-                    const activeEngine = gameManager.getSession(this.state.roomId);
-                    if (activeEngine && this.state.players.some((p) => p.id === player.player_id)) {
-                        gameManager.broadcastGameSnapshot(this.state.roomId, activeEngine, this);
-                    }
+                    ws.close(4003, "Kicked by Host");
+                    return null;
+                }
+                currentToken = token;
+                this.playerNames.set(player.player_id, player.player_name);
+                this.bindSocket(ws, token, player.player_id);
+                if (this.state.roomExists && this.state.players.some((p) => p.id === player.player_id)) {
+                    this.addOrRestorePlayer(player.player_id, player.player_name);
+                    this.persistLobbyState();
+                }
+                this.send(ws, "AUTH_SUCCESS", {
+                    playerId: player.player_id,
+                    name: player.player_name,
+                });
+                this.broadcastLobbyState();
+                // If game is in progress, sync game state immediately to all players
+                const gameManager = game_handler_1.GameSessionManager.getInstance();
+                const activeEngine = gameManager.getSession(this.state.roomId);
+                if (activeEngine && this.state.players.some((p) => p.id === player.player_id)) {
+                    gameManager.broadcastGameSnapshot(this.state.roomId, activeEngine, this);
                 }
                 return currentToken;
             }
@@ -327,15 +443,7 @@ class LobbyManager {
                         sanitized.dualCharacterHpRule = raw.dualCharacterHpRule;
                     }
                     if (Array.isArray(raw.expansions)) {
-                        const allowedExpansions = [
-                            "base",
-                            "dodge_city",
-                            "high_noon",
-                            "fistful_of_cards",
-                            "wild_west_show",
-                        ];
-                        const filtered = raw.expansions.filter((e) => allowedExpansions.includes(e));
-                        sanitized.expansions = Array.from(new Set(["base", ...filtered]));
+                        sanitized.expansions = (0, expansion_config_1.filterActiveExpansions)(raw.expansions.map((e) => String(e)));
                     }
                     this.state.settings = { ...this.state.settings, ...sanitized };
                     this.persistLobbyState();
@@ -370,27 +478,13 @@ class LobbyManager {
                     p.seatIndex = idx;
                 });
                 this.kickedPlayerIds.add(targetPlayerId);
-                session_repository_1.SessionRepository.getInstance().setPlayerOffline(targetPlayerId);
-                const socketsToKick = new Set(this.playerSockets.get(targetPlayerId) || []);
-                for (const [tok, pId] of Array.from(this.tokenToPlayerId.entries())) {
-                    if (pId === targetPlayerId) {
-                        const targetWs = this.connections.get(tok);
-                        if (targetWs) {
-                            socketsToKick.add(targetWs);
-                        }
-                        this.connections.delete(tok);
-                        this.tokenToPlayerId.delete(tok);
-                    }
+                try {
+                    session_repository_1.SessionRepository.getInstance().setPlayerOffline(targetPlayerId);
                 }
-                for (const targetWs of socketsToKick) {
-                    this.send(targetWs, "PLAYER_KICKED", {
-                        playerId: targetPlayerId,
-                        reason: "You were removed from the room by the Host.",
-                    });
-                    this.unbindSocket(targetWs);
-                    targetWs.close(4003, "Kicked by Host");
+                catch {
+                    // Ignore DB error on kick
                 }
-                this.playerSockets.delete(targetPlayerId);
+                this.removePlayerSockets(targetPlayerId, 4003, "You were removed from the room by the Host.", true);
                 this.persistLobbyState();
                 this.broadcastLobbyState();
                 return currentToken;
@@ -399,6 +493,12 @@ class LobbyManager {
                 const playerId = this.resolvePlayerId(ws, currentToken);
                 if (!playerId) {
                     throw new Error("Session not authenticated. Please sign in again.");
+                }
+                if (!this.state.roomExists) {
+                    throw new Error("No active room exists.");
+                }
+                if (this.state.status !== "waiting") {
+                    throw new Error("Game has already started.");
                 }
                 if (playerId !== this.state.hostId) {
                     throw new Error("Only the Host can start the game.");
@@ -428,9 +528,13 @@ class LobbyManager {
                 if (!requesterId) {
                     throw new Error("Session not authenticated.");
                 }
+                if (!this.state.roomExists) {
+                    throw new Error("No active room exists.");
+                }
                 const activeEngine = game_handler_1.GameSessionManager.getInstance().getSession(this.state.roomId);
                 const isFinished = Boolean(activeEngine?.getState().gameOver);
-                if (requesterId !== this.state.hostId && !isFinished) {
+                const isMember = this.state.players.some((p) => p.id === requesterId);
+                if (requesterId !== this.state.hostId && !(isFinished && isMember)) {
                     throw new Error("Only the Host can reset an active match.");
                 }
                 game_handler_1.GameSessionManager.getInstance().endSession(this.state.roomId);
@@ -489,6 +593,55 @@ class LobbyManager {
                 return currentToken;
         }
     }
+    removePlayerSockets(playerId, closeCode, reason, notifyKicked) {
+        this.clearDisconnectTimer(playerId);
+        const socketsToClose = this.collectPlayerSockets(playerId);
+        for (const [tok, pId] of Array.from(this.tokenToPlayerId.entries())) {
+            if (pId === playerId) {
+                this.connections.delete(tok);
+                this.tokenToPlayerId.delete(tok);
+            }
+        }
+        for (const targetWs of socketsToClose) {
+            if (notifyKicked) {
+                this.send(targetWs, "PLAYER_KICKED", {
+                    playerId,
+                    reason,
+                });
+            }
+            this.unbindSocket(targetWs);
+            if (targetWs.readyState === ws_1.WebSocket.OPEN || targetWs.readyState === ws_1.WebSocket.CONNECTING) {
+                try {
+                    targetWs.close(closeCode, reason);
+                }
+                catch {
+                    targetWs.terminate();
+                }
+            }
+        }
+        this.playerSockets.delete(playerId);
+    }
+    // Revoke and close all active player sockets
+    disconnectPlayerSockets(playerId, reason) {
+        this.removePlayerSockets(playerId, 4001, reason || "Session ended.", false);
+        const player = this.state.players.find((p) => p.id === playerId);
+        if (player) {
+            player.isOnline = false;
+            player.isReady = player.isHost;
+            try {
+                this.persistLobbyState();
+            }
+            catch {
+                // Ignore DB error during disconnect
+            }
+            this.broadcastLobbyState();
+            const gameManager = game_handler_1.GameSessionManager.getInstance();
+            const activeEngine = gameManager.getSession(this.state.roomId);
+            if (activeEngine) {
+                gameManager.broadcastGameSnapshot(this.state.roomId, activeEngine, this);
+            }
+        }
+    }
     addOrRestorePlayer(playerId, name) {
         let player = this.state.players.find((p) => p.id === playerId);
         if (player) {
@@ -520,25 +673,43 @@ class LobbyManager {
         if (!playerId)
             return;
         // Keep player online while another active socket exists
-        const remaining = this.playerSockets.get(playerId);
-        if (remaining && Array.from(remaining).some((s) => s.readyState === ws_1.WebSocket.OPEN)) {
+        if (this.hasOpenSocket(playerId)) {
             return;
         }
-        session_repository_1.SessionRepository.getInstance().setPlayerOffline(playerId);
-        const player = this.state.players.find((p) => p.id === playerId);
-        if (player) {
-            player.isOnline = false;
-            player.isReady = player.isHost;
-            // Preserve original host across disconnects
-            this.persistLobbyState();
-            this.broadcastLobbyState();
-            // Sync active table state for disconnect indicator
-            const gameManager = game_handler_1.GameSessionManager.getInstance();
-            const activeEngine = gameManager.getSession(this.state.roomId);
-            if (activeEngine) {
-                gameManager.broadcastGameSnapshot(this.state.roomId, activeEngine, this);
+        this.clearDisconnectTimer(playerId);
+        const timer = setTimeout(() => {
+            this.disconnectTimers.delete(playerId);
+            if (this.hasOpenSocket(playerId)) {
+                return;
             }
-        }
+            try {
+                session_repository_1.SessionRepository.getInstance().setPlayerOffline(playerId);
+            }
+            catch {
+                // Ignore DB failure on disconnect
+            }
+            const player = this.state.players.find((p) => p.id === playerId);
+            if (player) {
+                player.isOnline = false;
+                player.isReady = player.isHost;
+                // Preserve original host across disconnects
+                try {
+                    this.persistLobbyState();
+                }
+                catch {
+                    // Ignore DB failure on disconnect
+                }
+                this.broadcastLobbyState();
+                // Sync active table state for disconnect indicator
+                const gameManager = game_handler_1.GameSessionManager.getInstance();
+                const activeEngine = gameManager.getSession(this.state.roomId);
+                if (activeEngine) {
+                    gameManager.broadcastGameSnapshot(this.state.roomId, activeEngine, this);
+                }
+            }
+        }, 1000);
+        timer.unref?.();
+        this.disconnectTimers.set(playerId, timer);
     }
     isPlayerOnline(playerId) {
         const player = this.state.players.find((p) => p.id === playerId);
@@ -589,20 +760,21 @@ class LobbyManager {
                     ? parsed.dualCharacterHpRule
                     : "strict",
                 expansions: Array.isArray(parsed.expansions)
-                    ? Array.from(new Set(["base", ...parsed.expansions]))
-                    : ["base", "dodge_city", "fistful_of_cards"],
+                    ? (0, expansion_config_1.filterActiveExpansions)(parsed.expansions.map((e) => String(e)))
+                    : ["base", "dodge_city"],
             };
             this.state.players = savedPlayers.map((p, idx) => {
-                const isHost = p.id === row.host_id || Boolean(p.isHost);
+                const playerId = String(p.id);
+                const isHost = playerId === row.host_id || Boolean(p.isHost);
                 const name = typeof p.name === "string" ? p.name : `Player_${idx + 1}`;
-                this.playerNames.set(p.id, name);
+                this.playerNames.set(playerId, name);
                 return {
-                    id: String(p.id),
+                    id: playerId,
                     name,
                     seatIndex: typeof p.seatIndex === "number" ? p.seatIndex : idx,
                     isHost,
                     isReady: isHost,
-                    isOnline: this.isPlayerOnline(String(p.id)),
+                    isOnline: this.hasOpenSocket(playerId),
                 };
             });
             if (row.status === "in_game") {
@@ -627,6 +799,18 @@ class LobbyManager {
     broadcastLobbyState() {
         this.broadcastMessage("LOBBY_STATE", this.state);
     }
+    sendSerialized(recipients, str) {
+        for (const ws of recipients) {
+            if (ws.readyState === ws_1.WebSocket.OPEN) {
+                try {
+                    ws.send(str);
+                }
+                catch {
+                    // Ignore send failure on closing socket
+                }
+            }
+        }
+    }
     broadcastMessage(type, payload) {
         const str = JSON.stringify({ type, payload });
         const recipients = new Set();
@@ -638,28 +822,22 @@ class LobbyManager {
         for (const ws of this.connections.values()) {
             recipients.add(ws);
         }
-        for (const ws of recipients) {
-            if (ws.readyState === ws_1.WebSocket.OPEN) {
-                ws.send(str);
-            }
-        }
+        this.sendSerialized(recipients, str);
     }
     sendToPlayer(playerId, type, payload) {
         const str = JSON.stringify({ type, payload });
-        const recipients = new Set(this.playerSockets.get(playerId) || []);
-        for (const [token, pId] of this.tokenToPlayerId.entries()) {
-            if (pId === playerId) {
-                const ws = this.connections.get(token);
-                if (ws) {
-                    recipients.add(ws);
-                }
+        this.sendSerialized(this.collectPlayerSockets(playerId), str);
+    }
+    // Send one serialized message to multiple players
+    sendToPlayers(playerIds, type, payload) {
+        const str = JSON.stringify({ type, payload });
+        const recipients = new Set();
+        for (const playerId of playerIds) {
+            for (const ws of this.collectPlayerSockets(playerId)) {
+                recipients.add(ws);
             }
         }
-        for (const ws of recipients) {
-            if (ws.readyState === ws_1.WebSocket.OPEN) {
-                ws.send(str);
-            }
-        }
+        this.sendSerialized(recipients, str);
     }
     getConnectedPlayerIds() {
         return Array.from(new Set(this.tokenToPlayerId.values()));
@@ -668,9 +846,7 @@ class LobbyManager {
         return this.tokenToPlayerId.get(token);
     }
     send(ws, type, payload) {
-        if (ws.readyState === ws_1.WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type, payload }));
-        }
+        (0, ws_utils_1.sendSocketJson)(ws, String(type), payload);
     }
 }
 exports.LobbyManager = LobbyManager;

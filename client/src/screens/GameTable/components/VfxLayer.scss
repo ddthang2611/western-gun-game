@@ -1,0 +1,48 @@
+.game-table {
+  &__vfx-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    pointer-events: none;
+    z-index: 999;
+  }
+
+  &__vfx-line {
+    animation: vfxPulse 0.65s ease-out forwards;
+  }
+
+  &__vfx-impact {
+    animation: vfxImpact 0.65s ease-out forwards;
+  }
+}
+
+@keyframes vfxPulse {
+  0% {
+    stroke-dashoffset: 60;
+    opacity: 0.2;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    stroke-dashoffset: 0;
+    opacity: 0;
+  }
+}
+
+@keyframes vfxImpact {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  40% {
+    transform: scale(1.8);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}

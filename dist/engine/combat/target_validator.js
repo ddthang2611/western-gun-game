@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TargetValidator = void 0;
 const distance_calculator_1 = require("../board/distance_calculator");
 const skill_hooks_1 = require("../interact/skill_hooks");
+const inventory_1 = require("../utils/inventory");
 const AREA_CARDS = new Set([
     "CAT BALOU",
     "PANIC!",
@@ -12,27 +13,6 @@ const AREA_CARDS = new Set([
     "RICOCHET",
 ]);
 class TargetValidator {
-    // Collect equipped cards on player
-    static getEquippedCards(player) {
-        const eq = player.equipments || {};
-        const list = [];
-        if (eq.weapon)
-            list.push(eq.weapon);
-        if (eq.horseDef)
-            list.push(eq.horseDef);
-        if (eq.horseOff)
-            list.push(eq.horseOff);
-        if (eq.barrel)
-            list.push(eq.barrel);
-        if (eq.extra)
-            list.push(eq.extra);
-        for (const item of eq.extras || []) {
-            if (item && !list.some((existing) => existing.id === item.id)) {
-                list.push(item);
-            }
-        }
-        return list;
-    }
     // Validate target card presence in area
     static validateTargetArea(targetPlayer, targetArea, targetCardId) {
         if (targetArea === "HAND") {
@@ -42,7 +22,7 @@ class TargetValidator {
             return { valid: true, target: targetPlayer };
         }
         if (targetArea === "EQUIPMENT") {
-            const equipped = this.getEquippedCards(targetPlayer);
+            const equipped = (0, inventory_1.getAllEquippedCards)(targetPlayer);
             if (equipped.length === 0) {
                 return { valid: false, reason: "Target player has no equipment in play." };
             }

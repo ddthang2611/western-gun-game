@@ -14,6 +14,7 @@ import { TunnelManager } from "./tunnel/tunnel_manager";
 import { authRouter } from "./api/auth_routes";
 import { catalogRouter } from "./api/catalog_routes";
 import { parseCookies } from "./api/cookie_utils";
+import { getClientIp, isHttpsRequest } from "./api/request_utils";
 
 export { parseCookies };
 
@@ -76,13 +77,17 @@ async function startServer() {
   app.disable("x-powered-by");
 
   // Security Headers (SEC-02 & OWASP Top 10)
-  app.use((_req, res, next) => {
+  app.use((req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "no-referrer");
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; frame-ancestors 'none';"
+      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' ws: wss:; frame-ancestors 'none'; object-src 'none'; base-uri 'self';"
     );
+    if (isHttpsRequest(req)) {
+      res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    }
     next();
   });
 
@@ -144,6 +149,27 @@ async function startServer() {
     res.status(404).send("Client build not found. Run npm --prefix client run build or open Vite dev server at /dev-test.");
   });
 
+  // Mask internal error details in JSON responses
+  app.use((err: any, _req: express.Request, res: express.Response, next: express.NextFunction) => {
+    if (res.headersSent) {
+      return next(err);
+    }
+    if (typeof err?.message === "string" && err.message.includes("CORS policy violation")) {
+      return res.status(403).json({ success: false, message: "Origin not allowed." });
+    }
+    if (err?.type === "entity.parse.failed" || (err instanceof SyntaxError && "body" in err)) {
+      return res.status(400).json({ success: false, message: "Malformed JSON request body." });
+    }
+    if (err?.type === "entity.too.large") {
+      return res.status(413).json({ success: false, message: "Request payload too large." });
+    }
+    const status = typeof err?.status === "number" && err.status >= 400 && err.status < 500 ? err.status : 500;
+    return res.status(status).json({
+      success: false,
+      message: status < 500 ? "Invalid request." : "Internal server error.",
+    });
+  });
+
   const server = http.createServer(app);
   const wss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 });
   const lobbyManager = LobbyManager.getInstance();
@@ -151,8 +177,15 @@ async function startServer() {
 
   // Validate Origin and authenticate WebSocket upgrade (SEC-02)
   server.on("upgrade", (req, socket, head) => {
+    const reqPath = (req.url || "/").split("?")[0];
+    if (reqPath !== "/" && reqPath !== "/ws") {
+      socket.write("HTTP/1.1 404 Not Found\r\n\r\n");
+      socket.destroy();
+      return;
+    }
+
     const origin = req.headers.origin;
-    if (!tunnelManager.isOriginAllowed(origin)) {
+    if (!origin || !tunnelManager.isOriginAllowed(origin)) {
       socket.write("HTTP/1.1 403 Forbidden\r\n\r\n");
       socket.destroy();
       return;
@@ -166,20 +199,22 @@ async function startServer() {
   const aliveSockets = new WeakMap<any, boolean>();
 
   wss.on("connection", (ws, req) => {
-    aliveSockets.set(ws, true);
-    ws.on("pong", () => {
+    try {
       aliveSockets.set(ws, true);
-    });
-    const cfIp = req.headers["cf-connecting-ip"];
-    const xff = req.headers["x-forwarded-for"];
-    const ip =
-      (typeof cfIp === "string" && cfIp.trim()) ||
-      (typeof xff === "string" && xff.split(",")[0].trim()) ||
-      req.socket.remoteAddress ||
-      "unknown";
-    const cookies = parseCookies(req.headers.cookie);
-    const cookieToken = cookies.session_token;
-    lobbyManager.handleConnection(ws, ip, cookieToken);
+      ws.on("pong", () => {
+        aliveSockets.set(ws, true);
+      });
+      const ip = getClientIp(req);
+      const cookies = parseCookies(req.headers.cookie);
+      const cookieToken = cookies.session_token;
+      lobbyManager.handleConnection(ws, ip, cookieToken);
+    } catch {
+      try {
+        ws.close(1008, "Connection rejected.");
+      } catch {
+        ws.terminate();
+      }
+    }
   });
 
   // Reclaim stale half-open WebSocket connections
@@ -200,6 +235,45 @@ async function startServer() {
   wss.on("close", () => {
     clearInterval(heartbeatInterval);
   });
+
+  server.on("error", (err: NodeJS.ErrnoException) => {
+    console.error("Server error:", err.code || err.message);
+    tunnelManager.stopTunnel();
+    process.exit(1);
+  });
+
+  let shuttingDown = false;
+  const shutdown = (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    console.log(`[Western Gun] Received ${signal}. Shutting down cleanly...`);
+    clearInterval(heartbeatInterval);
+    tunnelManager.stopTunnel();
+
+    for (const client of wss.clients) {
+      try {
+        client.close(1001, "Server shutting down");
+      } catch {
+        client.terminate();
+      }
+    }
+
+    const forceExitTimer = setTimeout(() => {
+      process.exit(0);
+    }, 3000);
+    forceExitTimer.unref?.();
+
+    wss.close(() => {
+      server.close(() => {
+        clearTimeout(forceExitTimer);
+        process.exit(0);
+      });
+      server.closeIdleConnections?.();
+    });
+  };
+
+  process.once("SIGINT", () => shutdown("SIGINT"));
+  process.once("SIGTERM", () => shutdown("SIGTERM"));
 
   server.listen(CONFIG.PORT, CONFIG.HOST, async () => {
     const lanIps = getLocalLanIps();
@@ -223,4 +297,7 @@ async function startServer() {
   });
 }
 
-startServer();
+startServer().catch((err) => {
+  console.error("Failed to start server:", err?.message || err);
+  process.exit(1);
+});

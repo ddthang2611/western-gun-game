@@ -70,6 +70,19 @@ export class HealActions {
       return { success: true, events };
     }
 
+    const beerHeal = SkillHooks.getBeerHealAmount(player, state);
+    if (beerHeal > 1 && SkillHooks.hasSkill(player, "Tequila Joe", state)) {
+      events.push({
+        type: "ACTIVE_SKILL_USED",
+        payload: {
+          playerId: player.id,
+          playerName: player.name,
+          skill: "Tequila Joe",
+          detail: `healed +${beerHeal} HP from Beer`,
+        },
+        timestamp: Date.now(),
+      });
+    }
     AtomicEffects.applyHeal(state, player, 1, card, events, deckManager);
     SkillHooks.checkSuzyLafayette(state, player, events);
     return { success: true, events };

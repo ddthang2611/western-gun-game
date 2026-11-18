@@ -7,20 +7,6 @@ class DuelInteraction {
     static handleStartDuel(state, player, targetPlayer, card, cardIndex, deckManager) {
         player.handCards.splice(cardIndex, 1);
         atomic_effects_1.AtomicEffects.discardCard(state, card, deckManager);
-        if (skill_hooks_1.SkillHooks.isImmuneToCard(targetPlayer, card, player, state)) {
-            const immuneEvents = [
-                {
-                    type: "APACHE_KID_IMMUNITY",
-                    payload: { sourcePlayerId: player.id, targetPlayerId: targetPlayer.id, card },
-                    timestamp: Date.now(),
-                },
-            ];
-            skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, immuneEvents);
-            return {
-                success: true,
-                events: immuneEvents,
-            };
-        }
         // Target responds first in Duel
         const reaction = {
             id: `reaction_duel_${targetPlayer.id}_${Date.now()}`,

@@ -28,9 +28,10 @@ exports.CONFIG = {
     RUNTIME_DB_PATH: path_1.default.resolve(BASE_DIR, process.env.RUNTIME_DB_PATH || fileConfig.database?.runtime_path || "./data/western_gun_runtime.db"),
     DB_SECRET_KEY: process.env.DB_SECRET_KEY,
     SESSION_HMAC_SECRET: process.env.SESSION_HMAC_SECRET,
+    CLOUDFLARED_SHA256: process.env.CLOUDFLARED_SHA256 || fileConfig.server?.cloudflared_sha256,
     ENABLE_TUNNEL: process.argv.includes("--tunnel") ||
-        process.env.ENABLE_TUNNEL === "true" ||
-        fileConfig.server?.enable_tunnel === true,
+        (process.env.ENABLE_TUNNEL !== "false" &&
+            (process.env.ENABLE_TUNNEL === "true" || fileConfig.server?.enable_tunnel === true)),
     TUNNEL_DOMAIN: process.env.TUNNEL_DOMAIN || fileConfig.server?.tunnel_domain || null,
     BASE_DIR,
     CLIENT_DIST: path_1.default.join(BASE_DIR, "client", "dist"),

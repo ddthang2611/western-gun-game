@@ -13,7 +13,7 @@ export const InFlightChain: React.FC<InFlightChainProps> = ({ cards }) => {
   const uniqueCards = React.useMemo(() => {
     const seen = new Set<string>();
     return (cards || []).filter((item) => {
-      const key = item.card?.id || item.id;
+      const key = item.isFlipReveal ? item.id : item.card?.id || item.id;
       if (!key) return true;
       if (seen.has(key)) return false;
       seen.add(key);
@@ -35,7 +35,11 @@ export const InFlightChain: React.FC<InFlightChainProps> = ({ cards }) => {
   }, [cardCount, overlapMargin]);
 
   if (uniqueCards.length === 0) {
-    return <div className="inflight-chain inflight-chain--empty" aria-hidden="true" />;
+    return (
+      <div className="inflight-chain inflight-chain--empty">
+        <span className="inflight-chain__placeholder">Card Arena</span>
+      </div>
+    );
   }
 
   return (
@@ -44,12 +48,29 @@ export const InFlightChain: React.FC<InFlightChainProps> = ({ cards }) => {
         {uniqueCards.map((item, index) => (
           <div
             key={item.id || index}
-            className="inflight-chain__card-slot"
+            className={`inflight-chain__card-slot${
+              item.isFlipReveal ? " inflight-chain__card-slot--flip" : ""
+            }`}
             title={`${item.sourcePlayerName}${
               item.targetPlayerName ? ` -> ${item.targetPlayerName}` : ""
             }: ${item.actionText}`}
           >
-            <CardView card={item.card} isPlayable={false} />
+            {item.isFlipReveal ? (
+              <div className="inflight-chain__flipper">
+                <div className="inflight-chain__face inflight-chain__face--front">
+                  <CardView card={item.card} isPlayable={false} />
+                </div>
+                <div className="inflight-chain__face inflight-chain__face--back">
+                  <img
+                    src="/assets/images/ui/card_back.png"
+                    alt="Face-down check card"
+                    draggable={false}
+                  />
+                </div>
+              </div>
+            ) : (
+              <CardView card={item.card} isPlayable={false} />
+            )}
           </div>
         ))}
       </div>

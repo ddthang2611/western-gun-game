@@ -96,13 +96,17 @@ export class DeckManager {
   public static peekTop(
     state: SimulationState,
     count: number
-  ): { cards: EngineCard[]; reshuffled: boolean } {
-    if (count <= 0) return { cards: [], reshuffled: false };
+  ): { cards: EngineCard[]; reshuffled: boolean; events: DomainEvent[] } {
+    if (count <= 0) return { cards: [], reshuffled: false, events: [] };
 
     let reshuffled = false;
+    const events: DomainEvent[] = [];
     if (state.drawDeck.length < count && state.discardPile.length > 0) {
-      this.reshuffleDiscardIntoDeck(state);
-      reshuffled = true;
+      const ev = this.reshuffleDiscardIntoDeck(state);
+      if (ev) {
+        events.push(ev);
+        reshuffled = true;
+      }
     }
 
     const available = Math.min(count, state.drawDeck.length);
@@ -111,7 +115,7 @@ export class DeckManager {
       cards.push(state.drawDeck[state.drawDeck.length - 1 - i]);
     }
 
-    return { cards, reshuffled };
+    return { cards, reshuffled, events };
   }
 
   // Instance shuffle helper
