@@ -16,6 +16,7 @@ export interface PlayerConsoleProps {
   selectedCardId: string | null;
   selectedCardIds?: string[];
   discardCardIds?: string[];
+  concealedCardIds?: string[];
   selectedGreenCardId?: string | null;
   isCurrentTurn?: boolean;
   isLocked?: boolean;
@@ -33,6 +34,7 @@ export const PlayerConsole: React.FC<PlayerConsoleProps> = ({
   selectedCardId,
   selectedCardIds,
   discardCardIds,
+  concealedCardIds,
   selectedGreenCardId,
   isCurrentTurn = false,
   isLocked = false,
@@ -54,6 +56,7 @@ export const PlayerConsole: React.FC<PlayerConsoleProps> = ({
         selectedCardId={selectedCardId}
         selectedCardIds={selectedCardIds}
         discardCardIds={discardCardIds}
+        concealedCardIds={concealedCardIds}
         onSelectCard={(card) => {
           if (!isLocked) onSelectCard(card);
         }}

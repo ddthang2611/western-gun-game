@@ -36,7 +36,8 @@ const ARENA_ANCHOR = ".inflight-chain";
 const DRAW_PILE_ANCHOR = '[data-flight-anchor="draw-pile"], .game-table__pile-card--stack';
 const DISCARD_PILE_ANCHOR =
   '[data-flight-anchor="discard-pile"], .game-table__pile-card--discard';
-const MY_HAND_ANCHOR = '[data-flight-anchor="my-hand"], .game-table__console-hand';
+const MY_HAND_ANCHOR =
+  '[data-flight-anchor="my-hand-last"], [data-flight-anchor="my-hand"], .game-table__console-hand';
 
 function normImg(img?: unknown): string | undefined {
   if (typeof img !== "string" || !img) return undefined;
@@ -122,7 +123,7 @@ const handleInPlayStolen: EventHandler = (p, ctx) => {
       playerAnchor(myId, sourcePlayerId),
       {
         faceDown: false,
-        cardImage: card?.image,
+        cardImage: normImg(card?.image),
         label: card?.name,
         durationMs: 1350,
       }
@@ -130,19 +131,8 @@ const handleInPlayStolen: EventHandler = (p, ctx) => {
   }, 1050);
 };
 
-const handleDestroyedOrDiscarded: EventHandler = (p, ctx) => {
-  const actorId = asStr(p.targetPlayerId) || asStr(p.playerId);
-  const fromAnchor = playerAnchor(ctx.getMyPlayerId(), actorId);
-  const card = asCard(p.card);
-  ctx.scheduleStaggered(() => {
-    ctx.enqueueFlight(fromAnchor, DISCARD_PILE_ANCHOR, {
-      faceDown: false,
-      cardImage: card?.image,
-      label: card?.name,
-      durationMs: 1200,
-    });
-  }, 950);
-};
+// Skip discard pile exit flights
+const handleDestroyedOrDiscarded: EventHandler = () => undefined;
 
 const handleDrawCheckResult: EventHandler = (p, ctx) => {
   if (p.reason === "DYNAMITE" || p.reason === "JAIL") return;
@@ -171,8 +161,8 @@ const handleDrawCheckResult: EventHandler = (p, ctx) => {
       suit: "spades",
       border: reasonUpper === "BARREL" || isJourdonnais ? "blue" : "green",
       image: isJourdonnais
-        ? normImg(actor?.characters?.[0]?.image) || "/assets/images/cards/card_barrel.png"
-        : `/assets/images/cards/card_${reasonSlug}.png`,
+        ? normImg(actor?.characters?.[0]?.image) || "/assets/images/ui/card_back.png"
+        : "/assets/images/ui/card_back.png",
       desc: `Draw check for ${reasonUpper}.`,
     };
     sourceEntry = {
@@ -190,11 +180,7 @@ const handleDrawCheckResult: EventHandler = (p, ctx) => {
       suit: rawCard.suit || "spades",
       rank: rawCard.rank || "Q",
       border: rawCard.border || "blue",
-      image:
-        normImg(rawCard.image) ||
-        `/assets/images/cards/card_${String(rawCard.name || "barrel")
-          .toLowerCase()
-          .replace(/[^a-z0-9]/g, "_")}.png`,
+      image: normImg(rawCard.image) || "/assets/images/ui/card_back.png",
       desc: `${playerName} draw check for ${reasonStr || "action"}.`,
     };
     const outcomeText = success ? "PASSED" : "FAILED";
@@ -219,30 +205,27 @@ const handleDrawCheckResult: EventHandler = (p, ctx) => {
       faceDown: false,
       cardImage: sourceEntry?.card.image || lastCard.image,
       label: sourceEntry?.card.name || lastCard.name,
-      durationMs: 1150,
+      durationMs: 1000,
     });
     if (sourceEntry) {
-      ctx.addEphemeralCards([sourceEntry]);
+      ctx.scheduleTimeout(() => {
+        ctx.addEphemeralCards([sourceEntry!]);
+      }, 900);
     }
     ctx.scheduleTimeout(() => {
       ctx.enqueueFlight(DRAW_PILE_ANCHOR, ARENA_ANCHOR, {
         faceDown: true,
-        durationMs: 900,
+        durationMs: 1000,
       });
-    }, 400);
+    }, 600);
     ctx.scheduleTimeout(() => {
       ctx.addEphemeralCards(checkEntries);
-    }, 1300);
+    }, 1550);
     ctx.scheduleTimeout(() => {
-      ctx.enqueueFlight(ARENA_ANCHOR, DISCARD_PILE_ANCHOR, {
-        faceDown: false,
-        cardImage: lastCard.image,
-        durationMs: 1150,
-      });
       ctx.removeEphemeralCards(entryIds);
       ctx.onDiscardReveal(lastCard);
-    }, 5400);
-  }, 1350);
+    }, 4800);
+  }, 1500);
 };
 
 const handleJudgementResolved: EventHandler = (p, ctx) => {
@@ -264,9 +247,7 @@ const handleJudgementResolved: EventHandler = (p, ctx) => {
         suit: rawSource.suit || "spades",
         rank: rawSource.rank || "J",
         border: rawSource.border || "blue",
-        image:
-          normImg(rawSource.image) ||
-          `/assets/images/cards/card_${jType.toLowerCase()}.png`,
+        image: normImg(rawSource.image) || "/assets/images/ui/card_back.png",
         desc: rawSource.desc || `${jType} judgement.`,
       }
     : {
@@ -275,7 +256,7 @@ const handleJudgementResolved: EventHandler = (p, ctx) => {
         rank: jType === "DYNAMITE" ? "2" : "J",
         suit: jType === "DYNAMITE" ? "hearts" : "spades",
         border: "blue",
-        image: `/assets/images/cards/card_${jType.toLowerCase()}.png`,
+        image: "/assets/images/ui/card_back.png",
         desc: `${jType} judgement.`,
       };
 
@@ -292,11 +273,7 @@ const handleJudgementResolved: EventHandler = (p, ctx) => {
     suit: rawCard.suit || "spades",
     rank: rawCard.rank || "A",
     border: rawCard.border || "blue",
-    image:
-      normImg(rawCard.image) ||
-      `/assets/images/cards/card_${String(rawCard.name || "dynamite")
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "_")}.png`,
+    image: normImg(rawCard.image) || "/assets/images/ui/card_back.png",
     desc: `${playerName} ${jType} result: ${resultLabel}`,
   };
 
@@ -316,33 +293,30 @@ const handleJudgementResolved: EventHandler = (p, ctx) => {
       faceDown: false,
       cardImage: sourceCard.image,
       label: sourceCard.name,
-      durationMs: 1200,
+      durationMs: 1050,
     });
-    ctx.addEphemeralCards([sourceEntry]);
+    ctx.scheduleTimeout(() => {
+      ctx.addEphemeralCards([sourceEntry]);
+    }, 950);
     ctx.scheduleTimeout(() => {
       ctx.enqueueFlight(DRAW_PILE_ANCHOR, ARENA_ANCHOR, {
         faceDown: true,
-        durationMs: 950,
+        durationMs: 1000,
       });
-    }, 450);
+    }, 650);
     ctx.scheduleTimeout(() => {
       ctx.addEphemeralCards([checkEntry]);
       if (isExploded) {
         ctx.triggerVfx("dynamite", playerId);
       }
-    }, 1400);
+    }, 1600);
     ctx.scheduleTimeout(() => {
-      ctx.enqueueFlight(ARENA_ANCHOR, DISCARD_PILE_ANCHOR, {
-        faceDown: false,
-        cardImage: clientCard.image,
-        durationMs: 1150,
-      });
       ctx.removeEphemeralCards(entryIds);
       if (isExploded || !isEscaped) {
         ctx.onDiscardReveal(clientCard);
       }
-    }, 5800);
-  }, 1450);
+    }, 5000);
+  }, 1600);
 };
 
 const GAME_EVENT_HANDLERS: Record<string, EventHandler> = {
@@ -382,7 +356,7 @@ const GAME_EVENT_HANDLERS: Record<string, EventHandler> = {
     ctx.scheduleStaggered(() => {
       ctx.enqueueFlight(ARENA_ANCHOR, targetAnchor, {
         faceDown: false,
-        cardImage: card?.image,
+        cardImage: normImg(card?.image),
         label: card?.name,
         durationMs: 1350,
       });
@@ -397,7 +371,7 @@ const GAME_EVENT_HANDLERS: Record<string, EventHandler> = {
     ctx.scheduleStaggered(() => {
       ctx.enqueueFlight(DISCARD_PILE_ANCHOR, targetAnchor, {
         faceDown: false,
-        cardImage: card?.image,
+        cardImage: normImg(card?.image),
         label: card?.name,
         durationMs: 1350,
       });
@@ -412,7 +386,7 @@ const GAME_EVENT_HANDLERS: Record<string, EventHandler> = {
     ctx.scheduleStaggered(() => {
       ctx.enqueueFlight(ARENA_ANCHOR, targetAnchor, {
         faceDown: false,
-        cardImage: card?.image,
+        cardImage: normImg(card?.image),
         label: card?.name,
         durationMs: 1300,
       });
@@ -468,7 +442,7 @@ const GAME_EVENT_HANDLERS: Record<string, EventHandler> = {
         playerAnchor(myId, sourcePlayerId),
         {
           faceDown: !isKnown,
-          cardImage: isKnown ? card.image : undefined,
+          cardImage: isKnown ? normImg(card.image) : undefined,
           label: isKnown ? card.name : undefined,
           durationMs: 1350,
         }
@@ -498,7 +472,7 @@ const GAME_EVENT_HANDLERS: Record<string, EventHandler> = {
         playerAnchor(myId, toPlayerId),
         {
           faceDown: false,
-          cardImage: card?.image || "/assets/images/cards/card_dynamite.png",
+          cardImage: normImg(card?.image) || "/assets/images/ui/card_back.png",
           label: "DYNAMITE",
           durationMs: 1300,
         }
@@ -532,11 +506,7 @@ const GAME_EVENT_HANDLERS: Record<string, EventHandler> = {
       suit: rawCard.suit || "spades",
       rank: rawCard.rank || "A",
       border: rawCard.border || "brown",
-      image:
-        rawCard.image ||
-        `/assets/images/cards/card_${String(rawCard.name || "bang")
-          .toLowerCase()
-          .replace(/[^a-z0-9]/g, "_")}.png`,
+      image: normImg(rawCard.image) || "/assets/images/ui/card_back.png",
       desc: rawCard.desc || rawCard.name || "Card played",
     };
     const targetPlayerName = asStr(p.targetPlayerName);
@@ -557,25 +527,29 @@ const GAME_EVENT_HANDLERS: Record<string, EventHandler> = {
       clientCard.name === "JAIL" && targetPlayerId
         ? playerAnchor(myId, targetPlayerId)
         : playerAnchor(myId, actorId);
-    const endAnchor = p.isPlacement ? placementDest : DISCARD_PILE_ANCHOR;
+    const isPlacement = Boolean(p.isPlacement);
 
     ctx.scheduleStaggered(() => {
       ctx.enqueueFlight(fromAnchor, ARENA_ANCHOR, {
         faceDown: false,
         cardImage: clientCard.image,
         label: clientCard.name,
-        durationMs: 1200,
+        durationMs: 1000,
       });
-      ctx.addEphemeralCards([arenaEntry]);
       ctx.scheduleTimeout(() => {
-        ctx.enqueueFlight(ARENA_ANCHOR, endAnchor, {
-          faceDown: false,
-          cardImage: clientCard.image,
-          label: clientCard.name,
-          durationMs: 1150,
-        });
+        ctx.addEphemeralCards([arenaEntry]);
+      }, 900);
+      ctx.scheduleTimeout(() => {
+        if (isPlacement) {
+          ctx.enqueueFlight(ARENA_ANCHOR, placementDest, {
+            faceDown: false,
+            cardImage: clientCard.image,
+            label: clientCard.name,
+            durationMs: 1150,
+          });
+        }
         ctx.removeEphemeralCards(new Set([arenaEntry.id]));
-      }, 4800);
+      }, 4200);
     }, 1200);
   },
 
@@ -588,7 +562,7 @@ const GAME_EVENT_HANDLERS: Record<string, EventHandler> = {
       suit: rawCard.suit || "spades",
       rank: rawCard.rank || "A",
       border: rawCard.border || "brown",
-      image: rawCard.image,
+      image: normImg(rawCard.image) || "/assets/images/ui/card_back.png",
       desc: rawCard.desc || "Peyote draw",
     };
     const peyoteEntry: InFlightCard = {
@@ -607,7 +581,7 @@ const GAME_EVENT_HANDLERS: Record<string, EventHandler> = {
       });
       ctx.scheduleTimeout(() => {
         ctx.addEphemeralCards([peyoteEntry]);
-      }, 900);
+      }, 950);
       ctx.scheduleTimeout(() => {
         ctx.removeEphemeralCards(new Set([peyoteEntry.id]));
       }, 4500);

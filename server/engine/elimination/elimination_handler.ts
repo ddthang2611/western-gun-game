@@ -106,6 +106,9 @@ export class EliminationHandler {
         payload: {
           scavengerId: vultureSam.id,
           scavengerName: vultureSam.name,
+          victimId: deadPlayer.id,
+          victimName: deadPlayer.name,
+          cardCount: cardsToTransfer.length,
           cardsCount: cardsToTransfer.length,
         },
         timestamp: Date.now(),

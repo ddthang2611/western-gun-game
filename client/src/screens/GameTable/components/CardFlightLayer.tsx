@@ -47,13 +47,13 @@ const FlightNode: React.FC<FlightNodeProps> = ({ item }) => {
     el.style.left = `${from.x}px`;
     el.style.top = `${from.y}px`;
     el.style.transition = "none";
-    el.style.transform = "translate3d(-50%, -50%, 0) scale(0.92)";
+    el.style.transform = "translate3d(-50%, -50%, 0) scale(1)";
     el.style.opacity = "1";
 
     let raf2 = 0;
     const raf1 = requestAnimationFrame(() => {
       raf2 = requestAnimationFrame(() => {
-        el.style.transition = `transform ${duration}ms cubic-bezier(0.22, 1, 0.36, 1), opacity ${Math.round(duration * 0.35)}ms ease ${Math.round(duration * 0.65)}ms`;
+        el.style.transition = `transform ${duration}ms cubic-bezier(0.22, 1, 0.36, 1), opacity ${Math.round(duration * 0.25)}ms ease ${Math.round(duration * 0.75)}ms`;
         el.style.transform = `translate3d(calc(-50% + ${dx}px), calc(-50% + ${dy}px), 0) scale(1)`;
         el.style.opacity = "0";
       });
@@ -72,9 +72,6 @@ const FlightNode: React.FC<FlightNodeProps> = ({ item }) => {
   return (
     <div ref={nodeRef} className="card-flight-layer__card" aria-hidden="true">
       <img src={imgSrc} alt="" className="card-flight-layer__img" draggable={false} />
-      {item.label && !item.faceDown && (
-        <span className="card-flight-layer__label">{item.label}</span>
-      )}
     </div>
   );
 };

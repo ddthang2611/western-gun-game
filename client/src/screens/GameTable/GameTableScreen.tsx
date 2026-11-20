@@ -69,10 +69,15 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
 }) => {
   const ui = useTableUi();
   const reconcileHandRef = useRef<(hand: Card[]) => void>(() => undefined);
+  const newHandCardsRef = useRef<(cardIds: string[]) => void>(() => undefined);
   const gameEventRef = useRef<(event: GameEventMessage) => void>(() => undefined);
 
   const handleHandReconcile = useCallback((hand: Card[]) => {
     reconcileHandRef.current(hand);
+  }, []);
+
+  const handleNewHandCards = useCallback((cardIds: string[]) => {
+    newHandCardsRef.current(cardIds);
   }, []);
 
   const handleGameEvent = useCallback((event: GameEventMessage) => {
@@ -82,6 +87,7 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
   const liveSession = useLiveTableSession({
     enabled: !isMock,
     onHandReconcile: handleHandReconcile,
+    onNewHandCards: handleNewHandCards,
     onGameEvent: handleGameEvent,
     onBackToLobby,
     onKicked,
@@ -89,6 +95,10 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
   });
 
   const animations = useTableAnimations(isMock ? "" : liveSession.state.myPlayerId);
+
+  useEffect(() => {
+    newHandCardsRef.current = animations.concealHandCards;
+  }, [animations.concealHandCards]);
   const mockSession = useMockTableSimulation({
     externalHeroes,
     animations,
@@ -305,6 +315,7 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
         selectedCardId={selection.selectedHandCardId}
         selectedCardIds={!isMock && state.currentPhase === 3 ? selection.phase3DiscardIds : selection.skillDiscardIds}
         discardCardIds={selection.discardCostIds}
+        concealedCardIds={animations.concealedHandCardIds}
         selectedGreenCardId={selection.selectedGreenCardId}
         isCurrentTurn={vm.isMyTurn && state.matchPhase !== "CHARACTER_SELECT"}
         isLocked={vm.isTurnLocked}

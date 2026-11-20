@@ -24,11 +24,13 @@ const VFX_COLORS: Record<VfxBeam["type"], string> = {
 export function useTableAnimations(myPlayerId: string) {
   const [flyingCards, setFlyingCards] = useState<FlyingCardItem[]>([]);
   const [ephemeralCheckCards, setEphemeralCheckCards] = useState<InFlightCard[]>([]);
+  const [concealedHandCardIds, setConcealedHandCardIds] = useState<string[]>([]);
   const [vfxBeams, setVfxBeams] = useState<VfxBeam[]>([]);
 
   const timersRef = useRef<number[]>([]);
   const vfxSeqRef = useRef(0);
   const arenaQueueUntilRef = useRef(0);
+  const myHandFlightEndAtRef = useRef(0);
   const myPlayerIdRef = useRef(myPlayerId);
 
   useEffect(() => {
@@ -57,6 +59,12 @@ export function useTableAnimations(myPlayerId: string) {
       options?: Omit<FlyingCardItem, "id" | "fromSelector" | "toSelector">
     ) => {
       const durationMs = options?.durationMs ?? 600;
+      if (toSelector.includes("my-hand")) {
+        const endAt = Date.now() + durationMs;
+        if (endAt > myHandFlightEndAtRef.current) {
+          myHandFlightEndAtRef.current = endAt;
+        }
+      }
       const flight: FlyingCardItem = {
         id: `flt_${Date.now()}_${Math.random()}`,
         fromSelector,
@@ -70,6 +78,25 @@ export function useTableAnimations(myPlayerId: string) {
       scheduleTimeout(() => {
         setFlyingCards((prev) => prev.filter((f) => f.id !== flight.id));
       }, durationMs + 120);
+    },
+    [scheduleTimeout]
+  );
+
+  const concealHandCards = useCallback(
+    (cardIds: string[]) => {
+      if (cardIds.length === 0) return;
+      const idSet = new Set(cardIds);
+      setConcealedHandCardIds((prev) => Array.from(new Set([...prev, ...cardIds])));
+
+      // Reveal only after flight to hand finishes
+      scheduleTimeout(() => {
+        const now = Date.now();
+        const remaining = Math.max(0, myHandFlightEndAtRef.current - now);
+        const waitMs = remaining > 50 ? Math.min(remaining, 3600) : 1550;
+        scheduleTimeout(() => {
+          setConcealedHandCardIds((prev) => prev.filter((id) => !idSet.has(id)));
+        }, waitMs);
+      }, 60);
     },
     [scheduleTimeout]
   );
@@ -223,10 +250,12 @@ export function useTableAnimations(myPlayerId: string) {
   return {
     flyingCards,
     ephemeralCheckCards,
+    concealedHandCardIds,
     vfxBeams,
     arenaQueueUntilRef,
     scheduleTimeout,
     enqueueFlight,
+    concealHandCards,
     scheduleStaggered,
     triggerVfx,
     addEphemeralCards,

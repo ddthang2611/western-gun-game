@@ -471,7 +471,8 @@ export class GameEngine {
   // Resume Phase 0 after pauses
   private resumePhase0IfReady(events: DomainEvent[]): void {
     if (this.state.gameOver || this.state.matchPhase !== "PLAYING") return;
-    if (this.state.pendingReactions.length > 0) return;
+    InteractManager.pruneStaleReactions(this.state);
+    if (this.state.pendingReactions.length > 0 || this.state.activeChain.length > 0) return;
 
     const turnPlayer = this.state.players.get(this.state.turnPlayerId);
     if (!turnPlayer) return;

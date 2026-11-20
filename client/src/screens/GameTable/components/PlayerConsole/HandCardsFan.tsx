@@ -7,6 +7,7 @@ export interface HandCardsFanProps {
   selectedCardId: string | null;
   selectedCardIds?: string[];
   discardCardIds?: string[];
+  concealedCardIds?: string[];
   onSelectCard: (card: Card) => void;
 }
 
@@ -15,6 +16,7 @@ export const HandCardsFan: React.FC<HandCardsFanProps> = ({
   selectedCardId,
   selectedCardIds,
   discardCardIds,
+  concealedCardIds,
   onSelectCard,
 }) => {
   const fanRef = useRef<HTMLDivElement | null>(null);
@@ -70,17 +72,21 @@ export const HandCardsFan: React.FC<HandCardsFanProps> = ({
       aria-label={`Hand cards (${cardCount})`}
     >
       <div ref={fanRef} className="game-table__hand-fan">
-        {hand.map((card) => {
+        {hand.map((card, idx) => {
           const isSelected =
             selectedCardId === card.id || Boolean(selectedCardIds?.includes(card.id));
           const isDiscardCost = Boolean(discardCardIds?.includes(card.id));
+          const isConcealed = Boolean(concealedCardIds?.includes(card.id));
+          const isRightmost = idx === hand.length - 1;
           return (
             <div
               key={card.id}
               data-target-origin={isSelected || isDiscardCost ? "card" : undefined}
+              data-flight-anchor={isRightmost ? "my-hand-last" : undefined}
               className={[
                 "game-table__hand-card-wrapper",
                 isSelected || isDiscardCost ? "game-table__hand-card-wrapper--selected" : "",
+                isConcealed ? "game-table__hand-card-wrapper--concealed" : "",
               ]
                 .filter(Boolean)
                 .join(" ")}
@@ -89,7 +95,11 @@ export const HandCardsFan: React.FC<HandCardsFanProps> = ({
                 card={card}
                 isSelected={isSelected}
                 isDiscardCost={isDiscardCost}
-                onClick={() => onSelectCard(card)}
+                isFaceDown={isConcealed}
+                isPlayable={!isConcealed}
+                onClick={() => {
+                  if (!isConcealed) onSelectCard(card);
+                }}
               />
             </div>
           );

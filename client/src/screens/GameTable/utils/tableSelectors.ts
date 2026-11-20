@@ -387,7 +387,7 @@ export function computeTableViewModel({
   ];
   const seenInFlight = new Set<string>();
   const displayInFlightCards = combinedInFlight.filter((c) => {
-    const key = c.card?.id || c.id;
+    const key = c.isFlipReveal ? c.id : c.card?.id || c.id;
     if (seenInFlight.has(key)) return false;
     seenInFlight.add(key);
     return true;

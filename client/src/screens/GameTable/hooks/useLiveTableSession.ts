@@ -15,6 +15,7 @@ import { EMPTY_LIVE_TABLE } from "../utils/tableSelectors";
 export interface UseLiveTableSessionParams {
   enabled: boolean;
   onHandReconcile: (hand: Card[]) => void;
+  onNewHandCards?: (cardIds: string[]) => void;
   onGameEvent: (event: GameEventMessage) => void;
   onBackToLobby?: () => void;
   onKicked?: (reason: string) => void;
@@ -34,6 +35,7 @@ type TableStateSnapshotPayload = Partial<TableState> & {
 export function useLiveTableSession({
   enabled,
   onHandReconcile,
+  onNewHandCards,
   onGameEvent,
   onBackToLobby,
   onKicked,
@@ -54,12 +56,15 @@ export function useLiveTableSession({
   });
 
   const hasReceivedTableStateRef = useRef(false);
+  const hasInitialHandRef = useRef(false);
+  const prevHandRef = useRef<Card[]>([]);
   const stateSeqRef = useRef<number | undefined>(undefined);
   const cmdSeqRef = useRef(0);
   const myPlayerIdRef = useRef("");
   const playersRef = useRef<Player[]>([]);
 
   const onHandReconcileRef = useRef(onHandReconcile);
+  const onNewHandCardsRef = useRef(onNewHandCards);
   const onGameEventRef = useRef(onGameEvent);
   const onBackToLobbyRef = useRef(onBackToLobby);
   const onKickedRef = useRef(onKicked);
@@ -67,11 +72,12 @@ export function useLiveTableSession({
 
   useEffect(() => {
     onHandReconcileRef.current = onHandReconcile;
+    onNewHandCardsRef.current = onNewHandCards;
     onGameEventRef.current = onGameEvent;
     onBackToLobbyRef.current = onBackToLobby;
     onKickedRef.current = onKicked;
     showErrorRef.current = showError;
-  }, [onHandReconcile, onGameEvent, onBackToLobby, onKicked, showError]);
+  }, [onHandReconcile, onNewHandCards, onGameEvent, onBackToLobby, onKicked, showError]);
 
   useEffect(() => {
     myPlayerIdRef.current = state.myPlayerId;
@@ -104,11 +110,32 @@ export function useLiveTableSession({
       if (typeof payload.stateSeq === "number") {
         stateSeqRef.current = payload.stateSeq;
       }
+      if (payload.matchPhase && payload.matchPhase !== "PLAYING") {
+        hasInitialHandRef.current = false;
+        prevHandRef.current = [];
+      }
       setState((prev) => ({ ...prev, ...payload }));
       if (Array.isArray(payload.myHand)) {
-        const nextHand = payload.myHand;
-        setMyHand(nextHand);
-        onHandReconcileRef.current(nextHand);
+        const incoming = payload.myHand;
+        const prev = prevHandRef.current;
+        const prevIds = new Set(prev.map((c) => c.id));
+        const kept = prev
+          .map((oldCard) => incoming.find((c) => c.id === oldCard.id))
+          .filter((c): c is Card => Boolean(c));
+        const added = incoming.filter((c) => !prevIds.has(c.id));
+        const orderedHand = prev.length > 0 ? [...kept, ...added] : incoming;
+
+        if (!hasInitialHandRef.current) {
+          if (orderedHand.length > 0 || payload.matchPhase === "PLAYING") {
+            hasInitialHandRef.current = true;
+          }
+        } else if (added.length > 0) {
+          onNewHandCardsRef.current?.(added.map((c) => c.id));
+        }
+
+        prevHandRef.current = orderedHand;
+        setMyHand(orderedHand);
+        onHandReconcileRef.current(orderedHand);
       }
       if (payload.myHp !== undefined) setMyHp(payload.myHp);
       if (payload.myMaxHp !== undefined) setMyMaxHp(payload.myMaxHp);

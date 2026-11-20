@@ -72,7 +72,7 @@ export class ActiveSkills {
     }
 
     for (const card of discarded) {
-      DeckManager.discardCard(state, card);
+      AtomicEffects.discardCard(state, card);
     }
     player.hp = Math.min(player.hp + 1, player.maxHp);
 
@@ -176,7 +176,7 @@ export class ActiveSkills {
     }
 
     player.handCards.splice(cardIdx, 1);
-    DeckManager.discardCard(state, card);
+    AtomicEffects.discardCard(state, card);
     state.joseDelgadoCountThisTurn += 1;
 
     SkillHooks.checkSuzyLafayette(state, player, events);
@@ -272,7 +272,7 @@ export class ActiveSkills {
       return { success: false, message: "Selected discard cards not found in hand." };
     }
     for (const card of discarded) {
-      DeckManager.discardCard(state, card);
+      AtomicEffects.discardCard(state, card);
     }
 
     state.docHolydayUsedThisTurn += 1;
