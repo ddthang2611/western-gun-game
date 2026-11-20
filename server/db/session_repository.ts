@@ -365,4 +365,14 @@ export class SessionRepository {
     const db = getRuntimeDatabase();
     db.prepare("DELETE FROM match_events WHERE match_id = ?").run(matchId);
   }
+
+  // Delete game state and events atomically
+  public deleteMatchData(matchId: string): void {
+    const db = getRuntimeDatabase();
+    const runDelete = db.transaction(() => {
+      db.prepare("DELETE FROM active_session WHERE match_id = ?").run(matchId);
+      db.prepare("DELETE FROM match_events WHERE match_id = ?").run(matchId);
+    });
+    runDelete();
+  }
 }

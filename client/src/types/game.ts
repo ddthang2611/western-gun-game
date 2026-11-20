@@ -228,6 +228,8 @@ export interface GameOverInfo {
 
 export interface TableState {
   roomId: string;
+  matchId?: string;
+  isHost?: boolean;
   hostInfo: string;
   stateSeq?: number;
   matchPhase?: "CHARACTER_SELECT" | "PLAYING" | "FINISHED";

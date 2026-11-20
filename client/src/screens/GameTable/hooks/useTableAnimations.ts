@@ -25,6 +25,7 @@ export function useTableAnimations(myPlayerId: string) {
   const [flyingCards, setFlyingCards] = useState<FlyingCardItem[]>([]);
   const [ephemeralCheckCards, setEphemeralCheckCards] = useState<InFlightCard[]>([]);
   const [concealedHandCardIds, setConcealedHandCardIds] = useState<string[]>([]);
+  const [heldHandCardIds, setHeldHandCardIds] = useState<string[]>([]);
   const [vfxBeams, setVfxBeams] = useState<VfxBeam[]>([]);
 
   const timersRef = useRef<number[]>([]);
@@ -247,15 +248,41 @@ export function useTableAnimations(myPlayerId: string) {
     setEphemeralCheckCards((prev) => prev.filter((c) => !ids.has(c.id)));
   }, []);
 
+  const holdHandCard = useCallback((cardId: string) => {
+    if (!cardId || cardId === "SECRET") return;
+    setHeldHandCardIds((prev) => (prev.includes(cardId) ? prev : [...prev, cardId]));
+  }, []);
+
+  const releaseHandCard = useCallback(
+    (cardId: string, delayMs = 0) => {
+      if (!cardId) return;
+      const clear = () => {
+        setHeldHandCardIds((prev) => prev.filter((id) => id !== cardId));
+      };
+      if (delayMs <= 0) {
+        clear();
+      } else {
+        scheduleTimeout(clear, delayMs);
+      }
+    },
+    [scheduleTimeout]
+  );
+
+  const combinedHiddenHandIds = Array.from(
+    new Set([...concealedHandCardIds, ...heldHandCardIds])
+  );
+
   return {
     flyingCards,
     ephemeralCheckCards,
-    concealedHandCardIds,
+    concealedHandCardIds: combinedHiddenHandIds,
     vfxBeams,
     arenaQueueUntilRef,
     scheduleTimeout,
     enqueueFlight,
     concealHandCards,
+    holdHandCard,
+    releaseHandCard,
     scheduleStaggered,
     triggerVfx,
     addEphemeralCards,

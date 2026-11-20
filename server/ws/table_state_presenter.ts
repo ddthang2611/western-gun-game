@@ -34,7 +34,9 @@ export function buildTableState(
   engine: GameEngine,
   combatLog: string[],
   matchPaused: boolean,
-  isPlayerOnline?: (id: string) => boolean
+  isPlayerOnline?: (id: string) => boolean,
+  matchId?: string,
+  hostId?: string
 ): any {
   const simState = engine.getState();
   const myPlayer = snapshot.players.find((p) => p.id === playerId);
@@ -155,6 +157,8 @@ export function buildTableState(
 
   return {
     roomId: snapshot.roomId,
+    matchId,
+    isHost: Boolean(hostId && hostId === playerId),
     stateSeq: snapshot.stateSeq,
     hostInfo: `Room: ${snapshot.roomId}`,
     matchPhase: snapshot.matchPhase,

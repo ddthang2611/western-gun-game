@@ -71,6 +71,7 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
   const reconcileHandRef = useRef<(hand: Card[]) => void>(() => undefined);
   const newHandCardsRef = useRef<(cardIds: string[]) => void>(() => undefined);
   const gameEventRef = useRef<(event: GameEventMessage) => void>(() => undefined);
+  const matchResetRef = useRef<() => void>(() => undefined);
 
   const handleHandReconcile = useCallback((hand: Card[]) => {
     reconcileHandRef.current(hand);
@@ -84,11 +85,16 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
     gameEventRef.current(event);
   }, []);
 
+  const handleMatchReset = useCallback(() => {
+    matchResetRef.current();
+  }, []);
+
   const liveSession = useLiveTableSession({
     enabled: !isMock,
     onHandReconcile: handleHandReconcile,
     onNewHandCards: handleNewHandCards,
     onGameEvent: handleGameEvent,
+    onMatchReset: handleMatchReset,
     onBackToLobby,
     onKicked,
     showError: ui.showError,
@@ -121,6 +127,7 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
         addEphemeralCards: animations.addEphemeralCards,
         removeEphemeralCards: animations.removeEphemeralCards,
         onDiscardReveal: liveSession.recordDiscardReveal,
+        onHoldHandCard: animations.holdHandCard,
         onOpenElGringoPicker: ui.openElGringoPicker,
       });
     };
@@ -156,6 +163,13 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
   useEffect(() => {
     reconcileHandRef.current = selection.reconcileHandSelection;
   }, [selection.reconcileHandSelection]);
+
+  useEffect(() => {
+    matchResetRef.current = () => {
+      selection.handleCancelSelection();
+      ui.resetUi();
+    };
+  }, [selection.handleCancelSelection, ui.resetUi]);
 
   const vm = useMemo(
     () =>
@@ -242,11 +256,13 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
         hostInfo={state.hostInfo}
         currentPhase={state.currentPhase}
         isMock={isMock}
+        isHost={Boolean(state.isHost)}
         roundNumber={state.roundNumber}
         isMyTurn={vm.isMyTurn}
         activePlayerName={vm.activePlayerName}
         activeEvent={state.activeEvent}
         onOpenCharSelect={() => ui.setShowCharSelectModal(true)}
+        onDeleteMatch={() => ui.setIsDeleteMatchConfirmOpen(true)}
         onBackToLobby={() => onBackToLobby?.()}
       />
 
@@ -334,6 +350,12 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
         setShowCharSelectModal={ui.setShowCharSelectModal}
         isCombatLogModalOpen={ui.isCombatLogModalOpen}
         setIsCombatLogModalOpen={ui.setIsCombatLogModalOpen}
+        isDeleteMatchConfirmOpen={ui.isDeleteMatchConfirmOpen}
+        onCancelDeleteMatch={() => ui.setIsDeleteMatchConfirmOpen(false)}
+        onConfirmDeleteMatch={() => {
+          ui.setIsDeleteMatchConfirmOpen(false);
+          liveSession.sendDeleteMatch();
+        }}
         cardPickerConfig={ui.cardPickerConfig}
         setCardPickerConfig={ui.setCardPickerConfig}
         forcedModal={forcedModal}
@@ -345,6 +367,7 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
         onSendLobbyReset={liveSession.sendLobbyReset}
         onCancelSelection={selection.handleCancelSelection}
         onShowError={ui.showError}
+        onReleaseHeldHandCard={animations.releaseHandCard}
         onEnqueueFlight={animations.enqueueFlight}
         mockHandlers={mockSession}
       />

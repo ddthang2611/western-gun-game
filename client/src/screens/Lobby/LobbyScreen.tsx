@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import type { ExpansionOptionInfo, LobbyState } from "../../types/game";
 import { useGameSocket } from "../../hooks/useGameSocket";
+import { Button, Modal } from "../../components/ui";
 import { LobbyPlayerList } from "./components/LobbyPlayerList";
 import { LobbySettingsPanel } from "./components/LobbySettingsPanel";
 import "./LobbyScreen.scss";
@@ -37,6 +38,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   const [lanUrls, setLanUrls] = useState<string[]>([]);
   const [tunnelUrl, setTunnelUrl] = useState<string | null>(null);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"delete_match" | "delete_room" | null>(null);
 
   const prevStatusRef = useRef<string | null>(null);
   const hasAutoLaunchedRef = useRef(false);
@@ -164,8 +166,9 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
           prevStatusRef.current = newStatus;
           setLobbyState(nextState);
 
-          if (newStatus === "waiting") {
+          if (!nextState.roomExists || newStatus === "waiting") {
             hasAutoLaunchedRef.current = false;
+            setConfirmAction(null);
           }
 
           const activeId = myPlayerIdRef.current;
@@ -300,9 +303,15 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
     sendMessage("START_GAME", {});
   };
 
-  const handleResetRoom = () => {
+  const handleConfirmHostAction = () => {
+    if (!confirmAction) return;
     setErrorMessage("");
-    sendMessage("RESET_LOBBY", {});
+    if (confirmAction === "delete_match") {
+      sendMessage("DELETE_MATCH", {});
+    } else if (confirmAction === "delete_room") {
+      sendMessage("DELETE_ROOM", {});
+    }
+    setConfirmAction(null);
   };
 
   const me = lobbyState?.players.find((p) => p.id === myPlayerId);
@@ -492,13 +501,24 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                     Join Game Table
                   </button>
                   {isHost && (
-                    <button
-                      type="button"
-                      onClick={handleResetRoom}
-                      className="lobby-screen__btn lobby-screen__btn--unready"
-                    >
-                      Reset Room to Lobby
-                    </button>
+                    <>
+                      <button
+                        type="button"
+                        disabled={!isConnected}
+                        onClick={() => setConfirmAction("delete_match")}
+                        className="lobby-screen__btn lobby-screen__btn--danger"
+                      >
+                        Delete Match
+                      </button>
+                      <button
+                        type="button"
+                        disabled={!isConnected}
+                        onClick={() => setConfirmAction("delete_room")}
+                        className="lobby-screen__btn lobby-screen__btn--danger-outline"
+                      >
+                        Delete Room
+                      </button>
+                    </>
                   )}
                 </>
               ) : (
@@ -536,13 +556,25 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                     </div>
                   )}
 
-                  {(!isHost || activeCount <= 1) && (
+                  {(!isHost || lobbyState.players.length <= 1) && (
                     <button
                       type="button"
+                      disabled={!isConnected}
                       onClick={handleLeaveRoom}
                       className="lobby-screen__btn lobby-screen__btn--leave"
                     >
                       Leave Room
+                    </button>
+                  )}
+
+                  {isHost && (
+                    <button
+                      type="button"
+                      disabled={!isConnected}
+                      onClick={() => setConfirmAction("delete_room")}
+                      className="lobby-screen__btn lobby-screen__btn--danger-outline"
+                    >
+                      Delete Room
                     </button>
                   )}
                 </>
@@ -551,6 +583,30 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
           </>
         )}
       </div>
+
+      {confirmAction !== null && (
+        <Modal isOpen={true} size="medium" onClose={() => setConfirmAction(null)}>
+          <Modal.Header
+            title={confirmAction === "delete_match" ? "Delete Active Match?" : "Delete Saloon Room?"}
+            subtitle="Host Room Management"
+          />
+          <Modal.Body>
+            <p>
+              {confirmAction === "delete_match"
+                ? "This will immediately abort the active match, wipe all saved match state and combat logs, and return all players to the waiting room."
+                : "This will permanently close the room, remove all players from the table, and clear any active match data so a new room can be created."}
+            </p>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={() => setConfirmAction(null)}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={handleConfirmHostAction}>
+              {confirmAction === "delete_match" ? "Delete Match" : "Delete Room"}
+            </Button>
+          </Modal.Footer>
+        </Modal>
+      )}
     </div>
   );
 };

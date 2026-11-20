@@ -21,6 +21,7 @@ export interface GameEventChoreographyContext {
   addEphemeralCards: (entries: InFlightCard[]) => void;
   removeEphemeralCards: (ids: Set<string>) => void;
   onDiscardReveal: (card: Card) => void;
+  onHoldHandCard?: (cardId: string) => void;
   onOpenElGringoPicker: (
     attacker: Player,
     attackerId: string,
@@ -415,6 +416,9 @@ const GAME_EVENT_HANDLERS: Record<string, EventHandler> = {
     const card = asCard(p.card);
     const attackerObj = ctx.getPlayers().find((pl) => pl.id === attackerId);
     if (victimId === myId && attackerObj) {
+      if (card?.id && card.id !== "SECRET") {
+        ctx.onHoldHandCard?.(card.id);
+      }
       ctx.onOpenElGringoPicker(attackerObj, attackerId, card as Card | undefined);
       return;
     }

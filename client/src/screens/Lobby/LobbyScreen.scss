@@ -502,6 +502,18 @@
       color: $western-text-main;
       border: 1px solid $western-border-wood;
     }
+
+    &--danger {
+      background-color: $western-danger-dark;
+      color: #fff;
+      border: 1px solid $western-danger;
+    }
+
+    &--danger-outline {
+      background-color: rgba(220, 38, 38, 0.14);
+      color: #fca5a5;
+      border: 1px solid rgba(239, 68, 68, 0.55);
+    }
   }
 
   &__room-entry {

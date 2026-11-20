@@ -17,6 +17,7 @@ export interface UseLiveTableSessionParams {
   onHandReconcile: (hand: Card[]) => void;
   onNewHandCards?: (cardIds: string[]) => void;
   onGameEvent: (event: GameEventMessage) => void;
+  onMatchReset?: () => void;
   onBackToLobby?: () => void;
   onKicked?: (reason: string) => void;
   showError: (message: string) => void;
@@ -37,6 +38,7 @@ export function useLiveTableSession({
   onHandReconcile,
   onNewHandCards,
   onGameEvent,
+  onMatchReset,
   onBackToLobby,
   onKicked,
   showError,
@@ -58,6 +60,7 @@ export function useLiveTableSession({
   const hasReceivedTableStateRef = useRef(false);
   const hasInitialHandRef = useRef(false);
   const prevHandRef = useRef<Card[]>([]);
+  const matchIdRef = useRef<string | undefined>(undefined);
   const stateSeqRef = useRef<number | undefined>(undefined);
   const cmdSeqRef = useRef(0);
   const myPlayerIdRef = useRef("");
@@ -66,6 +69,7 @@ export function useLiveTableSession({
   const onHandReconcileRef = useRef(onHandReconcile);
   const onNewHandCardsRef = useRef(onNewHandCards);
   const onGameEventRef = useRef(onGameEvent);
+  const onMatchResetRef = useRef(onMatchReset);
   const onBackToLobbyRef = useRef(onBackToLobby);
   const onKickedRef = useRef(onKicked);
   const showErrorRef = useRef(showError);
@@ -74,10 +78,11 @@ export function useLiveTableSession({
     onHandReconcileRef.current = onHandReconcile;
     onNewHandCardsRef.current = onNewHandCards;
     onGameEventRef.current = onGameEvent;
+    onMatchResetRef.current = onMatchReset;
     onBackToLobbyRef.current = onBackToLobby;
     onKickedRef.current = onKicked;
     showErrorRef.current = showError;
-  }, [onHandReconcile, onNewHandCards, onGameEvent, onBackToLobby, onKicked, showError]);
+  }, [onHandReconcile, onNewHandCards, onGameEvent, onMatchReset, onBackToLobby, onKicked, showError]);
 
   useEffect(() => {
     myPlayerIdRef.current = state.myPlayerId;
@@ -107,6 +112,18 @@ export function useLiveTableSession({
 
     const applyTableSnapshot = (payload: TableStateSnapshotPayload | undefined) => {
       if (!payload) return;
+      const isNewMatch = Boolean(
+        payload.matchId && matchIdRef.current && matchIdRef.current !== payload.matchId
+      );
+      if (payload.matchId) {
+        matchIdRef.current = payload.matchId;
+      }
+      if (isNewMatch) {
+        hasInitialHandRef.current = false;
+        prevHandRef.current = [];
+        stateSeqRef.current = undefined;
+        onMatchResetRef.current?.();
+      }
       if (typeof payload.stateSeq === "number") {
         stateSeqRef.current = payload.stateSeq;
       }
@@ -114,7 +131,7 @@ export function useLiveTableSession({
         hasInitialHandRef.current = false;
         prevHandRef.current = [];
       }
-      setState((prev) => ({ ...prev, ...payload }));
+      setState((prev) => ({ ...(isNewMatch ? EMPTY_LIVE_TABLE : prev), ...payload }));
       if (Array.isArray(payload.myHand)) {
         const incoming = payload.myHand;
         const prev = prevHandRef.current;
@@ -235,7 +252,7 @@ export function useLiveTableSession({
         }
 
         case "LOBBY_STATE": {
-          if (p?.status === "waiting") {
+          if (p?.status === "waiting" || p?.roomExists === false) {
             onBackToLobbyRef.current?.();
           }
           return;
@@ -278,6 +295,12 @@ export function useLiveTableSession({
     }
   }, [sendMessage]);
 
+  const sendDeleteMatch = useCallback(() => {
+    if (!sendMessage("DELETE_MATCH", {})) {
+      showErrorRef.current("WebSocket connection is not ready.");
+    }
+  }, [sendMessage]);
+
   const recordDiscardReveal = useCallback((card: Card) => {
     setState((prev) => ({
       ...prev,
@@ -301,6 +324,7 @@ export function useLiveTableSession({
     isWsConnected: isConnected,
     sendLiveCommand,
     sendLobbyReset,
+    sendDeleteMatch,
     recordDiscardReveal,
     getMyPlayerId,
     getPlayers,

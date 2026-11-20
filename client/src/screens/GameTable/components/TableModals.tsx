@@ -17,6 +17,7 @@ import {
 } from "../../../components/game";
 import type { CardPickerConfig, TableViewModel } from "../utils/tableSelectors";
 import type { DevForcedModalType } from "../GameTableScreen";
+import { Button, Modal } from "../../../components/ui";
 import { CombatLogModal } from "./CombatLogModal";
 
 export interface MockModalHandlers {
@@ -48,6 +49,9 @@ export interface TableModalsProps {
   setShowCharSelectModal: (open: boolean) => void;
   isCombatLogModalOpen: boolean;
   setIsCombatLogModalOpen: (open: boolean) => void;
+  isDeleteMatchConfirmOpen?: boolean;
+  onCancelDeleteMatch?: () => void;
+  onConfirmDeleteMatch?: () => void;
   cardPickerConfig: CardPickerConfig;
   setCardPickerConfig: (cfg: CardPickerConfig) => void;
   forcedModal: DevForcedModalType;
@@ -59,6 +63,7 @@ export interface TableModalsProps {
   onSendLobbyReset: () => void;
   onCancelSelection: () => void;
   onShowError: (message: string) => void;
+  onReleaseHeldHandCard?: (cardId: string, delayMs?: number) => void;
   onEnqueueFlight: (
     fromSelector: string,
     toSelector: string,
@@ -84,6 +89,9 @@ export const TableModals: React.FC<TableModalsProps> = ({
   setShowCharSelectModal,
   isCombatLogModalOpen,
   setIsCombatLogModalOpen,
+  isDeleteMatchConfirmOpen = false,
+  onCancelDeleteMatch,
+  onConfirmDeleteMatch,
   cardPickerConfig,
   setCardPickerConfig,
   forcedModal,
@@ -95,6 +103,7 @@ export const TableModals: React.FC<TableModalsProps> = ({
   onSendLobbyReset,
   onCancelSelection,
   onShowError,
+  onReleaseHeldHandCard,
   onEnqueueFlight,
   mockHandlers,
 }) => {
@@ -395,14 +404,17 @@ export const TableModals: React.FC<TableModalsProps> = ({
                   : undefined;
                 onEnqueueFlight(
                   `#seat-${stealCtx.attackerId || target.id}`,
-                  '[data-flight-anchor="my-hand"], .game-table__console-hand',
+                  '[data-flight-anchor="my-hand-last"], [data-flight-anchor="my-hand"], .game-table__console-hand',
                   {
                     faceDown: !imgPath,
                     cardImage: imgPath,
                     label: stealCtx.stolenCard?.name,
-                    durationMs: 1500,
+                    durationMs: 1400,
                   }
                 );
+                if (stealCtx.stolenCard?.id) {
+                  onReleaseHeldHandCard?.(stealCtx.stolenCard.id, 1400);
+                }
               }
               setCardPickerConfig({ isOpen: false, action: "destroy" });
               return;
@@ -456,6 +468,29 @@ export const TableModals: React.FC<TableModalsProps> = ({
           onCloseForcedModal?.();
         }}
       />
+
+      {!isMock && isDeleteMatchConfirmOpen && (
+        <Modal isOpen={true} size="medium" onClose={onCancelDeleteMatch}>
+          <Modal.Header
+            title="Delete Active Match?"
+            subtitle="Host Match Management"
+          />
+          <Modal.Body>
+            <p>
+              This will immediately end the current match, erase all active match state and combat
+              logs, and return all players to the waiting room.
+            </p>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={onCancelDeleteMatch}>
+              Cancel
+            </Button>
+            <Button variant="danger" onClick={onConfirmDeleteMatch}>
+              Delete Match
+            </Button>
+          </Modal.Footer>
+        </Modal>
+      )}
     </>
   );
 };

@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { WebSocket } from "ws";
 import { GameEngine, SerializedEngineState } from "../engine/game_engine";
 import {
@@ -35,6 +36,7 @@ export class GameSessionManager {
   private engines: Map<string, GameEngine> = new Map();
   private combatLogs: Map<string, StoredLogEntry[]> = new Map();
   private matchEventSeqs: Map<string, number> = new Map();
+  private matchIds: Map<string, string> = new Map();
   private inactivityTimers: Map<string, NodeJS.Timeout> = new Map();
 
   public static getInstance(): GameSessionManager {
@@ -280,10 +282,9 @@ export class GameSessionManager {
     this.engines.delete(roomId);
     this.combatLogs.delete(roomId);
     this.matchEventSeqs.delete(roomId);
+    this.matchIds.delete(roomId);
     try {
-      const repo = SessionRepository.getInstance();
-      repo.deleteGameState(roomId);
-      repo.deleteMatchEvents(roomId);
+      SessionRepository.getInstance().deleteMatchData(roomId);
     } catch (err) {
       console.error("[GameSessionManager] Failed to clean up session:", err);
     }
@@ -387,6 +388,9 @@ export class GameSessionManager {
     );
 
     this.engines.set(roomId, engine);
+    if (!this.matchIds.has(roomId)) {
+      this.matchIds.set(roomId, crypto.randomUUID());
+    }
     const recentEvents = this.loadRecentMatchEvents(roomId);
     const maxSeq = recentEvents.reduce((max, row) => Math.max(max, row.seq), 0);
     this.matchEventSeqs.set(roomId, maxSeq);
@@ -484,11 +488,6 @@ export class GameSessionManager {
     const playerList = players.map((p) => ({ id: p.id, name: p.name }));
 
     try {
-      this.clearInactivityTimer(roomId);
-      const repo = SessionRepository.getInstance();
-      repo.deleteMatchEvents(roomId);
-      this.matchEventSeqs.set(roomId, 0);
-
       const engine = new GameEngine(roomId, engineCards, engineEvents, {
         defaultEnableCharacterSelect: true,
         defaultEnable3PlayerVariant: is3PVariant,
@@ -507,7 +506,27 @@ export class GameSessionManager {
         }
       );
 
+      this.clearInactivityTimer(roomId);
+      const nextMatchId = crypto.randomUUID();
+      const initialEvents = matchResult.events || [];
+      const repo = SessionRepository.getInstance();
+      const db = getRuntimeDatabase();
+      const serialized = engine.serializeState();
+      let seq = 0;
+
+      // Replace previous match data atomically
+      db.transaction(() => {
+        repo.deleteMatchData(roomId);
+        for (const ev of initialEvents) {
+          seq += 1;
+          repo.logMatchEvent(roomId, seq, ev.type, ev.payload || {});
+        }
+        repo.saveGameState(roomId, serialized);
+      })();
+
       this.engines.set(roomId, engine);
+      this.matchIds.set(roomId, nextMatchId);
+      this.matchEventSeqs.set(roomId, seq);
       this.combatLogs.set(roomId, [
         {
           publicText:
@@ -515,8 +534,6 @@ export class GameSessionManager {
         },
       ]);
 
-      const initialEvents = matchResult.events || [];
-      this.persistEventsAndState(roomId, initialEvents, engine);
       if (initialEvents.length > 0) {
         this.emitDomainEvents(roomId, initialEvents, engine, lobbyManager);
       }
@@ -643,7 +660,9 @@ export class GameSessionManager {
       engine,
       logs,
       this.isMatchPaused(engine, lobbyManager),
-      (pId) => lobbyManager.isPlayerOnline(pId)
+      (pId) => lobbyManager.isPlayerOnline(pId),
+      this.matchIds.get(roomId),
+      lobbyManager.getHostId()
     );
 
     lobbyManager.sendToPlayer(playerId, "TABLE_STATE", tableState);

@@ -7,6 +7,7 @@ export function useTableUi() {
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const [showCharSelectModal, setShowCharSelectModal] = useState(false);
   const [isCombatLogModalOpen, setIsCombatLogModalOpen] = useState(false);
+  const [isDeleteMatchConfirmOpen, setIsDeleteMatchConfirmOpen] = useState(false);
   const [cardPickerConfig, setCardPickerConfig] = useState<CardPickerConfig>({
     isOpen: false,
     action: "destroy",
@@ -51,6 +52,13 @@ export function useTableUi() {
     []
   );
 
+  const resetUi = useCallback(() => {
+    setShowCharSelectModal(false);
+    setIsCombatLogModalOpen(false);
+    setIsDeleteMatchConfirmOpen(false);
+    setCardPickerConfig({ isOpen: false, action: "destroy" });
+  }, []);
+
   return {
     errorNotice,
     showError,
@@ -58,8 +66,11 @@ export function useTableUi() {
     setShowCharSelectModal,
     isCombatLogModalOpen,
     setIsCombatLogModalOpen,
+    isDeleteMatchConfirmOpen,
+    setIsDeleteMatchConfirmOpen,
     cardPickerConfig,
     setCardPickerConfig,
     openElGringoPicker,
+    resetUi,
   };
 }

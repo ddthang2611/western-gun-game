@@ -20,7 +20,10 @@ export const HandCardsFan: React.FC<HandCardsFanProps> = ({
   onSelectCard,
 }) => {
   const fanRef = useRef<HTMLDivElement | null>(null);
-  const cardCount = hand.length;
+  const visibleHand = concealedCardIds?.length
+    ? hand.filter((c) => !concealedCardIds.includes(c.id))
+    : hand;
+  const cardCount = visibleHand.length;
 
   useLayoutEffect(() => {
     const fanEl = fanRef.current;
@@ -72,12 +75,11 @@ export const HandCardsFan: React.FC<HandCardsFanProps> = ({
       aria-label={`Hand cards (${cardCount})`}
     >
       <div ref={fanRef} className="game-table__hand-fan">
-        {hand.map((card, idx) => {
+        {visibleHand.map((card, idx) => {
           const isSelected =
             selectedCardId === card.id || Boolean(selectedCardIds?.includes(card.id));
           const isDiscardCost = Boolean(discardCardIds?.includes(card.id));
-          const isConcealed = Boolean(concealedCardIds?.includes(card.id));
-          const isRightmost = idx === hand.length - 1;
+          const isRightmost = idx === visibleHand.length - 1;
           return (
             <div
               key={card.id}
@@ -86,7 +88,6 @@ export const HandCardsFan: React.FC<HandCardsFanProps> = ({
               className={[
                 "game-table__hand-card-wrapper",
                 isSelected || isDiscardCost ? "game-table__hand-card-wrapper--selected" : "",
-                isConcealed ? "game-table__hand-card-wrapper--concealed" : "",
               ]
                 .filter(Boolean)
                 .join(" ")}
@@ -95,11 +96,7 @@ export const HandCardsFan: React.FC<HandCardsFanProps> = ({
                 card={card}
                 isSelected={isSelected}
                 isDiscardCost={isDiscardCost}
-                isFaceDown={isConcealed}
-                isPlayable={!isConcealed}
-                onClick={() => {
-                  if (!isConcealed) onSelectCard(card);
-                }}
+                onClick={() => onSelectCard(card)}
               />
             </div>
           );

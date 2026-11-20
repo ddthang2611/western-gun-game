@@ -8,11 +8,13 @@ export interface TableTopBarProps {
   hostInfo: string;
   currentPhase: number;
   isMock?: boolean;
+  isHost?: boolean;
   roundNumber?: number;
   isMyTurn?: boolean;
   activePlayerName?: string;
   activeEvent?: ActiveEventInfo | null;
   onOpenCharSelect: () => void;
+  onDeleteMatch?: () => void;
   onBackToLobby?: () => void;
 }
 
@@ -28,11 +30,13 @@ export const TableTopBar: React.FC<TableTopBarProps> = ({
   hostInfo,
   currentPhase,
   isMock = true,
+  isHost = false,
   roundNumber = 1,
   isMyTurn = false,
   activePlayerName,
   activeEvent,
   onOpenCharSelect,
+  onDeleteMatch,
   onBackToLobby,
 }) => {
   const phaseLabel = PHASE_LABELS[currentPhase] || String(currentPhase);
@@ -93,6 +97,15 @@ export const TableTopBar: React.FC<TableTopBarProps> = ({
             className="game-table__btn game-table__btn--primary"
           >
             Reset Mock Data
+          </button>
+        )}
+        {!isMock && isHost && onDeleteMatch && (
+          <button
+            type="button"
+            onClick={onDeleteMatch}
+            className="game-table__btn game-table__btn--danger"
+          >
+            Delete Match
           </button>
         )}
         <button
