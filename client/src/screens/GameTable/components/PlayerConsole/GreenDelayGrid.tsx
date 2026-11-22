@@ -4,6 +4,7 @@ import { DebouncedPopover } from "../../../../components/ui";
 
 export interface GreenDelayGridProps {
   greenCards: GreenCard[];
+  concealedCardIds?: string[];
   selectedGreenCardId?: string | null;
   onTriggerGreenCard: (card: GreenCard) => void;
 }
@@ -25,16 +26,22 @@ const getGreenCardDesc = (name: string, fallback?: string): string => {
 
 export const GreenDelayGrid: React.FC<GreenDelayGridProps> = ({
   greenCards,
+  concealedCardIds,
   selectedGreenCardId,
   onTriggerGreenCard,
 }) => {
-  const slotCount = Math.max(12, greenCards.length);
+  const visibleGreens = concealedCardIds?.length
+    ? greenCards.filter(
+        (g) => !concealedCardIds.includes(g.card.id) && !concealedCardIds.includes(g.id)
+      )
+    : greenCards;
+  const slotCount = Math.max(12, visibleGreens.length);
 
   return (
-    <div className="game-table__console-green">
+    <div className="game-table__console-green" data-flight-anchor="my-green">
       <div className="game-table__green-grid">
         {Array.from({ length: slotCount }).map((_, idx) => {
-          const gCard = greenCards[idx];
+          const gCard = visibleGreens[idx];
           if (!gCard) {
             return (
               <div

@@ -7,6 +7,7 @@ import { SkillHooks } from "../skill_hooks";
 import { GeneralStoreDraftState } from "../interact_types";
 import { AoePipeline } from "../pipeline/aoe_pipeline";
 import { AtomicEffects } from "../primitives/atomic_effects";
+import { ArenaChainManager } from "../../arena/arena_chain_manager";
 
 export class DraftStore {
   // Open General Store draft session
@@ -34,6 +35,18 @@ export class DraftStore {
 
     const removed = player.handCards.splice(resolvedIdx, 1)[0];
     AtomicEffects.discardCard(state, removed, deckManager);
+
+    ArenaChainManager.appendBatch(state, [
+      {
+        kind: "PLAYED_CARD",
+        card: removed,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        originZone: "HAND",
+        destinationZone: "DISCARD",
+        actionLabel: removed.name,
+      },
+    ]);
 
     const suzyEvents: DomainEvent[] = [];
     SkillHooks.checkSuzyLafayette(state, player, suzyEvents);

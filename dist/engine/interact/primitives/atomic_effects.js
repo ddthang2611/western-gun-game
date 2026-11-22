@@ -10,6 +10,7 @@ const seat_manager_1 = require("../../board/seat_manager");
 const elimination_handler_1 = require("../../elimination/elimination_handler");
 const skill_hooks_1 = require("../skill_hooks");
 const event_rule_registry_1 = require("../../events/event_rule_registry");
+const arena_chain_manager_1 = require("../../arena/arena_chain_manager");
 const inventory_1 = require("../../utils/inventory");
 class AtomicEffects {
     // Draw cards from state deck
@@ -147,6 +148,20 @@ class AtomicEffects {
         if (!card)
             return null;
         this.discardCard(state, card, deckManager);
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+            {
+                kind: "DISCARD_CARD",
+                card,
+                actorPlayerId: victim.id,
+                actorPlayerName: victim.name,
+                originZone: targetArea,
+                originSlotKey: targetArea === "EQUIPMENT"
+                    ? arena_chain_manager_1.ArenaChainManager.resolveEquipmentSlotKey(card)
+                    : undefined,
+                destinationZone: "DISCARD",
+                actionLabel: `Destroyed (${card.name})`,
+            },
+        ]);
         this.emitAreaTransferEvent(destroyer, victim, targetArea, card, false, events);
         if (targetArea === "HAND") {
             skill_hooks_1.SkillHooks.checkSuzyLafayette(state, victim, events);
@@ -204,6 +219,19 @@ class AtomicEffects {
                 break;
             const beerCard = victim.handCards.splice(beerIdx, 1)[0];
             this.discardCard(state, beerCard, deckManager);
+            arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                {
+                    kind: "DEFENSE_CARD",
+                    card: beerCard,
+                    actorPlayerId: victim.id,
+                    actorPlayerName: victim.name,
+                    originZone: "HAND",
+                    destinationZone: "DISCARD",
+                    actionLabel: "BEER (Revive)",
+                    vfxType: "heal",
+                    vfxTargetId: victim.id,
+                },
+            ]);
             const healAmount = skill_hooks_1.SkillHooks.getBeerHealAmount(victim, state);
             victim.hp = Math.min(victim.hp + healAmount, victim.maxHp);
             skill_hooks_1.SkillHooks.onPlayOutOfTurn(state, victim, events);

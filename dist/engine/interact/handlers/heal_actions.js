@@ -6,6 +6,7 @@ const event_engine_1 = require("../../events/event_engine");
 const skill_hooks_1 = require("../skill_hooks");
 const atomic_effects_1 = require("../primitives/atomic_effects");
 const aoe_actions_1 = require("./aoe_actions");
+const arena_chain_manager_1 = require("../../arena/arena_chain_manager");
 class HealActions {
     // Remove specified card IDs from hand
     static removeHandCardsById(player, cardIds) {
@@ -34,6 +35,19 @@ class HealActions {
         atomic_effects_1.AtomicEffects.discardCard(state, card, deckManager);
         const events = [];
         const living = seat_manager_1.SeatManager.getLivingContenders(state);
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+            {
+                kind: "PLAYED_CARD",
+                card,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                originZone: "HAND",
+                destinationZone: "DISCARD",
+                actionLabel: living.length <= 2 ? `${card.name} (No Effect)` : `${card.name} (+HP)`,
+                vfxType: living.length > 2 ? "heal" : undefined,
+                vfxTargetId: player.id,
+            },
+        ]);
         if (living.length <= 2) {
             events.push({
                 type: "BEER_NO_EFFECT_2P",
@@ -79,6 +93,28 @@ class HealActions {
         }
         const removed = this.removeHandCardsById(player, [card.id, extraCard.id]);
         atomic_effects_1.AtomicEffects.discardCards(state, removed, deckManager);
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+            {
+                kind: "PLAYED_CARD",
+                card,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                originZone: "HAND",
+                destinationZone: "DISCARD",
+                actionLabel: `${card.name} (+2 HP)`,
+                vfxType: "heal",
+                vfxTargetId: player.id,
+            },
+            {
+                kind: "EXTRA_COST",
+                card: extraCard,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                originZone: "HAND",
+                destinationZone: "DISCARD",
+                actionLabel: `Discard Cost (${extraCard.name})`,
+            },
+        ]);
         const events = [];
         atomic_effects_1.AtomicEffects.applyHeal(state, player, 2, card, events, deckManager);
         skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, events);
@@ -104,8 +140,33 @@ class HealActions {
         const removed = this.removeHandCardsById(player, [card.id, extraCard.id]);
         atomic_effects_1.AtomicEffects.discardCards(state, removed, deckManager);
         const events = [];
-        if (target.id !== player.id &&
-            skill_hooks_1.SkillHooks.isImmuneToCard(target, card, player, state)) {
+        const isImmune = target.id !== player.id &&
+            skill_hooks_1.SkillHooks.isImmuneToCard(target, card, player, state);
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+            {
+                kind: "PLAYED_CARD",
+                card,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                targetPlayerId: target.id,
+                targetPlayerName: target.name,
+                originZone: "HAND",
+                destinationZone: "DISCARD",
+                actionLabel: `${card.name} -> ${target.name}`,
+                vfxType: isImmune ? undefined : "heal",
+                vfxTargetId: target.id,
+            },
+            {
+                kind: "EXTRA_COST",
+                card: extraCard,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                originZone: "HAND",
+                destinationZone: "DISCARD",
+                actionLabel: `Discard Cost (${extraCard.name})`,
+            },
+        ]);
+        if (isImmune) {
             events.push({
                 type: "APACHE_KID_IMMUNITY",
                 payload: {

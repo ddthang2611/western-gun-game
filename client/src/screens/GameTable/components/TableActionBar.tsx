@@ -14,6 +14,7 @@ export interface TableActionBarProps {
   currentPhase?: number;
   isMyTurn?: boolean;
   isLocked?: boolean;
+  isArenaLocked?: boolean;
   excessCardsCount?: number;
   phase3DiscardCount?: number;
   activeSkillHint?: string | null;
@@ -39,6 +40,7 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
   currentPhase = 2,
   isMyTurn = true,
   isLocked = false,
+  isArenaLocked = false,
   excessCardsCount = 0,
   phase3DiscardCount = 0,
   activeSkillHint,
@@ -53,10 +55,11 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
   onEndTurn,
   onTriggerSkill,
 }) => {
+  const isInteractionBlocked = isLocked || isArenaLocked;
   const isPhase3Discard = !isMock && isMyTurn && currentPhase === 3;
   const isActionPhase = isMock || currentPhase === 2 || isPhase3Discard;
-  const canActInTurn = !isLocked && isMyTurn && isActionPhase;
-  const canUseSkill = !isLocked && isMyTurn && (isMock || currentPhase === 2);
+  const canActInTurn = !isInteractionBlocked && isMyTurn && isActionPhase;
+  const canUseSkill = !isInteractionBlocked && isMyTurn && (isMock || currentPhase === 2);
   const primaryLabel = isPhase3Discard
     ? phase3DiscardCount > 0
       ? `Discard (${phase3DiscardCount})`
@@ -70,9 +73,9 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
 
   return (
     <section
-      className={`game-table__action-bar${isLocked ? " game-table__action-bar--locked" : ""}`}
+      className={`game-table__action-bar${isInteractionBlocked ? " game-table__action-bar--locked" : ""}`}
     >
-      <div className="game-table__action-left">
+      <div className="game-table__action-left" data-flight-anchor="my-judgements">
         {myJudgements.hasJail && (
           <span className="game-table__judgement-tag game-table__judgement-tag--jail">
             JAIL
@@ -90,6 +93,10 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
           {isLocked ? (
             <span className="game-table__hint game-table__hint--warning">
               Match paused or reconnecting - actions locked
+            </span>
+          ) : isArenaLocked ? (
+            <span className="game-table__hint game-table__hint--skill">
+              Resolving cards in Card Arena...
             </span>
           ) : activeSkillHint ? (
             <span className="game-table__hint game-table__hint--skill">

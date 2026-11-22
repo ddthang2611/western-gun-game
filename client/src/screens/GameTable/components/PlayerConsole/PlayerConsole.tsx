@@ -17,6 +17,7 @@ export interface PlayerConsoleProps {
   selectedCardIds?: string[];
   discardCardIds?: string[];
   concealedCardIds?: string[];
+  concealedInPlayCardIds?: string[];
   selectedGreenCardId?: string | null;
   isCurrentTurn?: boolean;
   isLocked?: boolean;
@@ -35,6 +36,7 @@ export const PlayerConsole: React.FC<PlayerConsoleProps> = ({
   selectedCardIds,
   discardCardIds,
   concealedCardIds,
+  concealedInPlayCardIds,
   selectedGreenCardId,
   isCurrentTurn = false,
   isLocked = false,
@@ -47,8 +49,11 @@ export const PlayerConsole: React.FC<PlayerConsoleProps> = ({
         isCurrentTurn ? " game-table__player-console--active-turn" : ""
       }${isLocked ? " game-table__player-console--locked" : ""}`}
     >
-      {/* Left: 5 stacked equipment bars */}
-      <EquipmentColumn equipments={equipments} />
+      {/* Left: 6 fixed equipment slots */}
+      <EquipmentColumn
+        equipments={equipments}
+        concealedCardIds={concealedInPlayCardIds}
+      />
 
       {/* Center: Hand cards fan */}
       <HandCardsFan
@@ -65,6 +70,7 @@ export const PlayerConsole: React.FC<PlayerConsoleProps> = ({
       {/* Right-Center: Enlarged Green-Delay buttons */}
       <GreenDelayGrid
         greenCards={greenCards}
+        concealedCardIds={concealedInPlayCardIds}
         selectedGreenCardId={selectedGreenCardId}
         onTriggerGreenCard={(card) => {
           if (!isLocked) onTriggerGreenCard(card);

@@ -38,6 +38,7 @@ export class GameSessionManager {
   private matchEventSeqs: Map<string, number> = new Map();
   private matchIds: Map<string, string> = new Map();
   private inactivityTimers: Map<string, NodeJS.Timeout> = new Map();
+  private arenaTimers: Map<string, NodeJS.Timeout> = new Map();
 
   public static getInstance(): GameSessionManager {
     if (!GameSessionManager.instance) {
@@ -63,6 +64,52 @@ export class GameSessionManager {
     }
   }
 
+  // Clear room Card Arena settle timer
+  private clearArenaTimer(roomId: string): void {
+    const existing = this.arenaTimers.get(roomId);
+    if (existing) {
+      clearTimeout(existing);
+      this.arenaTimers.delete(roomId);
+    }
+  }
+
+  // Synchronize authoritative Card Arena settle timer
+  private syncArenaTimer(
+    roomId: string,
+    engine: GameEngine,
+    lobbyManager?: LobbyManager
+  ): void {
+    this.clearArenaTimer(roomId);
+    if (!lobbyManager || !engine.isArenaPacingEnabled()) return;
+
+    const simState = engine.getState();
+    const chain = simState.arenaChain;
+    if (!chain || chain.status !== "SETTLING") {
+      return;
+    }
+
+    if (!simState.gameOver && this.isMatchPaused(engine, lobbyManager)) {
+      return;
+    }
+
+    const remainingMs = Math.max(0, (chain.settleUntil || 0) - Date.now());
+    const timer = setTimeout(() => {
+      this.arenaTimers.delete(roomId);
+      if (this.engines.get(roomId) !== engine) return;
+      const currentState = engine.getState();
+      if (!currentState.gameOver && this.isMatchPaused(engine, lobbyManager)) {
+        return;
+      }
+      const cleared = engine.completeArenaSettling();
+      if (cleared.changed) {
+        this.persistEventsAndState(roomId, [], engine);
+        this.broadcastGameSnapshot(roomId, engine, lobbyManager);
+      }
+    }, remainingMs);
+    timer.unref?.();
+    this.arenaTimers.set(roomId, timer);
+  }
+
   // Schedule room inactivity timer when active
   private refreshInactivityTimer(
     roomId: string,
@@ -74,6 +121,9 @@ export class GameSessionManager {
 
     const simState = engine.getState();
     if (simState.gameOver || simState.matchPhase === "FINISHED") {
+      return;
+    }
+    if (simState.arenaChain?.status === "SETTLING") {
       return;
     }
     if (this.isMatchPaused(engine, lobbyManager)) {
@@ -99,6 +149,10 @@ export class GameSessionManager {
     const simState = engine.getState();
     if (simState.gameOver || simState.matchPhase === "FINISHED") return;
     if (this.isMatchPaused(engine, lobbyManager)) return;
+    if (simState.arenaChain?.status === "SETTLING") {
+      this.syncArenaTimer(roomId, engine, lobbyManager);
+      return;
+    }
 
     const collectedEvents: DomainEvent[] = [];
     let mutated = false;
@@ -279,6 +333,7 @@ export class GameSessionManager {
 
   public endSession(roomId: string): void {
     this.clearInactivityTimer(roomId);
+    this.clearArenaTimer(roomId);
     this.engines.delete(roomId);
     this.combatLogs.delete(roomId);
     this.matchEventSeqs.delete(roomId);
@@ -384,6 +439,7 @@ export class GameSessionManager {
         defaultEnableCharacterSelect: true,
         defaultEnable3PlayerVariant: saved.is3PlayerVariant,
         expansions: saved.expansions,
+        enableArenaPacing: true,
       }
     );
 
@@ -492,6 +548,7 @@ export class GameSessionManager {
         defaultEnableCharacterSelect: true,
         defaultEnable3PlayerVariant: is3PVariant,
         expansions,
+        enableArenaPacing: true,
       });
 
       const matchResult = engine.startMatch(
@@ -507,6 +564,7 @@ export class GameSessionManager {
       );
 
       this.clearInactivityTimer(roomId);
+      this.clearArenaTimer(roomId);
       const nextMatchId = crypto.randomUUID();
       const initialEvents = matchResult.events || [];
       const repo = SessionRepository.getInstance();
@@ -676,6 +734,7 @@ export class GameSessionManager {
     lobbyManager: LobbyManager
   ): void {
     this.emitPlayerSnapshot(engine, playerId, roomId, lobbyManager);
+    this.syncArenaTimer(roomId, engine, lobbyManager);
     this.refreshInactivityTimer(roomId, engine, lobbyManager);
   }
 
@@ -688,6 +747,7 @@ export class GameSessionManager {
     for (const playerId of engine.getState().players.keys()) {
       this.emitPlayerSnapshot(engine, playerId, roomId, lobbyManager);
     }
+    this.syncArenaTimer(roomId, engine, lobbyManager);
     this.refreshInactivityTimer(roomId, engine, lobbyManager);
   }
 

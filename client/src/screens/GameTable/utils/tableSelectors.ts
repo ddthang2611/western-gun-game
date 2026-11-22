@@ -159,7 +159,10 @@ export interface ComputeTableViewModelParams {
   phase3DiscardIds: string[];
   skillMode: SkillModeType;
   skillDiscardIds: string[];
-  ephemeralCheckCards: InFlightCard[];
+  visibleArenaCards: InFlightCard[];
+  isArenaBlockingActions: boolean;
+  isStepAnimating: boolean;
+  concealedInPlayCardIds: string[];
 }
 
 export interface TableViewModel {
@@ -176,6 +179,8 @@ export interface TableViewModel {
   activeJudgements: { hasJail: boolean; hasDynamite: boolean };
   isMyTurn: boolean;
   isTurnLocked: boolean;
+  isArenaLocked: boolean;
+  isStepAnimating: boolean;
   isActionLocked: boolean;
   activePlayerName: string | undefined;
   handLimit: number;
@@ -207,6 +212,7 @@ export interface BaseTableContext {
   activeHand: Card[];
   isMyTurn: boolean;
   isTurnLocked: boolean;
+  isArenaLocked: boolean;
   isActionLocked: boolean;
 }
 
@@ -218,8 +224,17 @@ export function deriveBaseTableContext(params: {
   myHand: Card[];
   myHeroes: Character[];
   myHp: number;
+  isArenaBlockingActions?: boolean;
 }): BaseTableContext {
-  const { state, isMock, isWsConnected, myHand, myHeroes, myHp } = params;
+  const {
+    state,
+    isMock,
+    isWsConnected,
+    myHand,
+    myHeroes,
+    myHp,
+    isArenaBlockingActions = false,
+  } = params;
   const myPlayerIndex = state.players.findIndex((p) => p.id === state.myPlayerId);
   const myPlayer = myPlayerIndex === -1 ? undefined : state.players[myPlayerIndex];
   const activeHeroes = isMock
@@ -240,8 +255,15 @@ export function deriveBaseTableContext(params: {
   const isMyTurn =
     isMock || (Boolean(state.myPlayerId) && state.activePlayerId === state.myPlayerId);
   const isTurnLocked = !isMock && (Boolean(state.matchPaused) || !isWsConnected);
+  const isArenaLocked = Boolean(
+    isArenaBlockingActions ||
+      (state.arenaChain &&
+        (state.arenaChain.status !== "IDLE" || state.arenaChain.entries.length > 0))
+  );
   const isActionLocked =
-    isTurnLocked || (!isMock && (!isMyTurn || state.currentPhase !== 2));
+    isTurnLocked ||
+    isArenaLocked ||
+    (!isMock && (!isMyTurn || state.currentPhase !== 2));
 
   return {
     myPlayerIndex,
@@ -253,6 +275,7 @@ export function deriveBaseTableContext(params: {
     activeHand,
     isMyTurn,
     isTurnLocked,
+    isArenaLocked,
     isActionLocked,
   };
 }
@@ -276,7 +299,10 @@ export function computeTableViewModel({
   phase3DiscardIds,
   skillMode,
   skillDiscardIds,
-  ephemeralCheckCards,
+  visibleArenaCards,
+  isArenaBlockingActions,
+  isStepAnimating,
+  concealedInPlayCardIds,
 }: ComputeTableViewModelParams): TableViewModel {
   const base = deriveBaseTableContext({
     state,
@@ -285,6 +311,7 @@ export function computeTableViewModel({
     myHand,
     myHeroes,
     myHp,
+    isArenaBlockingActions,
   });
   const {
     myPlayerIndex,
@@ -296,6 +323,7 @@ export function computeTableViewModel({
     activeHand,
     isMyTurn,
     isTurnLocked,
+    isArenaLocked,
     isActionLocked,
   } = base;
   const opponents =
@@ -309,9 +337,27 @@ export function computeTableViewModel({
   const activeMaxHp = isMock ? myMaxHp : myPlayer?.maxHp ?? myMaxHp;
   const activeEquipments = isMock ? myEquipments : myPlayer?.equipments || myEquipments;
   const activeGreenCards = isMock ? myGreenCards : myPlayer?.greenCards || myGreenCards;
+  const concealedSet = concealedInPlayCardIds.length
+    ? new Set(concealedInPlayCardIds)
+    : undefined;
   const activeJudgements =
     !isMock && myPlayer
-      ? { hasJail: myPlayer.hasJail, hasDynamite: myPlayer.hasDynamite }
+      ? concealedSet
+        ? {
+            hasJail: (myPlayer.judgements || []).some(
+              (j) =>
+                j.type === "JAIL" &&
+                !concealedSet.has(j.id) &&
+                !(j.card && concealedSet.has(j.card.id))
+            ),
+            hasDynamite: (myPlayer.judgements || []).some(
+              (j) =>
+                j.type === "DYNAMITE" &&
+                !concealedSet.has(j.id) &&
+                !(j.card && concealedSet.has(j.card.id))
+            ),
+          }
+        : { hasJail: myPlayer.hasJail, hasDynamite: myPlayer.hasDynamite }
       : myJudgements;
 
   const activePlayerName = state.players.find(
@@ -361,37 +407,7 @@ export function computeTableViewModel({
       .map((j) => ({ id: j.card!.id, label: j.card!.name, card: j.card! })),
   ];
 
-  const activeEventEntry: InFlightCard[] = state.activeEvent
-    ? [
-        {
-          id: `active_evt_${state.activeEvent.id}`,
-          card: {
-            id: state.activeEvent.id,
-            name: state.activeEvent.name,
-            border: "brown",
-            rank: "A",
-            suit: "clubs",
-            desc: state.activeEvent.desc,
-            image: state.activeEvent.image,
-          },
-          sourcePlayerName:
-            state.activeEvent.pack === "fistful" ? "A Fistful of Cards" : "High Noon",
-          actionText: state.activeEvent.name,
-        },
-      ]
-    : [];
-  const combinedInFlight = [
-    ...activeEventEntry,
-    ...state.inFlightCards,
-    ...ephemeralCheckCards,
-  ];
-  const seenInFlight = new Set<string>();
-  const displayInFlightCards = combinedInFlight.filter((c) => {
-    const key = c.isFlipReveal ? c.id : c.card?.id || c.id;
-    if (seenInFlight.has(key)) return false;
-    seenInFlight.add(key);
-    return true;
-  });
+  const displayInFlightCards = visibleArenaCards;
 
   const activeSkillHint = computeActionHint({
     skillMode,
@@ -410,6 +426,7 @@ export function computeTableViewModel({
   const isSkillMode = skillMode !== null;
   const canConfirmSkill =
     !isTurnLocked &&
+    !isArenaLocked &&
     !isActionLocked &&
     (skillMode === "CHUCK_WENGAM_SACRIFICE"
       ? !isMock || myHp > 1
@@ -423,6 +440,7 @@ export function computeTableViewModel({
 
   const canConfirmAction =
     !isTurnLocked &&
+    !isArenaLocked &&
     !isSkillMode &&
     Boolean(
       (!isMock && isMyTurn && state.currentPhase === 3 && phase3DiscardIds.length > 0) ||
@@ -451,6 +469,8 @@ export function computeTableViewModel({
     activeJudgements,
     isMyTurn,
     isTurnLocked,
+    isArenaLocked,
+    isStepAnimating,
     isActionLocked,
     activePlayerName,
     handLimit,

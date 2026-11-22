@@ -28,7 +28,7 @@ function mapClientEquipments(equipments) {
     };
 }
 // Convert sanitized snapshot to client TableState
-function buildTableState(snapshot, playerId, engine, combatLog, matchPaused, isPlayerOnline) {
+function buildTableState(snapshot, playerId, engine, combatLog, matchPaused, isPlayerOnline, matchId, hostId) {
     const simState = engine.getState();
     const myPlayer = snapshot.players.find((p) => p.id === playerId);
     const mySimPlayer = simState.players.get(playerId);
@@ -88,29 +88,33 @@ function buildTableState(snapshot, playerId, engine, combatLog, matchPaused, isP
                 renegade++;
         }
     });
-    const seenInFlightKeys = new Set();
-    const mappedInFlight = (snapshot.pendingReactionTargets || [])
-        .filter((r) => {
-        const key = r.sourceCard?.id ||
-            `${r.sourcePlayerId}:${r.type}:${r.sourceCard?.name || ""}`;
-        if (seenInFlightKeys.has(key))
-            return false;
-        seenInFlightKeys.add(key);
-        return true;
-    })
-        .map((r) => ({
-        id: r.id,
-        card: mapClientCard(r.sourceCard) ?? {
-            id: r.id,
-            name: r.type,
-            border: "brown",
-            rank: "A",
-            suit: "hearts",
-            desc: r.type,
-        },
-        sourcePlayerName: nameById.get(r.sourcePlayerId) || "Unknown",
-        targetPlayerName: nameById.get(r.targetPlayerId) || "Unknown",
-        actionText: `${r.type} (${r.currentCount}/${r.requiredCount})`,
+    const now = Date.now();
+    const rawArena = snapshot.arenaChain || {
+        chainId: "",
+        status: "IDLE",
+        entries: [],
+        stepLockUntil: 0,
+        settleUntil: 0,
+    };
+    const mappedArenaEntries = (rawArena.entries || []).map((entry) => ({
+        ...entry,
+        card: mapClientCard(entry.card),
+    }));
+    const mappedArenaChain = {
+        chainId: rawArena.chainId,
+        status: rawArena.status,
+        entries: mappedArenaEntries,
+        stepLockRemainingMs: rawArena.stepLockUntil > now ? rawArena.stepLockUntil - now : 0,
+        settleRemainingMs: rawArena.settleUntil > now ? rawArena.settleUntil - now : 0,
+    };
+    const mappedInFlight = mappedArenaEntries.map((entry) => ({
+        id: entry.id,
+        card: entry.card,
+        sourcePlayerName: entry.actorPlayerName,
+        targetPlayerName: entry.targetPlayerName,
+        actionText: entry.actionLabel,
+        kind: entry.kind,
+        outcome: entry.outcome,
     }));
     const mappedMyPending = snapshot.myPendingReaction
         ? {
@@ -138,6 +142,8 @@ function buildTableState(snapshot, playerId, engine, combatLog, matchPaused, isP
         : null;
     return {
         roomId: snapshot.roomId,
+        matchId,
+        isHost: Boolean(hostId && hostId === playerId),
         stateSeq: snapshot.stateSeq,
         hostInfo: `Room: ${snapshot.roomId}`,
         matchPhase: snapshot.matchPhase,
@@ -161,6 +167,7 @@ function buildTableState(snapshot, playerId, engine, combatLog, matchPaused, isP
         pendingTurnStartChoice: snapshot.pendingTurnStartChoice,
         pendingPhase1Choice: snapshot.pendingPhase1Choice,
         inFlightCards: mappedInFlight,
+        arenaChain: mappedArenaChain,
         combatLog: combatLog.slice(0, 50),
         roleCounts: { police, outlaw, renegade },
         myRole: snapshot.myState?.role || undefined,

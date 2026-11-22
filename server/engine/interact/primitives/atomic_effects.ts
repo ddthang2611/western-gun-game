@@ -9,6 +9,7 @@ import { TargetArea } from "../../combat/target_validator";
 import { SkillHooks } from "../skill_hooks";
 import { PendingReaction, ReactionConfig } from "../interact_types";
 import { EventRuleRegistry } from "../../events/event_rule_registry";
+import { ArenaChainManager } from "../../arena/arena_chain_manager";
 import { hasBarrelCard, removeEquippedCardById } from "../../utils/inventory";
 
 export interface DamageResult {
@@ -215,6 +216,21 @@ export class AtomicEffects {
     if (!card) return null;
 
     this.discardCard(state, card, deckManager);
+    ArenaChainManager.appendBatch(state, [
+      {
+        kind: "DISCARD_CARD",
+        card,
+        actorPlayerId: victim.id,
+        actorPlayerName: victim.name,
+        originZone: targetArea,
+        originSlotKey:
+          targetArea === "EQUIPMENT"
+            ? ArenaChainManager.resolveEquipmentSlotKey(card)
+            : undefined,
+        destinationZone: "DISCARD",
+        actionLabel: `Destroyed (${card.name})`,
+      },
+    ]);
     this.emitAreaTransferEvent(destroyer, victim, targetArea, card, false, events);
 
     if (targetArea === "HAND") {
@@ -288,6 +304,20 @@ export class AtomicEffects {
 
       const beerCard = victim.handCards.splice(beerIdx, 1)[0];
       this.discardCard(state, beerCard, deckManager);
+
+      ArenaChainManager.appendBatch(state, [
+        {
+          kind: "DEFENSE_CARD",
+          card: beerCard,
+          actorPlayerId: victim.id,
+          actorPlayerName: victim.name,
+          originZone: "HAND",
+          destinationZone: "DISCARD",
+          actionLabel: "BEER (Revive)",
+          vfxType: "heal",
+          vfxTargetId: victim.id,
+        },
+      ]);
 
       const healAmount = SkillHooks.getBeerHealAmount(victim, state);
       victim.hp = Math.min(victim.hp + healAmount, victim.maxHp);

@@ -11,6 +11,7 @@ export interface UseTableSelectionParams {
   isMock: boolean;
   isMyTurn: boolean;
   isTurnLocked: boolean;
+  isArenaLocked: boolean;
   isActionLocked: boolean;
   isWsConnected: boolean;
   currentPhase: number;
@@ -26,6 +27,7 @@ export function useTableSelection({
   isMock,
   isMyTurn,
   isTurnLocked,
+  isArenaLocked,
   isActionLocked,
   isWsConnected,
   currentPhase,
@@ -94,7 +96,7 @@ export function useTableSelection({
 
   const handleSelectHandCard = useCallback(
     (card: Card) => {
-      if (isTurnLocked) return;
+      if (isTurnLocked || isArenaLocked) return;
       setSelectedGreenCardId(null);
 
       if (!isMock && isMyTurn && currentPhase === 3) {
@@ -175,6 +177,7 @@ export function useTableSelection({
       isMyTurn,
       isSniperBangSelected,
       isTurnLocked,
+      isArenaLocked,
       requiresExtraDiscard,
       selectedCard,
       selectedHandCardId,
@@ -191,6 +194,9 @@ export function useTableSelection({
             ? "Match is paused. Actions are locked."
             : "Connection lost. Reconnecting..."
         );
+        return;
+      }
+      if (isArenaLocked) {
         return;
       }
       if (isActionLocked) {
@@ -215,7 +221,7 @@ export function useTableSelection({
       setSelectedTargetId(null);
       setSelectedGreenCardId((prev) => (prev === gCard.id ? null : gCard.id));
     },
-    [isActionLocked, isTurnLocked, isWsConnected, showError]
+    [isActionLocked, isArenaLocked, isTurnLocked, isWsConnected, showError]
   );
 
   const handleTriggerSkill = useCallback(
@@ -226,6 +232,9 @@ export function useTableSelection({
             ? "Match is paused. Actions are locked."
             : "Connection lost. Reconnecting..."
         );
+        return;
+      }
+      if (isArenaLocked) {
         return;
       }
       if (isActionLocked) {
@@ -291,6 +300,7 @@ export function useTableSelection({
       clearSkillState,
       effectiveSkillHeroes,
       isActionLocked,
+      isArenaLocked,
       isMock,
       isTurnLocked,
       isWsConnected,

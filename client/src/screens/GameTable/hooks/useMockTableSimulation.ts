@@ -1,11 +1,12 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
+  ArenaCardEntry,
+  ArenaChainState,
   Card,
   Character,
   EquipmentSlot,
   GeneralStoreInfo,
   GreenCard,
-  InFlightCard,
   TableState,
 } from "../../../types/game";
 import type { SelectedTargetCard } from "../../../components/game";
@@ -16,40 +17,30 @@ import {
   initialMyHand,
   initialMyHeroes,
 } from "@data/mock/mockGameTable";
+import { resolveEquipmentSlotKey } from "../../../utils/equipments";
 import { TARGETED_SINGLE_CARDS } from "../utils/cardRules";
 import type { SkillModeType } from "../utils/tableSelectors";
-import type { VfxBeam } from "./useTableAnimations";
-
-export interface MockAnimationCallbacks {
-  scheduleTimeout: (fn: () => void, ms: number) => void;
-  enqueueFlight: (
-    fromSelector: string,
-    toSelector: string,
-    options?: {
-      cardImage?: string;
-      faceDown?: boolean;
-      label?: string;
-      durationMs?: number;
-    }
-  ) => void;
-  triggerVfx: (type: VfxBeam["type"], targetId?: string, aoeHeal?: boolean) => void;
-  addEphemeralCards: (entries: InFlightCard[]) => void;
-  removeEphemeralCards: (ids: Set<string>) => void;
-}
 
 export interface UseMockTableSimulationParams {
   externalHeroes?: Character[];
-  animations: MockAnimationCallbacks;
   showError: (message: string) => void;
 }
 
-// Isolate offline /dev-test mock simulation
+const IDLE_ARENA: ArenaChainState = {
+  chainId: "",
+  status: "IDLE",
+  entries: [],
+};
+
+// Isolate offline /dev-test mock simulation using the same ArenaChain pipeline as live server
 export function useMockTableSimulation({
   externalHeroes,
-  animations,
   showError,
 }: UseMockTableSimulationParams) {
-  const [state, setState] = useState<TableState>(initialMockState);
+  const [state, setState] = useState<TableState>(() => ({
+    ...initialMockState,
+    arenaChain: IDLE_ARENA,
+  }));
   const [myHand, setMyHand] = useState<Card[]>(initialMyHand);
   const [myHeroes, setMyHeroes] = useState<Character[]>(
     () => externalHeroes || initialMyHeroes
@@ -71,13 +62,59 @@ export function useMockTableSimulation({
     hasDynamite: false,
   });
 
-  const {
-    scheduleTimeout,
-    enqueueFlight,
-    triggerVfx,
-    addEphemeralCards,
-    removeEphemeralCards,
-  } = animations;
+  const chainSeqRef = useRef(0);
+  const settleTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (settleTimerRef.current !== null) {
+        window.clearTimeout(settleTimerRef.current);
+      }
+    };
+  }, []);
+
+  const showMockArenaChain = useCallback(
+    (
+      drafts: Array<
+        Omit<ArenaCardEntry, "id" | "stepIndex" | "batchIndex" | "addedAt">
+      >,
+      holdMs = 1350,
+      onCleared?: () => void
+    ) => {
+      if (settleTimerRef.current !== null) {
+        window.clearTimeout(settleTimerRef.current);
+        settleTimerRef.current = null;
+      }
+      chainSeqRef.current += 1;
+      const chainId = `mock_chain_${chainSeqRef.current}`;
+      const now = Date.now();
+      const entries: ArenaCardEntry[] = drafts.map((d, idx) => ({
+        ...d,
+        id: `${chainId}_s${idx}`,
+        stepIndex: idx,
+        batchIndex: 0,
+        addedAt: now,
+      }));
+      setState((prev) => ({
+        ...prev,
+        arenaChain: {
+          chainId,
+          status: "SETTLING",
+          entries,
+          settleRemainingMs: holdMs,
+        },
+      }));
+      settleTimerRef.current = window.setTimeout(() => {
+        settleTimerRef.current = null;
+        setState((prev) => ({
+          ...prev,
+          arenaChain: IDLE_ARENA,
+        }));
+        onCleared?.();
+      }, holdMs);
+    },
+    []
+  );
 
   const applyMockManipulation = useCallback(
     (
@@ -143,6 +180,11 @@ export function useMockTableSimulation({
       discardCostIds: string[] = [],
       sourceGreenCardId?: string
     ) => {
+      const playedCard = selectedCardId
+        ? myHand.find((c) => c.id === selectedCardId)
+        : myGreenCards.find((g) => g.id === sourceGreenCardId)?.card;
+      const targetPlayer = state.players.find((p) => p.id === targetId);
+
       applyMockManipulation(targetId, chosen, isSteal, cardName);
       if (selectedCardId) {
         const removed = new Set([selectedCardId, ...discardCostIds]);
@@ -151,8 +193,33 @@ export function useMockTableSimulation({
       if (sourceGreenCardId) {
         setMyGreenCards((prev) => prev.filter((g) => g.id !== sourceGreenCardId));
       }
+      if (playedCard) {
+        showMockArenaChain(
+          [
+            {
+              kind: "PLAYED_CARD",
+              card: playedCard,
+              actorPlayerId: state.myPlayerId,
+              actorPlayerName: "You",
+              targetPlayerId: targetId,
+              targetPlayerName: targetPlayer?.name,
+              originZone: sourceGreenCardId ? "GREEN" : "HAND",
+              destinationZone: "DISCARD",
+              actionLabel: `${cardName} -> ${targetPlayer?.name || "Target"}`,
+            },
+          ],
+          1400
+        );
+      }
     },
-    [applyMockManipulation]
+    [
+      applyMockManipulation,
+      myGreenCards,
+      myHand,
+      showMockArenaChain,
+      state.myPlayerId,
+      state.players,
+    ]
   );
 
   const confirmMockSkill = useCallback(
@@ -167,7 +234,6 @@ export function useMockTableSimulation({
           return false;
         }
         setMyHp((prev) => prev - 1);
-        triggerVfx("draw");
         setState((prev) => ({
           ...prev,
           combatLog: ["Chuck Wengam: -1 HP, Draw 2", ...prev.combatLog],
@@ -182,7 +248,21 @@ export function useMockTableSimulation({
           return false;
         }
         setMyHand((prev) => prev.filter((c) => c.id !== chosenCard.id));
-        triggerVfx("draw");
+        showMockArenaChain(
+          [
+            {
+              kind: "EXTRA_COST",
+              card: chosenCard,
+              actorPlayerId: state.myPlayerId,
+              actorPlayerName: "You",
+              originZone: "HAND",
+              destinationZone: "DISCARD",
+              actionLabel: "Jose Delgado (+2)",
+              vfxType: "draw",
+            },
+          ],
+          1350
+        );
         setState((prev) => ({
           ...prev,
           combatLog: [`Jose Delgado: -${chosenCard.name}, Draw 2`, ...prev.combatLog],
@@ -196,9 +276,23 @@ export function useMockTableSimulation({
           return false;
         }
         const chosenIds = skillDiscardIds.slice(0, 2);
+        const discarded = myHand.filter((c) => chosenIds.includes(c.id));
         setMyHand((prev) => prev.filter((c) => !chosenIds.includes(c.id)));
         setMyHp((prev) => Math.min(prev + 1, myMaxHp));
-        triggerVfx("heal", state.myPlayerId);
+        showMockArenaChain(
+          discarded.map((c, idx) => ({
+            kind: "EXTRA_COST",
+            card: c,
+            actorPlayerId: state.myPlayerId,
+            actorPlayerName: "You",
+            originZone: "HAND",
+            destinationZone: "DISCARD",
+            actionLabel: "Sid Ketchum (+1 HP)",
+            vfxType: idx === 0 ? "heal" : undefined,
+            vfxTargetId: idx === 0 ? state.myPlayerId : undefined,
+          })),
+          1700
+        );
         setState((prev) => ({
           ...prev,
           combatLog: ["Sid Ketchum: +1 HP", ...prev.combatLog],
@@ -215,8 +309,25 @@ export function useMockTableSimulation({
           showError("Select a target opponent to shoot.");
           return false;
         }
+        const discarded = myHand.filter((c) => skillDiscardIds.includes(c.id)).slice(0, 2);
+        const target = state.players.find((p) => p.id === selectedTargetId);
         setMyHand((prev) => prev.filter((c) => !skillDiscardIds.includes(c.id)));
-        triggerVfx("bullet", selectedTargetId);
+        showMockArenaChain(
+          discarded.map((c, idx) => ({
+            kind: idx === 0 ? "PLAYED_CARD" : "EXTRA_COST",
+            card: c,
+            actorPlayerId: state.myPlayerId,
+            actorPlayerName: "You",
+            targetPlayerId: selectedTargetId,
+            targetPlayerName: target?.name,
+            originZone: "HAND",
+            destinationZone: "DISCARD",
+            actionLabel: "Doc Holyday BANG!",
+            vfxType: idx === 0 ? "bullet" : undefined,
+            vfxTargetId: idx === 0 ? selectedTargetId : undefined,
+          })),
+          1750
+        );
         setState((prev) => ({
           ...prev,
           combatLog: ["Doc Holyday: BANG!", ...prev.combatLog],
@@ -226,30 +337,59 @@ export function useMockTableSimulation({
 
       return false;
     },
-    [myHand, myHp, myMaxHp, showError, state.myPlayerId, triggerVfx]
+    [myHand, myHp, myMaxHp, showError, showMockArenaChain, state.myPlayerId, state.players]
   );
 
   const playMockGreenCard = useCallback(
     (selectedGreenCard: GreenCard, selectedTargetId: string | null) => {
       const gName = selectedGreenCard.card.name;
+      const target = selectedTargetId
+        ? state.players.find((p) => p.id === selectedTargetId)
+        : undefined;
+      let vfxType: ArenaCardEntry["vfxType"] = "bullet";
+      let vfxTargetId: string | undefined = selectedTargetId || undefined;
+      let vfxAoe = false;
+
       if (TARGETED_SINGLE_CARDS.has(gName) && selectedTargetId) {
-        triggerVfx("bullet", selectedTargetId);
+        vfxType = "bullet";
       } else if (gName === "CANTEEN") {
         setMyHp((prev) => Math.min(prev + 1, myMaxHp));
-        triggerVfx("heal", state.myPlayerId);
+        vfxType = "heal";
+        vfxTargetId = state.myPlayerId;
       } else if (gName === "PONY EXPRESS") {
-        triggerVfx("draw");
+        vfxType = "draw";
+        vfxTargetId = undefined;
       } else {
-        triggerVfx("bullet");
+        vfxType = "bullet";
+        vfxAoe = true;
       }
 
       setMyGreenCards((prev) => prev.filter((g) => g.id !== selectedGreenCard.id));
+      showMockArenaChain(
+        [
+          {
+            kind: "PLAYED_CARD",
+            card: selectedGreenCard.card,
+            actorPlayerId: state.myPlayerId,
+            actorPlayerName: "You",
+            targetPlayerId: target?.id,
+            targetPlayerName: target?.name,
+            originZone: "GREEN",
+            destinationZone: "DISCARD",
+            actionLabel: target ? `${gName} -> ${target.name}` : gName,
+            vfxType,
+            vfxTargetId,
+            vfxAoe,
+          },
+        ],
+        1450
+      );
       setState((prev) => ({
         ...prev,
         combatLog: [`You: ${gName}`, ...prev.combatLog],
       }));
     },
-    [myMaxHp, state.myPlayerId, triggerVfx]
+    [myMaxHp, showMockArenaChain, state.myPlayerId, state.players]
   );
 
   const playMockHandCard = useCallback(
@@ -268,6 +408,21 @@ export function useMockTableSimulation({
           { id: `g_${Date.now()}`, card: selectedCard, isDelay: true },
         ]);
         setMyHand((prev) => prev.filter((c) => c.id !== selectedCard.id));
+        showMockArenaChain(
+          [
+            {
+              kind: "EQUIP_PLACEMENT",
+              card: selectedCard,
+              actorPlayerId: state.myPlayerId,
+              actorPlayerName: "You",
+              originZone: "HAND",
+              destinationZone: "GREEN",
+              destinationPlayerId: state.myPlayerId,
+              actionLabel: `Place ${selectedCard.name}`,
+            },
+          ],
+          1450
+        );
         setState((prev) => ({
           ...prev,
           combatLog: [`Set: ${selectedCard.name}`, ...prev.combatLog],
@@ -276,6 +431,7 @@ export function useMockTableSimulation({
       }
 
       const removedIds = new Set([selectedCard.id, ...discardCostIds]);
+      const extraCards = myHand.filter((c) => discardCostIds.includes(c.id));
 
       if (
         selectedCard.name === "BEER" ||
@@ -291,7 +447,31 @@ export function useMockTableSimulation({
           setMyHp((prev) => Math.min(prev + healAmt, myMaxHp));
         }
         setMyHand((prev) => prev.filter((c) => !removedIds.has(c.id)));
-        triggerVfx("heal", healTarget, false);
+        showMockArenaChain(
+          [
+            {
+              kind: "PLAYED_CARD",
+              card: selectedCard,
+              actorPlayerId: state.myPlayerId,
+              actorPlayerName: "You",
+              originZone: "HAND",
+              destinationZone: "DISCARD",
+              actionLabel: `${selectedCard.name} (+${healAmt} HP)`,
+              vfxType: "heal",
+              vfxTargetId: healTarget,
+            },
+            ...extraCards.map((c) => ({
+              kind: "EXTRA_COST" as const,
+              card: c,
+              actorPlayerId: state.myPlayerId,
+              actorPlayerName: "You",
+              originZone: "HAND" as const,
+              destinationZone: "DISCARD" as const,
+              actionLabel: `Cost (${c.name})`,
+            })),
+          ],
+          1450
+        );
         setState((prev) => ({
           ...prev,
           combatLog: [`You: ${selectedCard.name} (+${healAmt} HP)`, ...prev.combatLog],
@@ -302,7 +482,22 @@ export function useMockTableSimulation({
       if (selectedCard.name === "SALOON") {
         setMyHp((prev) => Math.min(prev + 1, myMaxHp));
         setMyHand((prev) => prev.filter((c) => !removedIds.has(c.id)));
-        triggerVfx("heal", undefined, true);
+        showMockArenaChain(
+          [
+            {
+              kind: "PLAYED_CARD",
+              card: selectedCard,
+              actorPlayerId: state.myPlayerId,
+              actorPlayerName: "You",
+              originZone: "HAND",
+              destinationZone: "DISCARD",
+              actionLabel: "SALOON (+1 HP All)",
+              vfxType: "heal",
+              vfxAoe: true,
+            },
+          ],
+          1450
+        );
         setState((prev) => ({
           ...prev,
           combatLog: ["You: SALOON (+1 HP all)", ...prev.combatLog],
@@ -316,7 +511,31 @@ export function useMockTableSimulation({
         selectedCard.name === "BRAWL"
       ) {
         setMyHand((prev) => prev.filter((c) => !removedIds.has(c.id)));
-        triggerVfx("bullet");
+        showMockArenaChain(
+          [
+            {
+              kind: "PLAYED_CARD",
+              card: selectedCard,
+              actorPlayerId: state.myPlayerId,
+              actorPlayerName: "You",
+              originZone: "HAND",
+              destinationZone: "DISCARD",
+              actionLabel: selectedCard.name,
+              vfxType: "bullet",
+              vfxAoe: true,
+            },
+            ...extraCards.map((c) => ({
+              kind: "EXTRA_COST" as const,
+              card: c,
+              actorPlayerId: state.myPlayerId,
+              actorPlayerName: "You",
+              originZone: "HAND" as const,
+              destinationZone: "DISCARD" as const,
+              actionLabel: `Cost (${c.name})`,
+            })),
+          ],
+          1550
+        );
         setState((prev) => ({
           ...prev,
           combatLog: [`You: ${selectedCard.name}`, ...prev.combatLog],
@@ -324,9 +543,33 @@ export function useMockTableSimulation({
         return true;
       }
 
-      if (selectedCard.border === "blue" && selectedCard.range) {
-        setMyEquipments((prev) => ({ ...prev, weapon: selectedCard }));
+      if (selectedCard.border === "blue") {
+        const slotKey = resolveEquipmentSlotKey(selectedCard);
+        setMyEquipments((prev) => {
+          if (slotKey === "weapon") return { ...prev, weapon: selectedCard };
+          if (slotKey === "barrel") return { ...prev, barrel: selectedCard };
+          if (slotKey === "horseDef") return { ...prev, horseDef: selectedCard };
+          if (slotKey === "horseOff") return { ...prev, horseOff: selectedCard };
+          const extras = [...(prev.extras || []), selectedCard];
+          return { ...prev, extra: extras[0], extras };
+        });
         setMyHand((prev) => prev.filter((c) => !removedIds.has(c.id)));
+        showMockArenaChain(
+          [
+            {
+              kind: "EQUIP_PLACEMENT",
+              card: selectedCard,
+              actorPlayerId: state.myPlayerId,
+              actorPlayerName: "You",
+              originZone: "HAND",
+              destinationZone: "EQUIPMENT",
+              destinationPlayerId: state.myPlayerId,
+              destinationSlotKey: slotKey,
+              actionLabel: `Equip ${selectedCard.name}`,
+            },
+          ],
+          1450
+        );
         setState((prev) => ({
           ...prev,
           combatLog: [`Equip: ${selectedCard.name}`, ...prev.combatLog],
@@ -346,37 +589,63 @@ export function useMockTableSimulation({
         const target = state.players.find((p) => p.id === selectedTargetId);
         if (!target) return false;
 
-        triggerVfx("bullet", target.id);
-        const newInFlight: Card = selectedCard;
+        setMyHand((prev) => prev.filter((c) => !removedIds.has(c.id)));
+        showMockArenaChain(
+          [
+            {
+              kind: "PLAYED_CARD",
+              card: selectedCard,
+              actorPlayerId: state.myPlayerId,
+              actorPlayerName: "You",
+              targetPlayerId: target.id,
+              targetPlayerName: target.name,
+              originZone: "HAND",
+              destinationZone: "DISCARD",
+              actionLabel: `${selectedCard.name} -> ${target.name}`,
+              vfxType: "bullet",
+              vfxTargetId: target.id,
+            },
+            ...extraCards.map((c) => ({
+              kind: "EXTRA_COST" as const,
+              card: c,
+              actorPlayerId: state.myPlayerId,
+              actorPlayerName: "You",
+              originZone: "HAND" as const,
+              destinationZone: "DISCARD" as const,
+              actionLabel: `Cost (${c.name})`,
+            })),
+          ],
+          1850,
+          () => {
+            setState((prev) => ({
+              ...prev,
+              discardCount: prev.discardCount + 1,
+              topDiscard: selectedCard,
+            }));
+          }
+        );
         setState((prev) => ({
           ...prev,
-          inFlightCards: [
-            ...prev.inFlightCards,
-            {
-              id: `inf_${Date.now()}`,
-              card: newInFlight,
-              sourcePlayerName: "You",
-              targetPlayerName: target.name,
-              actionText: "Awaiting reaction with Missed!.",
-            },
-          ],
           combatLog: [`You -> ${target.name}: ${selectedCard.name}`, ...prev.combatLog],
         }));
-
-        scheduleTimeout(() => {
-          setState((prev) => ({
-            ...prev,
-            inFlightCards: prev.inFlightCards.filter((c) => c.card.id !== newInFlight.id),
-            discardCount: prev.discardCount + 1,
-            topDiscard: newInFlight,
-          }));
-        }, 2800);
-
-        setMyHand((prev) => prev.filter((c) => !removedIds.has(c.id)));
         return true;
       }
 
       setMyHand((prev) => prev.filter((c) => !removedIds.has(c.id)));
+      showMockArenaChain(
+        [
+          {
+            kind: "PLAYED_CARD",
+            card: selectedCard,
+            actorPlayerId: state.myPlayerId,
+            actorPlayerName: "You",
+            originZone: "HAND",
+            destinationZone: "DISCARD",
+            actionLabel: selectedCard.name,
+          },
+        ],
+        1400
+      );
       setState((prev) => ({
         ...prev,
         combatLog: [`You: ${selectedCard.name}`, ...prev.combatLog],
@@ -385,22 +654,19 @@ export function useMockTableSimulation({
     },
     [
       myGreenCards.length,
+      myHand,
       myMaxHp,
-      scheduleTimeout,
       showError,
+      showMockArenaChain,
       state.myPlayerId,
       state.players,
-      triggerVfx,
     ]
   );
 
   const endMockTurn = useCallback(() => {
-    setState((prev) => ({
-      ...prev,
-      inFlightCards: [],
-      currentPhase: 1,
-      combatLog: ["End Turn", ...prev.combatLog],
-    }));
+    const judgeDrafts: Array<
+      Omit<ArenaCardEntry, "id" | "stepIndex" | "batchIndex" | "addedAt">
+    > = [];
 
     if (myJudgements.hasDynamite) {
       const isExploded = Math.random() < 0.25;
@@ -413,7 +679,7 @@ export function useMockTableSimulation({
         image: "/assets/images/cards/card_dynamite.png",
         desc: "Dynamite judgement.",
       };
-      const dynFlipCard: Card = {
+      const dynCheckCard: Card = {
         id: `dyn_chk_${Date.now()}`,
         name: isExploded ? "BANG!" : "MISSED!",
         suit: isExploded ? "spades" : "hearts",
@@ -424,34 +690,33 @@ export function useMockTableSimulation({
           : "/assets/images/cards/card_missed.png",
         desc: isExploded ? "Spades 2-9: Exploded for 3 damage!" : "Check passed.",
       };
-      const srcEntry: InFlightCard = {
-        id: `inf_dynsrc_${Date.now()}`,
-        card: dynSrcCard,
-        sourcePlayerName: "You",
-        actionText: "DYNAMITE Judgement",
-      };
-      const dynEntry: InFlightCard = {
-        id: `inf_dyn_${Date.now()}`,
-        card: dynFlipCard,
-        sourcePlayerName: "You (Flipped)",
-        actionText: isExploded ? "Spades 4 (EXPLODED! -3 HP)" : "Hearts 10 (PASSED)",
-        isFlipReveal: true,
-      };
-      const ids = new Set([srcEntry.id, dynEntry.id]);
-      enqueueFlight('[data-flight-anchor="my-heroes"]', ".inflight-chain", {
-        faceDown: false,
-        cardImage: dynSrcCard.image,
-        label: "DYNAMITE",
-        durationMs: 1100,
-      });
-      addEphemeralCards([srcEntry]);
-      scheduleTimeout(() => addEphemeralCards([dynEntry]), 1100);
+      judgeDrafts.push(
+        {
+          kind: "CHECK_SOURCE",
+          card: dynSrcCard,
+          actorPlayerId: state.myPlayerId,
+          actorPlayerName: "You",
+          originZone: "JUDGEMENT",
+          destinationZone: "DISCARD",
+          actionLabel: "DYNAMITE Judgement",
+        },
+        {
+          kind: "CHECK_RESULT",
+          card: dynCheckCard,
+          actorPlayerId: state.myPlayerId,
+          actorPlayerName: "You",
+          originZone: "DECK",
+          destinationZone: "DISCARD",
+          actionLabel: isExploded ? "Spades 4 (EXPLODED)" : "Hearts 10 (PASSED)",
+          outcome: isExploded ? "EXPLODED" : "PASSED",
+          vfxType: isExploded ? "dynamite" : undefined,
+          vfxTargetId: isExploded ? state.myPlayerId : undefined,
+        }
+      );
       if (isExploded) {
-        triggerVfx("dynamite", state.myPlayerId);
         setMyHp((h) => Math.max(0, h - 3));
         setMyJudgements((j) => ({ ...j, hasDynamite: false }));
       }
-      scheduleTimeout(() => removeEphemeralCards(ids), 5000);
     }
 
     if (myJudgements.hasJail) {
@@ -465,7 +730,7 @@ export function useMockTableSimulation({
         image: "/assets/images/cards/card_jail.png",
         desc: "Jail judgement.",
       };
-      const jailFlipCard: Card = {
+      const jailCheckCard: Card = {
         id: `jail_chk_${Date.now()}`,
         name: isEscaped ? "BEER" : "PANIC!",
         suit: isEscaped ? "hearts" : "clubs",
@@ -476,44 +741,42 @@ export function useMockTableSimulation({
           : "/assets/images/cards/card_panic.png",
         desc: isEscaped ? "Heart: Escaped jail!" : "Check failed: Lost turn.",
       };
-      const srcEntry: InFlightCard = {
-        id: `inf_jailsrc_${Date.now()}`,
-        card: jailSrcCard,
-        sourcePlayerName: "You",
-        actionText: "JAIL Judgement",
-      };
-      const jailEntry: InFlightCard = {
-        id: `inf_jail_${Date.now()}`,
-        card: jailFlipCard,
-        sourcePlayerName: "You (Flipped)",
-        actionText: isEscaped ? "Hearts J (ESCAPED!)" : "Clubs 7 (LOCKED!)",
-        isFlipReveal: true,
-      };
-      const ids = new Set([srcEntry.id, jailEntry.id]);
-      enqueueFlight('[data-flight-anchor="my-heroes"]', ".inflight-chain", {
-        faceDown: false,
-        cardImage: jailSrcCard.image,
-        label: "JAIL",
-        durationMs: 1100,
-      });
-      addEphemeralCards([srcEntry]);
-      scheduleTimeout(() => addEphemeralCards([jailEntry]), 1100);
+      judgeDrafts.push(
+        {
+          kind: "CHECK_SOURCE",
+          card: jailSrcCard,
+          actorPlayerId: state.myPlayerId,
+          actorPlayerName: "You",
+          originZone: "JUDGEMENT",
+          destinationZone: "DISCARD",
+          actionLabel: "JAIL Judgement",
+        },
+        {
+          kind: "CHECK_RESULT",
+          card: jailCheckCard,
+          actorPlayerId: state.myPlayerId,
+          actorPlayerName: "You",
+          originZone: "DECK",
+          destinationZone: "DISCARD",
+          actionLabel: isEscaped ? "Hearts J (ESCAPED)" : "Clubs 7 (LOCKED)",
+          outcome: isEscaped ? "ESCAPED" : "LOCKED",
+        }
+      );
       setMyJudgements((j) => ({ ...j, hasJail: false }));
-      scheduleTimeout(() => removeEphemeralCards(ids), 5000);
     }
 
-    triggerVfx("draw");
+    setState((prev) => ({
+      ...prev,
+      currentPhase: 2,
+      combatLog: ["End Turn", ...prev.combatLog],
+    }));
+
+    if (judgeDrafts.length > 0) {
+      showMockArenaChain(judgeDrafts, 2200);
+    }
+
     setMyGreenCards((prev) => prev.map((g) => ({ ...g, isDelay: false })));
-  }, [
-    addEphemeralCards,
-    enqueueFlight,
-    myJudgements.hasDynamite,
-    myJudgements.hasJail,
-    removeEphemeralCards,
-    scheduleTimeout,
-    state.myPlayerId,
-    triggerVfx,
-  ]);
+  }, [myJudgements.hasDynamite, myJudgements.hasJail, showMockArenaChain, state.myPlayerId]);
 
   const resetMockWithHeroes = useCallback((selectedHeroes: Character[]) => {
     if (selectedHeroes.length === 0) return;
@@ -527,6 +790,7 @@ export function useMockTableSimulation({
     setState((prev) => ({
       ...prev,
       inFlightCards: [],
+      arenaChain: IDLE_ARENA,
       combatLog: [
         `[${new Date().toLocaleTimeString()}] Reset mock data with heroes: ${selectedHeroes
           .map((h) => h.name)
@@ -539,58 +803,20 @@ export function useMockTableSimulation({
   const resolveMockDrawCheck = useCallback(
     (source: "BARREL" | "JOURDONNAIS") => {
       const isSuccess = Math.random() < 0.4;
-      if (source === "JOURDONNAIS") {
-        const checkCard: Card = {
-          id: `chk_jour_${Date.now()}`,
-          name: "JOURDONNAIS CHECK",
-          suit: isSuccess ? "hearts" : "clubs",
-          rank: isSuccess ? "Q" : "8",
-          border: "blue",
-          image: "/assets/images/cards/card_barrel.png",
-          desc: isSuccess
-            ? "Heart drawn: Attack dodged."
-            : "Not a Heart: Check failed.",
-        };
-        const checkEntry: InFlightCard = {
-          id: `inf_jour_${Date.now()}`,
-          card: checkCard,
-          sourcePlayerName: "You (Jourdonnais)",
-          actionText: isSuccess ? "Hearts Q (DODGED!)" : "Clubs 8 (FAILED!)",
-          isFlipReveal: true,
-        };
-        const ids = new Set([checkEntry.id]);
-        addEphemeralCards([checkEntry]);
-        setState((prev) => ({
-          ...prev,
-          combatLog: [
-            `[${new Date().toLocaleTimeString()}] Jourdonnais Check: ${checkCard.rank} of ${checkCard.suit} -> ${
-              isSuccess ? "DODGED" : "FAILED"
-            }.`,
-            ...prev.combatLog,
-          ],
-        }));
-        scheduleTimeout(() => {
-          removeEphemeralCards(ids);
-          setState((prev) => ({
-            ...prev,
-            discardCount: prev.discardCount + 1,
-            topDiscard: checkCard,
-          }));
-        }, 3000);
-        return;
-      }
-
-      const barrelSrcCard: Card = {
-        id: `src_bar_${Date.now()}`,
-        name: "BARREL",
-        suit: "spades",
-        rank: "Q",
-        border: "blue",
-        image: "/assets/images/cards/card_barrel.png",
-        desc: "Draw check for Barrel.",
-      };
+      const srcCard: Card =
+        source === "BARREL" && myEquipments.barrel
+          ? myEquipments.barrel
+          : {
+              id: `src_${source.toLowerCase()}_${Date.now()}`,
+              name: source,
+              suit: "spades",
+              rank: "Q",
+              border: "blue",
+              image: "/assets/images/cards/card_barrel.png",
+              desc: `Draw check for ${source}.`,
+            };
       const checkCard: Card = {
-        id: `chk_bar_${Date.now()}`,
+        id: `chk_${source.toLowerCase()}_${Date.now()}`,
         name: isSuccess ? "BEER" : "BANG!",
         suit: isSuccess ? "hearts" : "spades",
         rank: isSuccess ? "K" : "4",
@@ -600,63 +826,111 @@ export function useMockTableSimulation({
           : "/assets/images/cards/card_bang.png",
         desc: isSuccess ? "Heart drawn: Attack dodged." : "Not a Heart: Check failed.",
       };
-      const srcEntry: InFlightCard = {
-        id: `inf_barsrc_${Date.now()}`,
-        card: barrelSrcCard,
-        sourcePlayerName: "You",
-        actionText: "BARREL Check",
-      };
-      const checkEntry: InFlightCard = {
-        id: `inf_bar_${Date.now()}`,
-        card: checkCard,
-        sourcePlayerName: "You (Flipped)",
-        actionText: isSuccess ? "Hearts K (DODGED!)" : "Spades 4 (FAILED!)",
-        isFlipReveal: true,
-      };
-      const ids = new Set([srcEntry.id, checkEntry.id]);
-      addEphemeralCards([srcEntry, checkEntry]);
+      showMockArenaChain(
+        [
+          {
+            kind: "CHECK_SOURCE",
+            card: srcCard,
+            actorPlayerId: state.myPlayerId,
+            actorPlayerName: "You",
+            originZone: source === "BARREL" ? "EQUIPMENT" : "HERO",
+            originSlotKey: source === "BARREL" ? "barrel" : undefined,
+            actionLabel: `${source} Check`,
+          },
+          {
+            kind: "CHECK_RESULT",
+            card: checkCard,
+            actorPlayerId: state.myPlayerId,
+            actorPlayerName: "You",
+            originZone: "DECK",
+            destinationZone: "DISCARD",
+            actionLabel: `${checkCard.rank} ${checkCard.suit} (${isSuccess ? "PASSED" : "FAILED"})`,
+            outcome: isSuccess ? "PASSED" : "FAILED",
+          },
+        ],
+        2100,
+        () => {
+          setState((prev) => ({
+            ...prev,
+            discardCount: prev.discardCount + 1,
+            topDiscard: checkCard,
+          }));
+        }
+      );
       setState((prev) => ({
         ...prev,
         combatLog: [
-          `[${new Date().toLocaleTimeString()}] Barrel Check: ${checkCard.rank} of ${checkCard.suit} -> ${
+          `[${new Date().toLocaleTimeString()}] ${source} Check: ${checkCard.rank} of ${checkCard.suit} -> ${
             isSuccess ? "DODGED" : "FAILED"
           }.`,
           ...prev.combatLog,
         ],
       }));
-      scheduleTimeout(() => {
-        removeEphemeralCards(ids);
-        setState((prev) => ({
-          ...prev,
-          discardCount: prev.discardCount + 1,
-          topDiscard: checkCard,
-        }));
-      }, 3000);
     },
-    [addEphemeralCards, removeEphemeralCards, scheduleTimeout]
+    [myEquipments.barrel, showMockArenaChain, state.myPlayerId]
   );
 
-  const resolveMockDefensePlayCard = useCallback((cardId: string) => {
-    setMyHand((prev) => prev.filter((c) => c.id !== cardId));
-    setState((prev) => ({
-      ...prev,
-      combatLog: [
-        `[${new Date().toLocaleTimeString()}] [Mock] Defended using hand card.`,
-        ...prev.combatLog,
-      ],
-    }));
-  }, []);
+  const resolveMockDefensePlayCard = useCallback(
+    (cardId: string) => {
+      const card = myHand.find((c) => c.id === cardId);
+      setMyHand((prev) => prev.filter((c) => c.id !== cardId));
+      if (card) {
+        showMockArenaChain(
+          [
+            {
+              kind: "DEFENSE_CARD",
+              card,
+              actorPlayerId: state.myPlayerId,
+              actorPlayerName: "You",
+              originZone: "HAND",
+              destinationZone: "DISCARD",
+              actionLabel: card.name,
+            },
+          ],
+          1500
+        );
+      }
+      setState((prev) => ({
+        ...prev,
+        combatLog: [
+          `[${new Date().toLocaleTimeString()}] [Mock] Defended using hand card.`,
+          ...prev.combatLog,
+        ],
+      }));
+    },
+    [myHand, showMockArenaChain, state.myPlayerId]
+  );
 
-  const resolveMockDefenseGreen = useCallback((greenId: string) => {
-    setMyGreenCards((prev) => prev.filter((g) => g.id !== greenId));
-    setState((prev) => ({
-      ...prev,
-      combatLog: [
-        `[${new Date().toLocaleTimeString()}] [Mock] Defended using ready green card.`,
-        ...prev.combatLog,
-      ],
-    }));
-  }, []);
+  const resolveMockDefenseGreen = useCallback(
+    (greenId: string) => {
+      const entry = myGreenCards.find((g) => g.id === greenId);
+      setMyGreenCards((prev) => prev.filter((g) => g.id !== greenId));
+      if (entry) {
+        showMockArenaChain(
+          [
+            {
+              kind: "DEFENSE_CARD",
+              card: entry.card,
+              actorPlayerId: state.myPlayerId,
+              actorPlayerName: "You",
+              originZone: "GREEN",
+              destinationZone: "DISCARD",
+              actionLabel: `${entry.card.name} (Missed!)`,
+            },
+          ],
+          1500
+        );
+      }
+      setState((prev) => ({
+        ...prev,
+        combatLog: [
+          `[${new Date().toLocaleTimeString()}] [Mock] Defended using ready green card.`,
+          ...prev.combatLog,
+        ],
+      }));
+    },
+    [myGreenCards, showMockArenaChain, state.myPlayerId]
+  );
 
   const resolveMockDefenseTakeDamage = useCallback(() => {
     setMyHp((prev) => Math.max(0, prev - 1));

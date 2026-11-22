@@ -1,6 +1,10 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GameSessionManager = void 0;
+const crypto_1 = __importDefault(require("crypto"));
 const ws_1 = require("ws");
 const game_engine_1 = require("../engine/game_engine");
 const interact_manager_1 = require("../engine/interact/interact_manager");
@@ -19,7 +23,9 @@ class GameSessionManager {
     engines = new Map();
     combatLogs = new Map();
     matchEventSeqs = new Map();
+    matchIds = new Map();
     inactivityTimers = new Map();
+    arenaTimers = new Map();
     static getInstance() {
         if (!GameSessionManager.instance) {
             GameSessionManager.instance = new GameSessionManager();
@@ -40,6 +46,45 @@ class GameSessionManager {
             this.inactivityTimers.delete(roomId);
         }
     }
+    // Clear room Card Arena settle timer
+    clearArenaTimer(roomId) {
+        const existing = this.arenaTimers.get(roomId);
+        if (existing) {
+            clearTimeout(existing);
+            this.arenaTimers.delete(roomId);
+        }
+    }
+    // Synchronize authoritative Card Arena settle timer
+    syncArenaTimer(roomId, engine, lobbyManager) {
+        this.clearArenaTimer(roomId);
+        if (!lobbyManager || !engine.isArenaPacingEnabled())
+            return;
+        const simState = engine.getState();
+        const chain = simState.arenaChain;
+        if (!chain || chain.status !== "SETTLING") {
+            return;
+        }
+        if (!simState.gameOver && this.isMatchPaused(engine, lobbyManager)) {
+            return;
+        }
+        const remainingMs = Math.max(0, (chain.settleUntil || 0) - Date.now());
+        const timer = setTimeout(() => {
+            this.arenaTimers.delete(roomId);
+            if (this.engines.get(roomId) !== engine)
+                return;
+            const currentState = engine.getState();
+            if (!currentState.gameOver && this.isMatchPaused(engine, lobbyManager)) {
+                return;
+            }
+            const cleared = engine.completeArenaSettling();
+            if (cleared.changed) {
+                this.persistEventsAndState(roomId, [], engine);
+                this.broadcastGameSnapshot(roomId, engine, lobbyManager);
+            }
+        }, remainingMs);
+        timer.unref?.();
+        this.arenaTimers.set(roomId, timer);
+    }
     // Schedule room inactivity timer when active
     refreshInactivityTimer(roomId, engine, lobbyManager) {
         this.clearInactivityTimer(roomId);
@@ -47,6 +92,9 @@ class GameSessionManager {
             return;
         const simState = engine.getState();
         if (simState.gameOver || simState.matchPhase === "FINISHED") {
+            return;
+        }
+        if (simState.arenaChain?.status === "SETTLING") {
             return;
         }
         if (this.isMatchPaused(engine, lobbyManager)) {
@@ -68,6 +116,10 @@ class GameSessionManager {
             return;
         if (this.isMatchPaused(engine, lobbyManager))
             return;
+        if (simState.arenaChain?.status === "SETTLING") {
+            this.syncArenaTimer(roomId, engine, lobbyManager);
+            return;
+        }
         const collectedEvents = [];
         let mutated = false;
         if (simState.matchPhase === "CHARACTER_SELECT") {
@@ -252,13 +304,13 @@ class GameSessionManager {
     }
     endSession(roomId) {
         this.clearInactivityTimer(roomId);
+        this.clearArenaTimer(roomId);
         this.engines.delete(roomId);
         this.combatLogs.delete(roomId);
         this.matchEventSeqs.delete(roomId);
+        this.matchIds.delete(roomId);
         try {
-            const repo = session_repository_1.SessionRepository.getInstance();
-            repo.deleteGameState(roomId);
-            repo.deleteMatchEvents(roomId);
+            session_repository_1.SessionRepository.getInstance().deleteMatchData(roomId);
         }
         catch (err) {
             console.error("[GameSessionManager] Failed to clean up session:", err);
@@ -343,8 +395,12 @@ class GameSessionManager {
             defaultEnableCharacterSelect: true,
             defaultEnable3PlayerVariant: saved.is3PlayerVariant,
             expansions: saved.expansions,
+            enableArenaPacing: true,
         });
         this.engines.set(roomId, engine);
+        if (!this.matchIds.has(roomId)) {
+            this.matchIds.set(roomId, crypto_1.default.randomUUID());
+        }
         const recentEvents = this.loadRecentMatchEvents(roomId);
         const maxSeq = recentEvents.reduce((max, row) => Math.max(max, row.seq), 0);
         this.matchEventSeqs.set(roomId, maxSeq);
@@ -423,28 +479,42 @@ class GameSessionManager {
         const is3PVariant = players.length === 3;
         const playerList = players.map((p) => ({ id: p.id, name: p.name }));
         try {
-            this.clearInactivityTimer(roomId);
-            const repo = session_repository_1.SessionRepository.getInstance();
-            repo.deleteMatchEvents(roomId);
-            this.matchEventSeqs.set(roomId, 0);
             const engine = new game_engine_1.GameEngine(roomId, engineCards, engineEvents, {
                 defaultEnableCharacterSelect: true,
                 defaultEnable3PlayerVariant: is3PVariant,
                 expansions,
+                enableArenaPacing: true,
             });
             const matchResult = engine.startMatch(playerList, allCharacters, settings.dualCharacterEnabled, settings.dualCharacterHpRule, {
                 enableCharacterSelect: true,
                 expansions,
                 enable3PlayerVariant: is3PVariant,
             });
+            this.clearInactivityTimer(roomId);
+            this.clearArenaTimer(roomId);
+            const nextMatchId = crypto_1.default.randomUUID();
+            const initialEvents = matchResult.events || [];
+            const repo = session_repository_1.SessionRepository.getInstance();
+            const db = (0, database_1.getRuntimeDatabase)();
+            const serialized = engine.serializeState();
+            let seq = 0;
+            // Replace previous match data atomically
+            db.transaction(() => {
+                repo.deleteMatchData(roomId);
+                for (const ev of initialEvents) {
+                    seq += 1;
+                    repo.logMatchEvent(roomId, seq, ev.type, ev.payload || {});
+                }
+                repo.saveGameState(roomId, serialized);
+            })();
             this.engines.set(roomId, engine);
+            this.matchIds.set(roomId, nextMatchId);
+            this.matchEventSeqs.set(roomId, seq);
             this.combatLogs.set(roomId, [
                 {
                     publicText: "---------- Match initialized. Waiting for character selection. ----------",
                 },
             ]);
-            const initialEvents = matchResult.events || [];
-            this.persistEventsAndState(roomId, initialEvents, engine);
             if (initialEvents.length > 0) {
                 this.emitDomainEvents(roomId, initialEvents, engine, lobbyManager);
             }
@@ -530,12 +600,13 @@ class GameSessionManager {
             return;
         const snapshot = engine.getFilteredSnapshot(playerId);
         const logs = (0, combat_log_formatter_1.getLogsForPlayer)(this.combatLogs.get(roomId) || [], playerId, 100);
-        const tableState = (0, table_state_presenter_1.buildTableState)(snapshot, playerId, engine, logs, this.isMatchPaused(engine, lobbyManager), (pId) => lobbyManager.isPlayerOnline(pId));
+        const tableState = (0, table_state_presenter_1.buildTableState)(snapshot, playerId, engine, logs, this.isMatchPaused(engine, lobbyManager), (pId) => lobbyManager.isPlayerOnline(pId), this.matchIds.get(roomId), lobbyManager.getHostId());
         lobbyManager.sendToPlayer(playerId, "TABLE_STATE", tableState);
     }
     // Send private snapshot to player
     sendPlayerSnapshot(engine, playerId, roomId, lobbyManager) {
         this.emitPlayerSnapshot(engine, playerId, roomId, lobbyManager);
+        this.syncArenaTimer(roomId, engine, lobbyManager);
         this.refreshInactivityTimer(roomId, engine, lobbyManager);
     }
     // Broadcast snapshots strictly to participants
@@ -543,6 +614,7 @@ class GameSessionManager {
         for (const playerId of engine.getState().players.keys()) {
             this.emitPlayerSnapshot(engine, playerId, roomId, lobbyManager);
         }
+        this.syncArenaTimer(roomId, engine, lobbyManager);
         this.refreshInactivityTimer(roomId, engine, lobbyManager);
     }
     // Broadcast domain events and logs

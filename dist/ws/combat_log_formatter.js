@@ -160,6 +160,10 @@ function formatEventToLog(ev, players) {
             return pub(`${nameOf(p.playerId, p.playerName)} used Beer[♥] at death's door to survive.`);
         case "PLAYER_ELIMINATED":
             return pub(`${p.playerName} was eliminated (Role: ${p.revealedRole}).`);
+        case "OUTLAW_BOUNTY_REWARD":
+            return pub(`${nameOf(p.killerId, p.killerName)} claimed Outlaw bounty (+${p.rewardCount ?? 3} card(s)).`);
+        case "SHERIFF_PENALTY_DISCARD":
+            return pub(`${nameOf(p.sheriffId, p.sheriffName)} lost ${p.cardsLostCount ?? 0} card(s) for eliminating a Deputy.`);
         case "GAME_OVER":
             return pub(`---------- GAME OVER: ${p.winner} (${p.message}) ----------`);
         case "HEAL_RESOLVED":

@@ -13,6 +13,7 @@ import { SkillHooks } from "../skill_hooks";
 import { AoePipeline } from "../pipeline/aoe_pipeline";
 import { AtomicEffects } from "../primitives/atomic_effects";
 import { ClockwiseTraversal } from "../primitives/clockwise_traversal";
+import { ArenaChainManager } from "../../arena/arena_chain_manager";
 
 export class AoeActions {
   // Consume hand card safely
@@ -53,6 +54,20 @@ export class AoeActions {
       return { success: false, message: "Card not in hand." };
     }
 
+    ArenaChainManager.appendBatch(state, [
+      {
+        kind: "PLAYED_CARD",
+        card,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        originZone: "HAND",
+        destinationZone: "DISCARD",
+        actionLabel: card.name,
+        vfxType: "bullet",
+        vfxAoe: true,
+      },
+    ]);
+
     const suzyEvents: DomainEvent[] = [];
     SkillHooks.checkSuzyLafayette(state, player, suzyEvents);
 
@@ -87,6 +102,20 @@ export class AoeActions {
     if (!this.consumeHandCard(state, player, card, cardIndex, deckManager)) {
       return { success: false, message: "Card not in hand." };
     }
+
+    ArenaChainManager.appendBatch(state, [
+      {
+        kind: "PLAYED_CARD",
+        card,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        originZone: "HAND",
+        destinationZone: "DISCARD",
+        actionLabel: card.name,
+        vfxType: "bullet",
+        vfxAoe: true,
+      },
+    ]);
 
     const suzyEvents: DomainEvent[] = [];
     SkillHooks.checkSuzyLafayette(state, player, suzyEvents);
@@ -140,6 +169,20 @@ export class AoeActions {
     greenCards.splice(idx, 1);
     AtomicEffects.discardCard(state, entry.card, deckManager);
 
+    ArenaChainManager.appendBatch(state, [
+      {
+        kind: "PLAYED_CARD",
+        card: entry.card,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        originZone: "GREEN",
+        destinationZone: "DISCARD",
+        actionLabel: entry.card.name,
+        vfxType: "bullet",
+        vfxAoe: true,
+      },
+    ]);
+
     const res = AoePipeline.executeReactionAoe(
       state,
       player,
@@ -191,6 +234,20 @@ export class AoeActions {
       return { success: false, message: "Card not in hand." };
     }
 
+    ArenaChainManager.appendBatch(state, [
+      {
+        kind: "PLAYED_CARD",
+        card,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        originZone: "HAND",
+        destinationZone: "DISCARD",
+        actionLabel: `${card.name} (+1 HP All)`,
+        vfxType: "heal",
+        vfxAoe: true,
+      },
+    ]);
+
     const suzyEvents: DomainEvent[] = [];
     SkillHooks.checkSuzyLafayette(state, player, suzyEvents);
 
@@ -238,6 +295,18 @@ export class AoeActions {
       return { success: false, message: "Card not in hand." };
     }
 
+    ArenaChainManager.appendBatch(state, [
+      {
+        kind: "PLAYED_CARD",
+        card,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        originZone: "HAND",
+        destinationZone: "DISCARD",
+        actionLabel: card.name,
+      },
+    ]);
+
     const suzyEvents: DomainEvent[] = [];
     SkillHooks.checkSuzyLafayette(state, player, suzyEvents);
 
@@ -284,10 +353,36 @@ export class AoeActions {
     }
 
     const extraIdx = player.handCards.findIndex((c) => c.id === extraCardId);
+    let extraCard: EngineCard | undefined;
     if (extraIdx !== -1) {
-      const extraCard = player.handCards.splice(extraIdx, 1)[0];
+      extraCard = player.handCards.splice(extraIdx, 1)[0];
       AtomicEffects.discardCard(state, extraCard, deckManager);
     }
+
+    ArenaChainManager.appendBatch(state, [
+      {
+        kind: "PLAYED_CARD",
+        card,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        originZone: "HAND",
+        destinationZone: "DISCARD",
+        actionLabel: card.name,
+      },
+      ...(extraCard
+        ? [
+            {
+              kind: "EXTRA_COST" as const,
+              card: extraCard,
+              actorPlayerId: player.id,
+              actorPlayerName: player.name,
+              originZone: "HAND" as const,
+              destinationZone: "DISCARD" as const,
+              actionLabel: `Discard Cost (${extraCard.name})`,
+            },
+          ]
+        : []),
+    ]);
 
     const selectionMap = new Map<string, TargetSelectionEntry>();
     for (const sel of command?.targetSelections || []) {

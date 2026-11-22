@@ -9,6 +9,9 @@ export interface FlyingCardItem {
   faceDown?: boolean;
   label?: string;
   durationMs?: number;
+  startScale?: number;
+  endScale?: number;
+  fadeOutAtEnd?: boolean;
 }
 
 interface FlightNodeProps {
@@ -16,14 +19,21 @@ interface FlightNodeProps {
 }
 
 const getElementCenter = (selector: string): { x: number; y: number } | null => {
-  const el = document.querySelector<HTMLElement>(selector);
-  if (!el) return null;
-  const rect = el.getBoundingClientRect();
-  if (rect.width === 0 && rect.height === 0) return null;
-  return {
-    x: rect.left + rect.width / 2,
-    y: rect.top + rect.height / 2,
-  };
+  const candidates = selector
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  for (const sel of candidates) {
+    const el = document.querySelector<HTMLElement>(sel);
+    if (!el) continue;
+    const rect = el.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) continue;
+    return {
+      x: rect.left + rect.width / 2,
+      y: rect.top + rect.height / 2,
+    };
+  }
+  return null;
 };
 
 const FlightNode: React.FC<FlightNodeProps> = ({ item }) => {
@@ -42,20 +52,30 @@ const FlightNode: React.FC<FlightNodeProps> = ({ item }) => {
 
     const dx = to.x - from.x;
     const dy = to.y - from.y;
-    const duration = item.durationMs ?? 600;
+    const duration = item.durationMs ?? 420;
+    const startScale = item.startScale ?? 0.9;
+    const endScale = item.endScale ?? 1;
+    const fadeOutAtEnd = item.fadeOutAtEnd ?? false;
 
     el.style.left = `${from.x}px`;
     el.style.top = `${from.y}px`;
     el.style.transition = "none";
-    el.style.transform = "translate3d(-50%, -50%, 0) scale(1)";
+    el.style.transform = `translate3d(-50%, -50%, 0) scale(${startScale})`;
     el.style.opacity = "1";
 
     let raf2 = 0;
     const raf1 = requestAnimationFrame(() => {
       raf2 = requestAnimationFrame(() => {
-        el.style.transition = `transform ${duration}ms cubic-bezier(0.22, 1, 0.36, 1), opacity ${Math.round(duration * 0.25)}ms ease ${Math.round(duration * 0.75)}ms`;
-        el.style.transform = `translate3d(calc(-50% + ${dx}px), calc(-50% + ${dy}px), 0) scale(1)`;
-        el.style.opacity = "0";
+        if (fadeOutAtEnd) {
+          el.style.transition = `transform ${duration}ms cubic-bezier(0.22, 1, 0.36, 1), opacity ${Math.round(
+            duration * 0.18
+          )}ms ease ${Math.round(duration * 0.82)}ms`;
+          el.style.opacity = "0";
+        } else {
+          el.style.transition = `transform ${duration}ms cubic-bezier(0.22, 1, 0.36, 1)`;
+          el.style.opacity = "1";
+        }
+        el.style.transform = `translate3d(calc(-50% + ${dx}px), calc(-50% + ${dy}px), 0) scale(${endScale})`;
       });
     });
 

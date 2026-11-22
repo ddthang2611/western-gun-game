@@ -9,6 +9,7 @@ const deck_manager_1 = require("../deck/deck_manager");
 const seat_manager_1 = require("../board/seat_manager");
 const skill_hooks_1 = require("../interact/skill_hooks");
 const event_rule_registry_1 = require("./event_rule_registry");
+const arena_chain_manager_1 = require("../arena/arena_chain_manager");
 const inventory_1 = require("../utils/inventory");
 class EventEngine {
     // Build event deck with final card
@@ -276,6 +277,21 @@ class EventEngine {
             !state.vendettaExtraTurnUsed) {
             const check = skill_hooks_1.SkillHooks.executeDrawCheck(state, player, "VENDETTA", (card, st) => skill_hooks_1.SkillHooks.getEffectiveSuit(card, st) === "hearts");
             events.push(...check.events);
+            if (check.drawnCards.length > 0) {
+                arena_chain_manager_1.ArenaChainManager.appendBatch(state, check.drawnCards.map((drawnCard) => {
+                    const passed = skill_hooks_1.SkillHooks.getEffectiveSuit(drawnCard, state) === "hearts";
+                    return {
+                        kind: "CHECK_RESULT",
+                        card: drawnCard,
+                        actorPlayerId: player.id,
+                        actorPlayerName: player.name,
+                        originZone: "DECK",
+                        destinationZone: "DISCARD",
+                        actionLabel: `Vendetta (${passed ? "PASSED" : "FAILED"})`,
+                        outcome: (passed ? "PASSED" : "FAILED"),
+                    };
+                }));
+            }
             if (check.success) {
                 state.vendettaExtraTurnUsed = true;
                 events.push({

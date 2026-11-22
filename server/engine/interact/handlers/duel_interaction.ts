@@ -5,6 +5,7 @@ import { DeckManager } from "../../deck/deck_manager";
 import { SkillHooks } from "../skill_hooks";
 import { PendingReaction } from "../interact_types";
 import { AtomicEffects } from "../primitives/atomic_effects";
+import { ArenaChainManager } from "../../arena/arena_chain_manager";
 
 export class DuelInteraction {
   public static handleStartDuel(
@@ -17,6 +18,22 @@ export class DuelInteraction {
   ): CommandResult {
     player.handCards.splice(cardIndex, 1);
     AtomicEffects.discardCard(state, card, deckManager);
+
+    ArenaChainManager.appendBatch(state, [
+      {
+        kind: "PLAYED_CARD",
+        card,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        targetPlayerId: targetPlayer.id,
+        targetPlayerName: targetPlayer.name,
+        originZone: "HAND",
+        destinationZone: "DISCARD",
+        actionLabel: `${card.name} -> ${targetPlayer.name}`,
+        vfxType: "bullet",
+        vfxTargetId: targetPlayer.id,
+      },
+    ]);
 
     // Target responds first in Duel
     const reaction: PendingReaction = {

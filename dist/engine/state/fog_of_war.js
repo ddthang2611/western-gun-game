@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FogOfWarFilter = void 0;
+const arena_chain_manager_1 = require("../arena/arena_chain_manager");
 class FogOfWarFilter {
     // Project Fog of War snapshot
     static projectStateForPlayer(state, targetPlayerId) {
@@ -192,6 +193,19 @@ class FogOfWarFilter {
             activeChain: sanitizedActiveChain,
             myPendingReaction,
             pendingReactionTargets,
+            arenaChain: (() => {
+                const chain = arena_chain_manager_1.ArenaChainManager.ensureChain(state);
+                return {
+                    chainId: chain.chainId,
+                    status: chain.status,
+                    entries: chain.entries.map((entry) => ({
+                        ...entry,
+                        card: { ...entry.card },
+                    })),
+                    stepLockUntil: chain.stepLockUntil,
+                    settleUntil: chain.settleUntil,
+                };
+            })(),
             generalStore,
             gameOver: state.gameOver,
         };

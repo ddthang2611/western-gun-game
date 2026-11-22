@@ -7,6 +7,7 @@ import { DeckManager } from "../deck/deck_manager";
 import { SeatManager } from "../board/seat_manager";
 import { SkillHooks } from "../interact/skill_hooks";
 import { EventRuleRegistry } from "./event_rule_registry";
+import { ArenaChainManager } from "../arena/arena_chain_manager";
 import { getAllEquippedCards, hasBarrelCard } from "../utils/inventory";
 
 export interface TurnStartPrepResult {
@@ -379,6 +380,24 @@ export class EventEngine {
         (card, st) => SkillHooks.getEffectiveSuit(card, st) === "hearts"
       );
       events.push(...check.events);
+      if (check.drawnCards.length > 0) {
+        ArenaChainManager.appendBatch(
+          state,
+          check.drawnCards.map((drawnCard) => {
+            const passed = SkillHooks.getEffectiveSuit(drawnCard, state) === "hearts";
+            return {
+              kind: "CHECK_RESULT" as const,
+              card: drawnCard,
+              actorPlayerId: player.id,
+              actorPlayerName: player.name,
+              originZone: "DECK" as const,
+              destinationZone: "DISCARD" as const,
+              actionLabel: `Vendetta (${passed ? "PASSED" : "FAILED"})`,
+              outcome: (passed ? "PASSED" : "FAILED") as "PASSED" | "FAILED",
+            };
+          })
+        );
+      }
 
       if (check.success) {
         state.vendettaExtraTurnUsed = true;

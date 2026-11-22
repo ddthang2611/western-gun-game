@@ -6,6 +6,7 @@ const bang_limiter_1 = require("../../combat/bang_limiter");
 const event_engine_1 = require("../../events/event_engine");
 const skill_hooks_1 = require("../skill_hooks");
 const atomic_effects_1 = require("../primitives/atomic_effects");
+const arena_chain_manager_1 = require("../../arena/arena_chain_manager");
 const inventory_1 = require("../../utils/inventory");
 class SingleTargetActions {
     // Resolve Ricochet target card ID
@@ -75,6 +76,21 @@ class SingleTargetActions {
             }
             this.removeHandCardsById(player, [card.id]);
             atomic_effects_1.AtomicEffects.discardCard(state, card, deckManager);
+            arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                {
+                    kind: "PLAYED_CARD",
+                    card,
+                    actorPlayerId: player.id,
+                    actorPlayerName: player.name,
+                    targetPlayerId: targetPlayer.id,
+                    targetPlayerName: targetPlayer.name,
+                    originZone: "HAND",
+                    destinationZone: "DISCARD",
+                    actionLabel: `Ricochet ${card.name} -> ${targetPlayer.name}`,
+                    vfxType: "bullet",
+                    vfxTargetId: targetPlayer.id,
+                },
+            ]);
             const reactionRes = atomic_effects_1.AtomicEffects.createReaction(state, targetPlayer, player, card, {
                 type: "EVENT_RICOCHET_DEFENSE",
                 requiredCard: "MISSED",
@@ -141,6 +157,36 @@ class SingleTargetActions {
         const removed = this.removeHandCardsById(player, idsToDiscard);
         atomic_effects_1.AtomicEffects.discardCards(state, removed, deckManager);
         state.bangCountThisTurn += 1;
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+            {
+                kind: "PLAYED_CARD",
+                card,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                targetPlayerId: targetPlayer.id,
+                targetPlayerName: targetPlayer.name,
+                originZone: "HAND",
+                destinationZone: "DISCARD",
+                actionLabel: `${card.name} -> ${targetPlayer.name}`,
+                vfxType: "bullet",
+                vfxTargetId: targetPlayer.id,
+            },
+            ...(sniperExtraCard
+                ? [
+                    {
+                        kind: "EXTRA_COST",
+                        card: sniperExtraCard,
+                        actorPlayerId: player.id,
+                        actorPlayerName: player.name,
+                        targetPlayerId: targetPlayer.id,
+                        targetPlayerName: targetPlayer.name,
+                        originZone: "HAND",
+                        destinationZone: "DISCARD",
+                        actionLabel: `Sniper Cost (${sniperExtraCard.name})`,
+                    },
+                ]
+                : []),
+        ]);
         const reactionRes = atomic_effects_1.AtomicEffects.createReaction(state, targetPlayer, player, card, {
             type: "BANG_DEFENSE",
             requiredCard: "MISSED",
@@ -225,6 +271,21 @@ class SingleTargetActions {
         }
         player.handCards.splice(cardIndex, 1);
         atomic_effects_1.AtomicEffects.discardCard(state, card, deckManager);
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+            {
+                kind: "PLAYED_CARD",
+                card,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                targetPlayerId: targetPlayer.id,
+                targetPlayerName: targetPlayer.name,
+                originZone: "HAND",
+                destinationZone: "DISCARD",
+                actionLabel: `${card.name} -> ${targetPlayer.name}`,
+                vfxType: "bullet",
+                vfxTargetId: targetPlayer.id,
+            },
+        ]);
         const reactionRes = atomic_effects_1.AtomicEffects.createReaction(state, targetPlayer, player, card, {
             type: "BANG_DEFENSE",
             requiredCard: "MISSED",
@@ -267,6 +328,30 @@ class SingleTargetActions {
         }
         const removed = this.removeHandCardsById(player, [card.id, extraCard.id]);
         atomic_effects_1.AtomicEffects.discardCards(state, removed, deckManager);
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+            {
+                kind: "PLAYED_CARD",
+                card,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                targetPlayerId: targetPlayer.id,
+                targetPlayerName: targetPlayer.name,
+                originZone: "HAND",
+                destinationZone: "DISCARD",
+                actionLabel: `${card.name} -> ${targetPlayer.name}`,
+                vfxType: "bullet",
+                vfxTargetId: targetPlayer.id,
+            },
+            {
+                kind: "EXTRA_COST",
+                card: extraCard,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                originZone: "HAND",
+                destinationZone: "DISCARD",
+                actionLabel: `Discard Cost (${extraCard.name})`,
+            },
+        ]);
         const reactionRes = atomic_effects_1.AtomicEffects.createReaction(state, targetPlayer, player, card, {
             type: "BANG_DEFENSE",
             requiredCard: "MISSED",
@@ -313,9 +398,41 @@ class SingleTargetActions {
         if (card.name === "PONY EXPRESS") {
             player.greenCards.splice(greenIdx, 1);
             atomic_effects_1.AtomicEffects.discardCard(state, card, deckManager);
+            arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                {
+                    kind: "PLAYED_CARD",
+                    card,
+                    actorPlayerId: player.id,
+                    actorPlayerName: player.name,
+                    originZone: "GREEN",
+                    destinationZone: "DISCARD",
+                    actionLabel: `${card.name} (+3)`,
+                    vfxType: "draw",
+                },
+            ]);
             const { cards: drawn, events: drawEvents } = atomic_effects_1.AtomicEffects.drawCards(state, 3, deckManager);
             player.handCards.push(...drawn);
             events.push(...drawEvents);
+            if (drawn.length > 0) {
+                events.push({
+                    type: "CARDS_DRAWN",
+                    visibleTo: [player.id],
+                    payload: {
+                        playerId: player.id,
+                        playerName: player.name,
+                        sourceCard: card,
+                        count: drawn.length,
+                        cards: drawn,
+                    },
+                    maskedPayload: {
+                        playerId: player.id,
+                        playerName: player.name,
+                        sourceCard: card,
+                        count: drawn.length,
+                    },
+                    timestamp: Date.now(),
+                });
+            }
             events.push({
                 type: "GREEN_CARD_ACTIVATED",
                 payload: {
@@ -337,6 +454,19 @@ class SingleTargetActions {
             }
             player.greenCards.splice(greenIdx, 1);
             atomic_effects_1.AtomicEffects.discardCard(state, card, deckManager);
+            arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                {
+                    kind: "PLAYED_CARD",
+                    card,
+                    actorPlayerId: player.id,
+                    actorPlayerName: player.name,
+                    originZone: "GREEN",
+                    destinationZone: "DISCARD",
+                    actionLabel: `${card.name} (+1 HP)`,
+                    vfxType: "heal",
+                    vfxTargetId: player.id,
+                },
+            ]);
             atomic_effects_1.AtomicEffects.applyHeal(state, player, 1, card, events, deckManager);
             events.push({
                 type: "GREEN_CARD_ACTIVATED",
@@ -365,10 +495,45 @@ class SingleTargetActions {
             }
             player.greenCards.splice(greenIdx, 1);
             atomic_effects_1.AtomicEffects.discardCard(state, card, deckManager);
+            arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                {
+                    kind: "PLAYED_CARD",
+                    card,
+                    actorPlayerId: player.id,
+                    actorPlayerName: player.name,
+                    targetPlayerId: targetPlayer.id,
+                    targetPlayerName: targetPlayer.name,
+                    originZone: "GREEN",
+                    destinationZone: "DISCARD",
+                    actionLabel: `${card.name} -> ${targetPlayer.name}`,
+                    vfxType: "bullet",
+                    vfxTargetId: targetPlayer.id,
+                },
+            ]);
             if (card.name === "DERRINGER") {
                 const { cards: drawn, events: drawEvents } = atomic_effects_1.AtomicEffects.drawCards(state, 1, deckManager);
                 player.handCards.push(...drawn);
                 events.push(...drawEvents);
+                if (drawn.length > 0) {
+                    events.push({
+                        type: "CARDS_DRAWN",
+                        visibleTo: [player.id],
+                        payload: {
+                            playerId: player.id,
+                            playerName: player.name,
+                            sourceCard: card,
+                            count: drawn.length,
+                            cards: drawn,
+                        },
+                        maskedPayload: {
+                            playerId: player.id,
+                            playerName: player.name,
+                            sourceCard: card,
+                            count: drawn.length,
+                        },
+                        timestamp: Date.now(),
+                    });
+                }
             }
             const reactionRes = atomic_effects_1.AtomicEffects.createReaction(state, targetPlayer, player, card, {
                 type: "BANG_DEFENSE",

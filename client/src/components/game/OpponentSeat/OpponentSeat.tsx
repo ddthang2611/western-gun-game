@@ -1,6 +1,6 @@
 import React from "react";
 import type { Player } from "../../../types/game";
-import { getAllEquipments } from "../../../utils/equipments";
+import { getFixedEquipmentSlots } from "../../../utils/equipments";
 import { BulletMeter } from "../BulletMeter/BulletMeter";
 import { CharacterPortrait } from "../CharacterPortrait/CharacterPortrait";
 import { DebouncedPopover } from "../../ui/DebouncedPopover/DebouncedPopover";
@@ -15,6 +15,7 @@ export interface OpponentSeatProps {
   isTargetable?: boolean;
   isInRange?: boolean;
   distance?: number;
+  concealedInPlayCardIds?: string[];
   onSelectTarget?: () => void;
 }
 
@@ -25,8 +26,28 @@ export const OpponentSeat: React.FC<OpponentSeatProps> = ({
   isTargetable = false,
   isInRange = true,
   distance,
+  concealedInPlayCardIds,
   onSelectTarget,
 }) => {
+  const concealedSet = concealedInPlayCardIds?.length
+    ? new Set(concealedInPlayCardIds)
+    : undefined;
+  const visibleHasJail = concealedSet
+    ? (player.judgements || []).some(
+        (j) =>
+          j.type === "JAIL" &&
+          !concealedSet.has(j.id) &&
+          !(j.card && concealedSet.has(j.card.id))
+      )
+    : player.hasJail;
+  const visibleHasDynamite = concealedSet
+    ? (player.judgements || []).some(
+        (j) =>
+          j.type === "DYNAMITE" &&
+          !concealedSet.has(j.id) &&
+          !(j.card && concealedSet.has(j.card.id))
+      )
+    : player.hasDynamite;
   const isDead = player.hp <= 0;
   const canSelect = !isDead && isTargetable && isInRange;
   const isDimmed = !isDead && isTargetable && !isInRange;
@@ -73,8 +94,8 @@ export const OpponentSeat: React.FC<OpponentSeatProps> = ({
       className={seatClasses}
     >
       <OpponentJudgementBadges
-        hasJail={player.hasJail}
-        hasDynamite={player.hasDynamite}
+        hasJail={visibleHasJail}
+        hasDynamite={visibleHasDynamite}
       />
 
       <div className="opponent-seat__main-pane">
@@ -138,37 +159,43 @@ export const OpponentSeat: React.FC<OpponentSeatProps> = ({
           </div>
         </div>
 
-        {/* Equipment 2x3 grid (6 slots) */}
+        {/* Fixed 2x3 equipment grid: 1 Weapon, 2 Barrel, 3 Mustang, 4 Scope, 5 Hideout, 6 Binocular */}
         {(() => {
-          const blueCards = getAllEquipments(player.equipments);
-
-          const equipSlots = Array.from({ length: Math.max(6, blueCards.length) }).map(
-            (_, idx) => blueCards[idx]
-          );
+          const equipSlots = getFixedEquipmentSlots(player.equipments, concealedSet);
 
           return (
-            <div className="opponent-seat__equip-rows">
-              {equipSlots.map((card, idx) => {
-                if (!card) {
+            <div
+              className="opponent-seat__equip-rows"
+              data-flight-anchor={`opp-equip-${player.id}`}
+            >
+              {equipSlots.map((slot) => {
+                const anchor = `opp-equip-${player.id}-${slot.slotKey}`;
+                if (!slot.card) {
                   return (
                     <div
-                      key={`eq_empty_${idx}`}
+                      key={slot.slotKey}
+                      data-flight-anchor={anchor}
                       className="opponent-seat__equip-row"
                       aria-hidden="true"
                     />
                   );
                 }
 
-                const title = card.range ? `${card.name} (Range ${card.range})` : card.name;
+                const title = slot.card.range
+                  ? `${slot.card.name} (Range ${slot.card.range})`
+                  : slot.card.name;
                 return (
                   <DebouncedPopover
-                    key={card.id || `eq_${idx}`}
+                    key={slot.slotKey}
                     title={title}
-                    content={card.desc || card.name}
+                    content={slot.card.desc || slot.card.name}
                     delayMs={250}
                   >
-                    <div className="opponent-seat__equip-row opponent-seat__equip-row--occupied">
-                      <span className="opponent-seat__equip-name">{card.name}</span>
+                    <div
+                      data-flight-anchor={anchor}
+                      className="opponent-seat__equip-row opponent-seat__equip-row--occupied"
+                    >
+                      <span className="opponent-seat__equip-name">{slot.card.name}</span>
                     </div>
                   </DebouncedPopover>
                 );
@@ -180,13 +207,21 @@ export const OpponentSeat: React.FC<OpponentSeatProps> = ({
 
       {/* Right pane: Scrollable Green Cards */}
       {(() => {
-        const greens = player.greenCards || [];
+        const greens = concealedSet
+          ? (player.greenCards || []).filter(
+              (g) => !concealedSet.has(g.card.id) && !concealedSet.has(g.id)
+            )
+          : player.greenCards || [];
         const greenSlots = Array.from({ length: Math.max(6, greens.length) }).map(
           (_, idx) => greens[idx]
         );
 
         return (
-          <div className="opponent-seat__green-pane" aria-label="Green cards in play">
+          <div
+            className="opponent-seat__green-pane"
+            data-flight-anchor={`opp-green-${player.id}`}
+            aria-label="Green cards in play"
+          >
             <div className="opponent-seat__green-list">
               {greenSlots.map((gCard, idx) => {
                 if (!gCard) {

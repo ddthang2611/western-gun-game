@@ -10,6 +10,7 @@ const skill_hooks_1 = require("../interact/skill_hooks");
 const win_condition_1 = require("../elimination/win_condition");
 const atomic_effects_1 = require("../interact/primitives/atomic_effects");
 const interact_manager_1 = require("../interact/interact_manager");
+const arena_chain_manager_1 = require("../arena/arena_chain_manager");
 const inventory_1 = require("../utils/inventory");
 const GREEN_MISSED_CARDS = new Set([
     "BIBLE",
@@ -443,6 +444,18 @@ class TurnManager {
                     allDrawn.push(bonusCard);
                 }
             }
+            arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                {
+                    kind: "REVEAL_CARD",
+                    card: secondCard,
+                    actorPlayerId: player.id,
+                    actorPlayerName: player.name,
+                    originZone: "DECK",
+                    destinationZone: "HAND",
+                    destinationPlayerId: player.id,
+                    actionLabel: bonusCard ? "Black Jack (+1 Bonus)" : "Black Jack Reveal",
+                },
+            ]);
             events.push({
                 type: "BLACK_JACK_REVEAL",
                 payload: {
@@ -461,6 +474,18 @@ class TurnManager {
         if (ctx.allowLawOfTheWest && drawnCards.length >= 2) {
             const forcedCard = drawnCards[1];
             player.forcedPlayCardId = forcedCard.id;
+            arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                {
+                    kind: "REVEAL_CARD",
+                    card: forcedCard,
+                    actorPlayerId: player.id,
+                    actorPlayerName: player.name,
+                    originZone: "DECK",
+                    destinationZone: "HAND",
+                    destinationPlayerId: player.id,
+                    actionLabel: "Law of the West",
+                },
+            ]);
             events.push({
                 type: "LAW_OF_THE_WEST_REVEAL",
                 payload: {
@@ -537,6 +562,19 @@ class TurnManager {
             const suit = skill_hooks_1.SkillHooks.getEffectiveSuit(card, state);
             const isRed = suit === "hearts" || suit === "diamonds";
             const matched = (guess === "RED" && isRed) || (guess === "BLACK" && !isRed);
+            arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                {
+                    kind: "CHECK_RESULT",
+                    card,
+                    actorPlayerId: player.id,
+                    actorPlayerName: player.name,
+                    originZone: "DECK",
+                    destinationZone: matched ? "HAND" : "DISCARD",
+                    destinationPlayerId: matched ? player.id : undefined,
+                    actionLabel: `Peyote ${guess} (${matched ? "CORRECT" : "WRONG"})`,
+                    outcome: matched ? "CORRECT" : "WRONG",
+                },
+            ]);
             events.push({
                 type: "EVENT_PEYOTE_GUESS",
                 payload: {
@@ -802,6 +840,15 @@ class TurnManager {
                 for (const card of matched) {
                     atomic_effects_1.AtomicEffects.discardCard(state, card);
                 }
+                arena_chain_manager_1.ArenaChainManager.appendBatch(state, matched.map((card) => ({
+                    kind: "DISCARD_CARD",
+                    card,
+                    actorPlayerId: player.id,
+                    actorPlayerName: player.name,
+                    originZone: "HAND",
+                    destinationZone: "DISCARD",
+                    actionLabel: "Ranch Discard",
+                })));
                 const ranchDraw = atomic_effects_1.AtomicEffects.drawCards(state, matched.length);
                 events.push(...ranchDraw.events);
                 player.handCards.push(...ranchDraw.cards);
@@ -922,11 +969,13 @@ class TurnManager {
                 events,
             };
         }
+        const discardedBatch = [];
         for (const id of targetIds) {
             const idx = player.handCards.findIndex((c) => c.id === id);
             if (idx !== -1) {
                 const card = player.handCards.splice(idx, 1)[0];
                 atomic_effects_1.AtomicEffects.discardCard(state, card);
+                discardedBatch.push(card);
                 if (player.forcedPlayCardId === card.id) {
                     player.forcedPlayCardId = null;
                 }
@@ -936,6 +985,17 @@ class TurnManager {
                     timestamp: Date.now(),
                 });
             }
+        }
+        if (discardedBatch.length > 0) {
+            arena_chain_manager_1.ArenaChainManager.appendBatch(state, discardedBatch.map((card) => ({
+                kind: "DISCARD_CARD",
+                card,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                originZone: "HAND",
+                destinationZone: "DISCARD",
+                actionLabel: `Discard (${card.name})`,
+            })));
         }
         skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, events);
         return { success: true, events };

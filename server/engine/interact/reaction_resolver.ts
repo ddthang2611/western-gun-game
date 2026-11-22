@@ -8,6 +8,7 @@ import { EventEngine } from "../events/event_engine";
 import { SkillHooks } from "./skill_hooks";
 import { AtomicEffects } from "./primitives/atomic_effects";
 import { PendingReaction } from "./interact_types";
+import { ArenaChainManager } from "../arena/arena_chain_manager";
 import {
   getAllEquippedCards,
   hasBarrelCard,
@@ -158,6 +159,21 @@ export class ReactionResolver {
     }
     AtomicEffects.discardCards(state, discardedCards, deckManager);
 
+    ArenaChainManager.appendBatch(
+      state,
+      discardedCards.map((c, idx) => ({
+        kind: "DEFENSE_CARD" as const,
+        card: c,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        originZone: "HAND" as const,
+        destinationZone: "DISCARD" as const,
+        actionLabel: "Sid Ketchum Rescue",
+        vfxType: idx === 0 ? ("heal" as const) : undefined,
+        vfxTargetId: idx === 0 ? player.id : undefined,
+      }))
+    );
+
     const healAmount = discardedCards.length / 2;
     player.hp = Math.min(player.hp + healAmount, player.maxHp);
     SkillHooks.onPlayOutOfTurn(state, player, events);
@@ -240,6 +256,18 @@ export class ReactionResolver {
     }
 
     AtomicEffects.discardCard(state, removedCard, deckManager);
+    ArenaChainManager.appendBatch(state, [
+      {
+        kind: "DISCARD_CARD",
+        card: removedCard,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        originZone: "EQUIPMENT",
+        originSlotKey: ArenaChainManager.resolveEquipmentSlotKey(removedCard),
+        destinationZone: "DISCARD",
+        actionLabel: `The Daltons (${removedCard.name})`,
+      },
+    ]);
     state.pendingReactions.splice(reactionIdx, 1);
 
     events.push({
@@ -405,6 +433,36 @@ export class ReactionResolver {
       );
       events.push(...drawCheck.events);
 
+      const sourceCheckCard =
+        checkSource === "BARREL"
+          ? ArenaChainManager.getRealBarrelCard(player)
+          : ArenaChainManager.buildJourdonnaisCard(player);
+
+      ArenaChainManager.appendBatch(state, [
+        {
+          kind: "CHECK_SOURCE",
+          card: sourceCheckCard,
+          actorPlayerId: player.id,
+          actorPlayerName: player.name,
+          originZone: checkSource === "BARREL" ? "EQUIPMENT" : "HERO",
+          originSlotKey: checkSource === "BARREL" ? "barrel" : undefined,
+          actionLabel: checkSource === "BARREL" ? "BARREL Check" : "Jourdonnais Check",
+        },
+        ...drawCheck.drawnCards.map((drawnCard) => {
+          const cardPassed = SkillHooks.getEffectiveSuit(drawnCard, state) === "hearts";
+          return {
+            kind: "CHECK_RESULT" as const,
+            card: drawnCard,
+            actorPlayerId: player.id,
+            actorPlayerName: player.name,
+            originZone: "DECK" as const,
+            destinationZone: "DISCARD" as const,
+            actionLabel: `${drawnCard.rank} ${drawnCard.suit} (${cardPassed ? "PASSED" : "FAILED"})`,
+            outcome: (cardPassed ? "PASSED" : "FAILED") as "PASSED" | "FAILED",
+          };
+        }),
+      ]);
+
       if (drawCheck.success) {
         reaction.currentCount += 1;
         events.push({
@@ -503,6 +561,18 @@ export class ReactionResolver {
       greenCards.splice(gIdx, 1);
       AtomicEffects.discardCard(state, greenEntry.card, deckManager);
 
+      ArenaChainManager.appendBatch(state, [
+        {
+          kind: "DEFENSE_CARD",
+          card: greenEntry.card,
+          actorPlayerId: player.id,
+          actorPlayerName: player.name,
+          originZone: "GREEN",
+          destinationZone: "DISCARD",
+          actionLabel: `${greenEntry.card.name} (Missed!)`,
+        },
+      ]);
+
       if (greenEntry.card.name === "BIBLE") {
         const { cards: drawn, events: drawEvents } = AtomicEffects.drawCards(
           state,
@@ -583,6 +653,33 @@ export class ReactionResolver {
 
       player.handCards.splice(cardIdx, 1);
       AtomicEffects.discardCard(state, card, deckManager);
+
+      const duelNextTarget =
+        reaction.type === "DUEL_RESPONSE"
+          ? state.players.get(reaction.sourcePlayerId)
+          : undefined;
+      ArenaChainManager.appendBatch(state, [
+        {
+          kind: "DEFENSE_CARD",
+          card,
+          actorPlayerId: player.id,
+          actorPlayerName: player.name,
+          targetPlayerId: duelNextTarget?.id,
+          targetPlayerName: duelNextTarget?.name,
+          originZone: "HAND",
+          destinationZone: "DISCARD",
+          actionLabel:
+            reaction.type === "DUEL_RESPONSE" && duelNextTarget
+              ? `Duel ${card.name} -> ${duelNextTarget.name}`
+              : reaction.type === "INDIANS_DEFENSE"
+              ? `Indians! ${card.name}`
+              : reaction.type === "EVENT_RUSSIAN_ROULETTE"
+              ? `Russian Roulette (${card.name})`
+              : card.name,
+          vfxType: reaction.type === "DUEL_RESPONSE" ? "bullet" : undefined,
+          vfxTargetId: reaction.type === "DUEL_RESPONSE" ? duelNextTarget?.id : undefined,
+        },
+      ]);
 
       if (reaction.requiredCard === "MISSED" && card.name !== "MISSED!" && card.name !== "DODGE") {
         if (card.name === "BANG!" && SkillHooks.hasSkill(player, "Calamity Janet", state)) {

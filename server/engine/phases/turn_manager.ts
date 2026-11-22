@@ -14,6 +14,7 @@ import { SkillHooks } from "../interact/skill_hooks";
 import { WinConditionEvaluator } from "../elimination/win_condition";
 import { AtomicEffects } from "../interact/primitives/atomic_effects";
 import { InteractManager } from "../interact/interact_manager";
+import { ArenaChainManager } from "../arena/arena_chain_manager";
 import { getAllEquippedCards } from "../utils/inventory";
 
 const GREEN_MISSED_CARDS = new Set([
@@ -561,6 +562,19 @@ export class TurnManager {
         }
       }
 
+      ArenaChainManager.appendBatch(state, [
+        {
+          kind: "REVEAL_CARD",
+          card: secondCard,
+          actorPlayerId: player.id,
+          actorPlayerName: player.name,
+          originZone: "DECK",
+          destinationZone: "HAND",
+          destinationPlayerId: player.id,
+          actionLabel: bonusCard ? "Black Jack (+1 Bonus)" : "Black Jack Reveal",
+        },
+      ]);
+
       events.push({
         type: "BLACK_JACK_REVEAL",
         payload: {
@@ -581,6 +595,18 @@ export class TurnManager {
     if (ctx.allowLawOfTheWest && drawnCards.length >= 2) {
       const forcedCard = drawnCards[1];
       player.forcedPlayCardId = forcedCard.id;
+      ArenaChainManager.appendBatch(state, [
+        {
+          kind: "REVEAL_CARD",
+          card: forcedCard,
+          actorPlayerId: player.id,
+          actorPlayerName: player.name,
+          originZone: "DECK",
+          destinationZone: "HAND",
+          destinationPlayerId: player.id,
+          actionLabel: "Law of the West",
+        },
+      ]);
       events.push({
         type: "LAW_OF_THE_WEST_REVEAL",
         payload: {
@@ -675,6 +701,20 @@ export class TurnManager {
       const suit = SkillHooks.getEffectiveSuit(card, state);
       const isRed = suit === "hearts" || suit === "diamonds";
       const matched = (guess === "RED" && isRed) || (guess === "BLACK" && !isRed);
+
+      ArenaChainManager.appendBatch(state, [
+        {
+          kind: "CHECK_RESULT",
+          card,
+          actorPlayerId: player.id,
+          actorPlayerName: player.name,
+          originZone: "DECK",
+          destinationZone: matched ? "HAND" : "DISCARD",
+          destinationPlayerId: matched ? player.id : undefined,
+          actionLabel: `Peyote ${guess} (${matched ? "CORRECT" : "WRONG"})`,
+          outcome: matched ? "CORRECT" : "WRONG",
+        },
+      ]);
 
       events.push({
         type: "EVENT_PEYOTE_GUESS",
@@ -1018,6 +1058,18 @@ export class TurnManager {
         for (const card of matched) {
           AtomicEffects.discardCard(state, card);
         }
+        ArenaChainManager.appendBatch(
+          state,
+          matched.map((card) => ({
+            kind: "DISCARD_CARD" as const,
+            card,
+            actorPlayerId: player.id,
+            actorPlayerName: player.name,
+            originZone: "HAND" as const,
+            destinationZone: "DISCARD" as const,
+            actionLabel: "Ranch Discard",
+          }))
+        );
         const ranchDraw = AtomicEffects.drawCards(state, matched.length);
         events.push(...ranchDraw.events);
         player.handCards.push(...ranchDraw.cards);
@@ -1163,11 +1215,13 @@ export class TurnManager {
       };
     }
 
+    const discardedBatch: EngineCard[] = [];
     for (const id of targetIds) {
       const idx = player.handCards.findIndex((c) => c.id === id);
       if (idx !== -1) {
         const card = player.handCards.splice(idx, 1)[0];
         AtomicEffects.discardCard(state, card);
+        discardedBatch.push(card);
         if (player.forcedPlayCardId === card.id) {
           player.forcedPlayCardId = null;
         }
@@ -1177,6 +1231,21 @@ export class TurnManager {
           timestamp: Date.now(),
         });
       }
+    }
+
+    if (discardedBatch.length > 0) {
+      ArenaChainManager.appendBatch(
+        state,
+        discardedBatch.map((card) => ({
+          kind: "DISCARD_CARD" as const,
+          card,
+          actorPlayerId: player.id,
+          actorPlayerName: player.name,
+          originZone: "HAND" as const,
+          destinationZone: "DISCARD" as const,
+          actionLabel: `Discard (${card.name})`,
+        }))
+      );
     }
 
     SkillHooks.checkSuzyLafayette(state, player, events);

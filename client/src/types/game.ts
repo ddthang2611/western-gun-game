@@ -111,13 +111,94 @@ export interface PendingPhase1ChoiceInfo {
   ranchUsed?: boolean;
 }
 
+export type EquipmentSlotKey =
+  | "weapon"
+  | "barrel"
+  | "horseDef"
+  | "horseOff"
+  | "hideout"
+  | "binocular";
+
+export type ArenaChainStatus = "IDLE" | "ACTIVE_CHAIN" | "SETTLING";
+
+export type ArenaOriginZone =
+  | "HAND"
+  | "GREEN"
+  | "EQUIPMENT"
+  | "JUDGEMENT"
+  | "DECK"
+  | "DISCARD"
+  | "HERO"
+  | "EVENT";
+
+export type ArenaDestinationZone =
+  | "DISCARD"
+  | "EQUIPMENT"
+  | "GREEN"
+  | "JUDGEMENT"
+  | "HAND"
+  | "DECK";
+
+export type ArenaEntryKind =
+  | "PLAYED_CARD"
+  | "EQUIP_PLACEMENT"
+  | "EXTRA_COST"
+  | "CHECK_SOURCE"
+  | "CHECK_RESULT"
+  | "DEFENSE_CARD"
+  | "DISCARD_CARD"
+  | "REVEAL_CARD";
+
+export type ArenaOutcomeTag =
+  | "PASSED"
+  | "FAILED"
+  | "EXPLODED"
+  | "ESCAPED"
+  | "LOCKED"
+  | "CORRECT"
+  | "WRONG";
+
+export type ArenaVfxType = "bullet" | "heal" | "jail" | "dynamite" | "draw";
+
+export interface ArenaCardEntry {
+  id: string;
+  stepIndex: number;
+  batchIndex: number;
+  kind: ArenaEntryKind;
+  card: Card;
+  actorPlayerId: string;
+  actorPlayerName: string;
+  targetPlayerId?: string;
+  targetPlayerName?: string;
+  originZone: ArenaOriginZone;
+  originSlotKey?: EquipmentSlotKey;
+  destinationZone?: ArenaDestinationZone;
+  destinationPlayerId?: string;
+  destinationSlotKey?: EquipmentSlotKey;
+  actionLabel: string;
+  outcome?: ArenaOutcomeTag;
+  vfxType?: ArenaVfxType;
+  vfxTargetId?: string;
+  vfxAoe?: boolean;
+  addedAt: number;
+}
+
+export interface ArenaChainState {
+  chainId: string;
+  status: ArenaChainStatus;
+  entries: ArenaCardEntry[];
+  stepLockRemainingMs?: number;
+  settleRemainingMs?: number;
+}
+
 export interface InFlightCard {
   id: string;
   card: Card;
   sourcePlayerName: string;
   targetPlayerName?: string;
   actionText: string;
-  isFlipReveal?: boolean;
+  kind?: ArenaEntryKind;
+  outcome?: ArenaOutcomeTag;
 }
 
 export interface PendingReactionInfo {
@@ -244,6 +325,7 @@ export interface TableState {
   discardCount: number;
   topDiscard?: Card;
   inFlightCards: InFlightCard[];
+  arenaChain?: ArenaChainState;
   combatLog: string[];
   roleCounts: {
     police: number;

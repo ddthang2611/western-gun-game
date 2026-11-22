@@ -5,6 +5,7 @@ import { DeckManager } from "../../deck/deck_manager";
 import { TargetValidator } from "../../combat/target_validator";
 import { SkillHooks } from "../skill_hooks";
 import { AtomicEffects } from "../primitives/atomic_effects";
+import { ArenaChainManager } from "../../arena/arena_chain_manager";
 
 export class ActiveSkills {
   // Active character skills handler
@@ -74,6 +75,20 @@ export class ActiveSkills {
     for (const card of discarded) {
       AtomicEffects.discardCard(state, card);
     }
+    ArenaChainManager.appendBatch(
+      state,
+      discarded.map((card, idx) => ({
+        kind: "EXTRA_COST" as const,
+        card,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        originZone: "HAND" as const,
+        destinationZone: "DISCARD" as const,
+        actionLabel: "Sid Ketchum (+1 HP)",
+        vfxType: idx === 0 ? ("heal" as const) : undefined,
+        vfxTargetId: idx === 0 ? player.id : undefined,
+      }))
+    );
     player.hp = Math.min(player.hp + 1, player.maxHp);
 
     events.push({
@@ -124,6 +139,24 @@ export class ActiveSkills {
     const { cards: drawn, events: drawEvents } = DeckManager.drawCards(state, 2);
     events.push(...drawEvents);
     player.handCards.push(...drawn);
+    if (drawn.length > 0) {
+      events.push({
+        type: "CARDS_DRAWN",
+        visibleTo: [player.id],
+        payload: {
+          playerId: player.id,
+          playerName: player.name,
+          count: drawn.length,
+          cards: drawn,
+        },
+        maskedPayload: {
+          playerId: player.id,
+          playerName: player.name,
+          count: drawn.length,
+        },
+        timestamp: Date.now(),
+      });
+    }
 
     events.push({
       type: "ACTIVE_SKILL_USED",
@@ -177,6 +210,18 @@ export class ActiveSkills {
 
     player.handCards.splice(cardIdx, 1);
     AtomicEffects.discardCard(state, card);
+    ArenaChainManager.appendBatch(state, [
+      {
+        kind: "EXTRA_COST",
+        card,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        originZone: "HAND",
+        destinationZone: "DISCARD",
+        actionLabel: "Jose Delgado (+2)",
+        vfxType: "draw",
+      },
+    ]);
     state.joseDelgadoCountThisTurn += 1;
 
     SkillHooks.checkSuzyLafayette(state, player, events);
@@ -184,6 +229,26 @@ export class ActiveSkills {
     const { cards: drawn, events: drawEvents } = DeckManager.drawCards(state, 2);
     events.push(...drawEvents);
     player.handCards.push(...drawn);
+    if (drawn.length > 0) {
+      events.push({
+        type: "CARDS_DRAWN",
+        visibleTo: [player.id],
+        payload: {
+          playerId: player.id,
+          playerName: player.name,
+          sourceCard: card,
+          count: drawn.length,
+          cards: drawn,
+        },
+        maskedPayload: {
+          playerId: player.id,
+          playerName: player.name,
+          sourceCard: card,
+          count: drawn.length,
+        },
+        timestamp: Date.now(),
+      });
+    }
 
     events.push({
       type: "ACTIVE_SKILL_USED",
@@ -274,6 +339,22 @@ export class ActiveSkills {
     for (const card of discarded) {
       AtomicEffects.discardCard(state, card);
     }
+    ArenaChainManager.appendBatch(
+      state,
+      discarded.map((card, idx) => ({
+        kind: idx === 0 ? ("PLAYED_CARD" as const) : ("EXTRA_COST" as const),
+        card,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        targetPlayerId: target.id,
+        targetPlayerName: target.name,
+        originZone: "HAND" as const,
+        destinationZone: "DISCARD" as const,
+        actionLabel: idx === 0 ? `Doc Holyday BANG! -> ${target.name}` : "Doc Holyday Cost",
+        vfxType: idx === 0 ? ("bullet" as const) : undefined,
+        vfxTargetId: idx === 0 ? target.id : undefined,
+      }))
+    );
 
     state.docHolydayUsedThisTurn += 1;
     SkillHooks.checkSuzyLafayette(state, player, events);

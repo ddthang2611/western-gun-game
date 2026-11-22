@@ -9,7 +9,9 @@ import {
   PendingTurnStartChoice,
   PendingPhase1Choice,
   PlayerEquipments,
+  ArenaChainState,
 } from "../types/state";
+import { ArenaChainManager } from "../arena/arena_chain_manager";
 import {
   EngineCard,
   EngineEventCard,
@@ -102,6 +104,7 @@ export interface SanitizedGameState {
   activeChain: any[];
   myPendingReaction: any | null;
   pendingReactionTargets: PublicReactionSummary[];
+  arenaChain: ArenaChainState;
   generalStore: GeneralStoreSnapshot | null;
   gameOver?: {
     winner: string | null;
@@ -324,6 +327,19 @@ export class FogOfWarFilter {
       activeChain: sanitizedActiveChain,
       myPendingReaction,
       pendingReactionTargets,
+      arenaChain: (() => {
+        const chain = ArenaChainManager.ensureChain(state);
+        return {
+          chainId: chain.chainId,
+          status: chain.status,
+          entries: chain.entries.map((entry) => ({
+            ...entry,
+            card: { ...entry.card },
+          })),
+          stepLockUntil: chain.stepLockUntil,
+          settleUntil: chain.settleUntil,
+        };
+      })(),
       generalStore,
       gameOver: state.gameOver,
     };

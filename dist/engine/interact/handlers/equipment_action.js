@@ -5,6 +5,7 @@ const event_engine_1 = require("../../events/event_engine");
 const target_validator_1 = require("../../combat/target_validator");
 const skill_hooks_1 = require("../skill_hooks");
 const atomic_effects_1 = require("../primitives/atomic_effects");
+const arena_chain_manager_1 = require("../../arena/arena_chain_manager");
 const inventory_1 = require("../../utils/inventory");
 class EquipmentAction {
     // Check if blue extra already equipped
@@ -73,6 +74,19 @@ class EquipmentAction {
                 atomic_effects_1.AtomicEffects.discardCard(state, player.equipments.weapon, deckManager);
             }
             player.equipments.weapon = card;
+            arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                {
+                    kind: "EQUIP_PLACEMENT",
+                    card,
+                    actorPlayerId: player.id,
+                    actorPlayerName: player.name,
+                    originZone: "HAND",
+                    destinationZone: "EQUIPMENT",
+                    destinationPlayerId: player.id,
+                    destinationSlotKey: "weapon",
+                    actionLabel: `Equip ${card.name}`,
+                },
+            ]);
             events.push({
                 type: "EQUIPMENT_EQUIPPED",
                 payload: {
@@ -89,6 +103,19 @@ class EquipmentAction {
         if (card.name === "JAIL" && targetPlayer) {
             if (skill_hooks_1.SkillHooks.isImmuneToCard(targetPlayer, card, player, state)) {
                 atomic_effects_1.AtomicEffects.discardCard(state, card, deckManager);
+                arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                    {
+                        kind: "PLAYED_CARD",
+                        card,
+                        actorPlayerId: player.id,
+                        actorPlayerName: player.name,
+                        targetPlayerId: targetPlayer.id,
+                        targetPlayerName: targetPlayer.name,
+                        originZone: "HAND",
+                        destinationZone: "DISCARD",
+                        actionLabel: `${card.name} -> ${targetPlayer.name} (Immune)`,
+                    },
+                ]);
                 events.push({
                     type: "APACHE_KID_IMMUNITY",
                     payload: {
@@ -110,6 +137,22 @@ class EquipmentAction {
                 attachedTimestamp: Date.now(),
             };
             targetPlayer.judgements.push(newJail);
+            arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                {
+                    kind: "EQUIP_PLACEMENT",
+                    card,
+                    actorPlayerId: player.id,
+                    actorPlayerName: player.name,
+                    targetPlayerId: targetPlayer.id,
+                    targetPlayerName: targetPlayer.name,
+                    originZone: "HAND",
+                    destinationZone: "JUDGEMENT",
+                    destinationPlayerId: targetPlayer.id,
+                    actionLabel: `${card.name} -> ${targetPlayer.name}`,
+                    vfxType: "jail",
+                    vfxTargetId: targetPlayer.id,
+                },
+            ]);
             events.push({
                 type: "JAIL_ATTACHED",
                 payload: {
@@ -133,6 +176,20 @@ class EquipmentAction {
                 attachedTimestamp: Date.now(),
             };
             player.judgements.push(newDynamite);
+            arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                {
+                    kind: "EQUIP_PLACEMENT",
+                    card,
+                    actorPlayerId: player.id,
+                    actorPlayerName: player.name,
+                    originZone: "HAND",
+                    destinationZone: "JUDGEMENT",
+                    destinationPlayerId: player.id,
+                    actionLabel: `Place ${card.name}`,
+                    vfxType: "dynamite",
+                    vfxTargetId: player.id,
+                },
+            ]);
             events.push({
                 type: "DYNAMITE_ATTACHED",
                 payload: {
@@ -165,6 +222,19 @@ class EquipmentAction {
                 player.equipments.extras = extras;
                 player.equipments.extra = extras[0];
             }
+            arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                {
+                    kind: "EQUIP_PLACEMENT",
+                    card,
+                    actorPlayerId: player.id,
+                    actorPlayerName: player.name,
+                    originZone: "HAND",
+                    destinationZone: "EQUIPMENT",
+                    destinationPlayerId: player.id,
+                    destinationSlotKey: arena_chain_manager_1.ArenaChainManager.resolveEquipmentSlotKey(card),
+                    actionLabel: `Equip ${card.name}`,
+                },
+            ]);
             events.push({
                 type: "EQUIPMENT_EQUIPPED",
                 payload: {
@@ -184,6 +254,18 @@ class EquipmentAction {
             attachedTurnRound: state.roundNumber,
         };
         player.greenCards.push(greenCard);
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+            {
+                kind: "EQUIP_PLACEMENT",
+                card,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                originZone: "HAND",
+                destinationZone: "GREEN",
+                destinationPlayerId: player.id,
+                actionLabel: `Place ${card.name}`,
+            },
+        ]);
         events.push({
             type: "GREEN_CARD_EQUIPPED",
             payload: {

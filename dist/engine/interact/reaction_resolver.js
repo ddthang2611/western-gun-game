@@ -6,6 +6,7 @@ const elimination_handler_1 = require("../elimination/elimination_handler");
 const event_engine_1 = require("../events/event_engine");
 const skill_hooks_1 = require("./skill_hooks");
 const atomic_effects_1 = require("./primitives/atomic_effects");
+const arena_chain_manager_1 = require("../arena/arena_chain_manager");
 const inventory_1 = require("../utils/inventory");
 const GREEN_DEFENSE_CARDS = new Set([
     "SOMBRERO",
@@ -114,6 +115,17 @@ class ReactionResolver {
             }
         }
         atomic_effects_1.AtomicEffects.discardCards(state, discardedCards, deckManager);
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, discardedCards.map((c, idx) => ({
+            kind: "DEFENSE_CARD",
+            card: c,
+            actorPlayerId: player.id,
+            actorPlayerName: player.name,
+            originZone: "HAND",
+            destinationZone: "DISCARD",
+            actionLabel: "Sid Ketchum Rescue",
+            vfxType: idx === 0 ? "heal" : undefined,
+            vfxTargetId: idx === 0 ? player.id : undefined,
+        })));
         const healAmount = discardedCards.length / 2;
         player.hp = Math.min(player.hp + healAmount, player.maxHp);
         skill_hooks_1.SkillHooks.onPlayOutOfTurn(state, player, events);
@@ -176,6 +188,18 @@ class ReactionResolver {
             };
         }
         atomic_effects_1.AtomicEffects.discardCard(state, removedCard, deckManager);
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+            {
+                kind: "DISCARD_CARD",
+                card: removedCard,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                originZone: "EQUIPMENT",
+                originSlotKey: arena_chain_manager_1.ArenaChainManager.resolveEquipmentSlotKey(removedCard),
+                destinationZone: "DISCARD",
+                actionLabel: `The Daltons (${removedCard.name})`,
+            },
+        ]);
         state.pendingReactions.splice(reactionIdx, 1);
         events.push({
             type: "EVENT_DALTONS_DISCARDED",
@@ -297,6 +321,33 @@ class ReactionResolver {
             }
             const drawCheck = skill_hooks_1.SkillHooks.executeDrawCheck(state, player, checkSource, (c, st) => skill_hooks_1.SkillHooks.getEffectiveSuit(c, st) === "hearts");
             events.push(...drawCheck.events);
+            const sourceCheckCard = checkSource === "BARREL"
+                ? arena_chain_manager_1.ArenaChainManager.getRealBarrelCard(player)
+                : arena_chain_manager_1.ArenaChainManager.buildJourdonnaisCard(player);
+            arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                {
+                    kind: "CHECK_SOURCE",
+                    card: sourceCheckCard,
+                    actorPlayerId: player.id,
+                    actorPlayerName: player.name,
+                    originZone: checkSource === "BARREL" ? "EQUIPMENT" : "HERO",
+                    originSlotKey: checkSource === "BARREL" ? "barrel" : undefined,
+                    actionLabel: checkSource === "BARREL" ? "BARREL Check" : "Jourdonnais Check",
+                },
+                ...drawCheck.drawnCards.map((drawnCard) => {
+                    const cardPassed = skill_hooks_1.SkillHooks.getEffectiveSuit(drawnCard, state) === "hearts";
+                    return {
+                        kind: "CHECK_RESULT",
+                        card: drawnCard,
+                        actorPlayerId: player.id,
+                        actorPlayerName: player.name,
+                        originZone: "DECK",
+                        destinationZone: "DISCARD",
+                        actionLabel: `${drawnCard.rank} ${drawnCard.suit} (${cardPassed ? "PASSED" : "FAILED"})`,
+                        outcome: (cardPassed ? "PASSED" : "FAILED"),
+                    };
+                }),
+            ]);
             if (drawCheck.success) {
                 reaction.currentCount += 1;
                 events.push({
@@ -380,6 +431,17 @@ class ReactionResolver {
             }
             greenCards.splice(gIdx, 1);
             atomic_effects_1.AtomicEffects.discardCard(state, greenEntry.card, deckManager);
+            arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                {
+                    kind: "DEFENSE_CARD",
+                    card: greenEntry.card,
+                    actorPlayerId: player.id,
+                    actorPlayerName: player.name,
+                    originZone: "GREEN",
+                    destinationZone: "DISCARD",
+                    actionLabel: `${greenEntry.card.name} (Missed!)`,
+                },
+            ]);
             if (greenEntry.card.name === "BIBLE") {
                 const { cards: drawn, events: drawEvents } = atomic_effects_1.AtomicEffects.drawCards(state, 1, deckManager);
                 player.handCards.push(...drawn);
@@ -445,6 +507,30 @@ class ReactionResolver {
             }
             player.handCards.splice(cardIdx, 1);
             atomic_effects_1.AtomicEffects.discardCard(state, card, deckManager);
+            const duelNextTarget = reaction.type === "DUEL_RESPONSE"
+                ? state.players.get(reaction.sourcePlayerId)
+                : undefined;
+            arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                {
+                    kind: "DEFENSE_CARD",
+                    card,
+                    actorPlayerId: player.id,
+                    actorPlayerName: player.name,
+                    targetPlayerId: duelNextTarget?.id,
+                    targetPlayerName: duelNextTarget?.name,
+                    originZone: "HAND",
+                    destinationZone: "DISCARD",
+                    actionLabel: reaction.type === "DUEL_RESPONSE" && duelNextTarget
+                        ? `Duel ${card.name} -> ${duelNextTarget.name}`
+                        : reaction.type === "INDIANS_DEFENSE"
+                            ? `Indians! ${card.name}`
+                            : reaction.type === "EVENT_RUSSIAN_ROULETTE"
+                                ? `Russian Roulette (${card.name})`
+                                : card.name,
+                    vfxType: reaction.type === "DUEL_RESPONSE" ? "bullet" : undefined,
+                    vfxTargetId: reaction.type === "DUEL_RESPONSE" ? duelNextTarget?.id : undefined,
+                },
+            ]);
             if (reaction.requiredCard === "MISSED" && card.name !== "MISSED!" && card.name !== "DODGE") {
                 if (card.name === "BANG!" && skill_hooks_1.SkillHooks.hasSkill(player, "Calamity Janet", state)) {
                     events.push({

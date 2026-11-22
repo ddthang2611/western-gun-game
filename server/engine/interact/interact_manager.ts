@@ -16,6 +16,7 @@ import { ActiveSkills } from "./handlers/active_skills";
 import { ReactionResolver } from "./reaction_resolver";
 import { SkillHooks } from "./skill_hooks";
 import { AtomicEffects } from "./primitives/atomic_effects";
+import { ArenaChainManager } from "../arena/arena_chain_manager";
 import {
   getAllEquippedCards,
   hasEquippedCardByName,
@@ -40,6 +41,19 @@ export class InteractManager {
   ): CommandResult {
     player.handCards.splice(cardIndex, 1);
     AtomicEffects.discardCard(state, card, deckManager);
+
+    ArenaChainManager.appendBatch(state, [
+      {
+        kind: "PLAYED_CARD",
+        card,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        originZone: "HAND",
+        destinationZone: "DISCARD",
+        actionLabel: `${card.name} (+${drawCount})`,
+        vfxType: "draw",
+      },
+    ]);
 
     const events: DomainEvent[] = [];
     SkillHooks.checkSuzyLafayette(state, player, events);
@@ -120,7 +134,7 @@ export class InteractManager {
     }
 
     const card = player.handCards[cardIndex];
-    const res = this.executeHandCardPlay(
+    return this.executeHandCardPlay(
       state,
       player,
       card,
@@ -128,25 +142,6 @@ export class InteractManager {
       command,
       deckManager
     );
-    if (res.success) {
-      res.events = res.events || [];
-      const targetName = command.targetPlayerId
-        ? state.players.get(command.targetPlayerId)?.name
-        : undefined;
-      res.events.push({
-        type: "CARD_PLAYED_TO_ARENA",
-        payload: {
-          playerId: player.id,
-          playerName: player.name,
-          targetPlayerId: command.targetPlayerId,
-          targetPlayerName: targetName,
-          card,
-          isPlacement: card.border === "blue" || card.border === "green",
-        },
-        timestamp: Date.now(),
-      });
-    }
-    return res;
   }
 
   private static executeHandCardPlay(
@@ -371,6 +366,19 @@ export class InteractManager {
       if (SkillHooks.isImmuneToCard(targetPlayer, card, player, state)) {
         player.handCards.splice(cardIndex, 1);
         AtomicEffects.discardCard(state, card, deckManager);
+        ArenaChainManager.appendBatch(state, [
+          {
+            kind: "PLAYED_CARD",
+            card,
+            actorPlayerId: player.id,
+            actorPlayerName: player.name,
+            targetPlayerId: targetPlayer.id,
+            targetPlayerName: targetPlayer.name,
+            originZone: "HAND",
+            destinationZone: "DISCARD",
+            actionLabel: `${card.name} -> ${targetPlayer.name} (Immune)`,
+          },
+        ]);
         const events: DomainEvent[] = [
           {
             type: "APACHE_KID_IMMUNITY",
@@ -519,18 +527,6 @@ export class InteractManager {
 
     if (res.success) {
       res.events = res.events || [];
-      res.events.push({
-        type: "CARD_PLAYED_TO_ARENA",
-        payload: {
-          playerId: player.id,
-          playerName: player.name,
-          targetPlayerId: targetPlayer?.id,
-          targetPlayerName: targetPlayer?.name,
-          card: greenEntry.card,
-          isPlacement: false,
-        },
-        timestamp: Date.now(),
-      });
       if (externalEvents) {
         externalEvents.push(...res.events);
       }

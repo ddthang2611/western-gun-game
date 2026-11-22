@@ -109,6 +109,8 @@ export const TableModals: React.FC<TableModalsProps> = ({
 }) => {
   const {
     isTurnLocked,
+    isArenaLocked,
+    isStepAnimating,
     myPlayer,
     opponents,
     activeHand,
@@ -130,22 +132,25 @@ export const TableModals: React.FC<TableModalsProps> = ({
     isLiveCharSelectOpen ||
     (isMock && (showCharSelectModal || forcedModal === "char_select"));
 
+  // Wait for newly played/checked card in ACTIVE_CHAIN to land face-up in Card Arena before opening DefenseModal
+  const isArenaSettling = state.arenaChain?.status === "SETTLING";
   const isDefenseOpen = !isMock
-    ? Boolean(state.myPendingReaction)
+    ? Boolean(state.myPendingReaction) && !isArenaSettling && !isStepAnimating
     : forcedModal === "defense";
   const effectiveDefenseReaction = !isMock
     ? state.myPendingReaction
     : mockScenarioReaction;
 
+  // Delay GeneralStoreModal & GameOverModal & TurnPromptModal until Card Arena finishes clearing
   const isGeneralStoreOpen = !isMock
-    ? Boolean(state.generalStore && state.generalStore.pool.length > 0)
+    ? Boolean(state.generalStore && state.generalStore.pool.length > 0) && !isArenaLocked
     : forcedModal === "general_store" && Boolean(mockScenarioGeneralStore);
   const effectiveGeneralStore = !isMock
     ? state.generalStore
     : mockScenarioGeneralStore;
 
   const isGameOverOpen = !isMock
-    ? Boolean(state.gameOver)
+    ? Boolean(state.gameOver) && !isArenaLocked
     : forcedModal === "game_over";
   const effectiveGameOver = !isMock ? state.gameOver : mockScenarioGameOver;
 
@@ -193,7 +198,7 @@ export const TableModals: React.FC<TableModalsProps> = ({
         />
       )}
 
-      {!isMock && (
+      {!isMock && !isArenaLocked && (
         <TurnPromptModal
           turnStartChoice={state.pendingTurnStartChoice}
           phase1Choice={state.pendingPhase1Choice}
@@ -201,15 +206,15 @@ export const TableModals: React.FC<TableModalsProps> = ({
           myHand={activeHand}
           myPlayerId={state.myPlayerId}
           topDiscard={state.topDiscard}
-          disabled={isTurnLocked}
+          disabled={isTurnLocked || isArenaLocked}
           isPickerOpen={cardPickerConfig.isOpen}
           onResolveTurnStart={(payload) => {
-            if (!isTurnLocked) {
+            if (!isTurnLocked && !isArenaLocked) {
               onSendLiveCommand("RESOLVE_TURN_START", payload);
             }
           }}
           onResolvePhase1={(payload) => {
-            if (!isTurnLocked) {
+            if (!isTurnLocked && !isArenaLocked) {
               onSendLiveCommand("RESOLVE_PHASE_1", payload);
             }
           }}

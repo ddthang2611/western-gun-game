@@ -5,6 +5,7 @@ import { DeckManager } from "../deck/deck_manager";
 import { SeatManager } from "../board/seat_manager";
 import { SkillHooks } from "../interact/skill_hooks";
 import { AtomicEffects } from "../interact/primitives/atomic_effects";
+import { ArenaChainManager } from "../arena/arena_chain_manager";
 
 export interface JudgementPhaseResult {
   turnSkipped: boolean;
@@ -72,6 +73,37 @@ export class JudgementPhase {
         events.push(...check.events);
         const exploded = check.drawnCards.length > 0 && !check.success;
 
+        const dynArenaEntries = ArenaChainManager.appendBatch(state, [
+          {
+            kind: "CHECK_SOURCE",
+            card: judgement.card,
+            actorPlayerId: player.id,
+            actorPlayerName: player.name,
+            originZone: "JUDGEMENT",
+            destinationZone: exploded ? "DISCARD" : "JUDGEMENT",
+            actionLabel: "DYNAMITE Judgement",
+          },
+          ...check.drawnCards.map((drawnCard) => {
+            const cardExploded = this.isDynamiteExploded(drawnCard, state);
+            return {
+              kind: "CHECK_RESULT" as const,
+              card: drawnCard,
+              actorPlayerId: player.id,
+              actorPlayerName: player.name,
+              originZone: "DECK" as const,
+              destinationZone: "DISCARD" as const,
+              actionLabel: `${drawnCard.rank} ${drawnCard.suit} (${cardExploded ? "EXPLODED" : "PASSED"})`,
+              outcome: (cardExploded ? "EXPLODED" : "PASSED") as "EXPLODED" | "PASSED",
+              vfxType:
+                exploded && drawnCard.id === check.chosenCard?.id
+                  ? ("dynamite" as const)
+                  : undefined,
+              vfxTargetId:
+                exploded && drawnCard.id === check.chosenCard?.id ? player.id : undefined,
+            };
+          }),
+        ]);
+
         events.push({
           type: "JUDGEMENT_RESOLVED",
           payload: {
@@ -80,6 +112,7 @@ export class JudgementPhase {
             judgementType: "DYNAMITE",
             judgementCard: judgement.card,
             drawnCard: check.chosenCard,
+            drawnCards: check.drawnCards,
             result: exploded ? "EXPLODED" : "PASSED",
             damage: exploded ? 3 : 0,
           },
@@ -122,6 +155,9 @@ export class JudgementPhase {
             attachedTimestamp: Date.now(),
           };
           nextSeat.judgements.push(passedJudgement);
+          if (dynArenaEntries[0]) {
+            dynArenaEntries[0].destinationPlayerId = nextSeat.id;
+          }
 
           events.push({
             type: "DYNAMITE_PASSED",
@@ -152,6 +188,31 @@ export class JudgementPhase {
         this.discardJudgementCard(state, judgement.card);
         events.push(...check.events);
 
+        ArenaChainManager.appendBatch(state, [
+          {
+            kind: "CHECK_SOURCE",
+            card: judgement.card,
+            actorPlayerId: player.id,
+            actorPlayerName: player.name,
+            originZone: "JUDGEMENT",
+            destinationZone: "DISCARD",
+            actionLabel: "JAIL Judgement",
+          },
+          ...check.drawnCards.map((drawnCard) => {
+            const escaped = this.isJailEscaped(drawnCard, state);
+            return {
+              kind: "CHECK_RESULT" as const,
+              card: drawnCard,
+              actorPlayerId: player.id,
+              actorPlayerName: player.name,
+              originZone: "DECK" as const,
+              destinationZone: "DISCARD" as const,
+              actionLabel: `${drawnCard.rank} ${drawnCard.suit} (${escaped ? "ESCAPED" : "LOCKED"})`,
+              outcome: (escaped ? "ESCAPED" : "LOCKED") as "ESCAPED" | "LOCKED",
+            };
+          }),
+        ]);
+
         events.push({
           type: "JUDGEMENT_RESOLVED",
           payload: {
@@ -160,6 +221,7 @@ export class JudgementPhase {
             judgementType: "JAIL",
             judgementCard: judgement.card,
             drawnCard: check.chosenCard,
+            drawnCards: check.drawnCards,
             result: check.success ? "ESCAPED" : "LOCKED",
           },
           timestamp: Date.now(),

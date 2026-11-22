@@ -16,6 +16,7 @@ const active_skills_1 = require("./handlers/active_skills");
 const reaction_resolver_1 = require("./reaction_resolver");
 const skill_hooks_1 = require("./skill_hooks");
 const atomic_effects_1 = require("./primitives/atomic_effects");
+const arena_chain_manager_1 = require("../arena/arena_chain_manager");
 const inventory_1 = require("../utils/inventory");
 const GREEN_DEFENSE_ONLY = new Set([
     "SOMBRERO",
@@ -28,6 +29,18 @@ class InteractManager {
     static handleDrawCardPlay(state, player, card, cardIndex, drawCount, deckManager) {
         player.handCards.splice(cardIndex, 1);
         atomic_effects_1.AtomicEffects.discardCard(state, card, deckManager);
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+            {
+                kind: "PLAYED_CARD",
+                card,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                originZone: "HAND",
+                destinationZone: "DISCARD",
+                actionLabel: `${card.name} (+${drawCount})`,
+                vfxType: "draw",
+            },
+        ]);
         const events = [];
         skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, events);
         const { cards: drawn, events: drawEvents } = atomic_effects_1.AtomicEffects.drawCards(state, drawCount, deckManager);
@@ -82,26 +95,7 @@ class InteractManager {
             return { success: false, message: "Card not in hand." };
         }
         const card = player.handCards[cardIndex];
-        const res = this.executeHandCardPlay(state, player, card, cardIndex, command, deckManager);
-        if (res.success) {
-            res.events = res.events || [];
-            const targetName = command.targetPlayerId
-                ? state.players.get(command.targetPlayerId)?.name
-                : undefined;
-            res.events.push({
-                type: "CARD_PLAYED_TO_ARENA",
-                payload: {
-                    playerId: player.id,
-                    playerName: player.name,
-                    targetPlayerId: command.targetPlayerId,
-                    targetPlayerName: targetName,
-                    card,
-                    isPlacement: card.border === "blue" || card.border === "green",
-                },
-                timestamp: Date.now(),
-            });
-        }
-        return res;
+        return this.executeHandCardPlay(state, player, card, cardIndex, command, deckManager);
     }
     static executeHandCardPlay(state, player, card, cardIndex, command, deckManager) {
         const blockReason = event_engine_1.EventEngine.shouldBlockPlayCard(state, player, card);
@@ -199,6 +193,19 @@ class InteractManager {
             if (skill_hooks_1.SkillHooks.isImmuneToCard(targetPlayer, card, player, state)) {
                 player.handCards.splice(cardIndex, 1);
                 atomic_effects_1.AtomicEffects.discardCard(state, card, deckManager);
+                arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                    {
+                        kind: "PLAYED_CARD",
+                        card,
+                        actorPlayerId: player.id,
+                        actorPlayerName: player.name,
+                        targetPlayerId: targetPlayer.id,
+                        targetPlayerName: targetPlayer.name,
+                        originZone: "HAND",
+                        destinationZone: "DISCARD",
+                        actionLabel: `${card.name} -> ${targetPlayer.name} (Immune)`,
+                    },
+                ]);
                 const events = [
                     {
                         type: "APACHE_KID_IMMUNITY",
@@ -290,18 +297,6 @@ class InteractManager {
         }
         if (res.success) {
             res.events = res.events || [];
-            res.events.push({
-                type: "CARD_PLAYED_TO_ARENA",
-                payload: {
-                    playerId: player.id,
-                    playerName: player.name,
-                    targetPlayerId: targetPlayer?.id,
-                    targetPlayerName: targetPlayer?.name,
-                    card: greenEntry.card,
-                    isPlacement: false,
-                },
-                timestamp: Date.now(),
-            });
             if (externalEvents) {
                 externalEvents.push(...res.events);
             }

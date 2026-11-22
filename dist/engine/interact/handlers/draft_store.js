@@ -5,6 +5,7 @@ const event_engine_1 = require("../../events/event_engine");
 const skill_hooks_1 = require("../skill_hooks");
 const aoe_pipeline_1 = require("../pipeline/aoe_pipeline");
 const atomic_effects_1 = require("../primitives/atomic_effects");
+const arena_chain_manager_1 = require("../../arena/arena_chain_manager");
 class DraftStore {
     // Open General Store draft session
     static handleGeneralStore(state, player, card, cardIndex, deckManager) {
@@ -22,6 +23,17 @@ class DraftStore {
         }
         const removed = player.handCards.splice(resolvedIdx, 1)[0];
         atomic_effects_1.AtomicEffects.discardCard(state, removed, deckManager);
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+            {
+                kind: "PLAYED_CARD",
+                card: removed,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                originZone: "HAND",
+                destinationZone: "DISCARD",
+                actionLabel: removed.name,
+            },
+        ]);
         const suzyEvents = [];
         skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, suzyEvents);
         const res = aoe_pipeline_1.AoePipeline.executeDraftStoreAoe(state, player, card, deckManager);

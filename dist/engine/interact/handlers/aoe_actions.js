@@ -6,6 +6,7 @@ const skill_hooks_1 = require("../skill_hooks");
 const aoe_pipeline_1 = require("../pipeline/aoe_pipeline");
 const atomic_effects_1 = require("../primitives/atomic_effects");
 const clockwise_traversal_1 = require("../primitives/clockwise_traversal");
+const arena_chain_manager_1 = require("../../arena/arena_chain_manager");
 class AoeActions {
     // Consume hand card safely
     static consumeHandCard(state, player, card, cardIndex, deckManager) {
@@ -29,6 +30,19 @@ class AoeActions {
         if (!this.consumeHandCard(state, player, card, cardIndex, deckManager)) {
             return { success: false, message: "Card not in hand." };
         }
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+            {
+                kind: "PLAYED_CARD",
+                card,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                originZone: "HAND",
+                destinationZone: "DISCARD",
+                actionLabel: card.name,
+                vfxType: "bullet",
+                vfxAoe: true,
+            },
+        ]);
         const suzyEvents = [];
         skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, suzyEvents);
         const res = aoe_pipeline_1.AoePipeline.executeReactionAoe(state, player, card, "ALL_OTHERS", () => ({
@@ -53,6 +67,19 @@ class AoeActions {
         if (!this.consumeHandCard(state, player, card, cardIndex, deckManager)) {
             return { success: false, message: "Card not in hand." };
         }
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+            {
+                kind: "PLAYED_CARD",
+                card,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                originZone: "HAND",
+                destinationZone: "DISCARD",
+                actionLabel: card.name,
+                vfxType: "bullet",
+                vfxAoe: true,
+            },
+        ]);
         const suzyEvents = [];
         skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, suzyEvents);
         const res = aoe_pipeline_1.AoePipeline.executeReactionAoe(state, player, card, "ALL_OTHERS", () => ({
@@ -91,6 +118,19 @@ class AoeActions {
         }
         greenCards.splice(idx, 1);
         atomic_effects_1.AtomicEffects.discardCard(state, entry.card, deckManager);
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+            {
+                kind: "PLAYED_CARD",
+                card: entry.card,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                originZone: "GREEN",
+                destinationZone: "DISCARD",
+                actionLabel: entry.card.name,
+                vfxType: "bullet",
+                vfxAoe: true,
+            },
+        ]);
         const res = aoe_pipeline_1.AoePipeline.executeReactionAoe(state, player, entry.card, "ALL_OTHERS", () => ({
             type: "GATLING_DEFENSE",
             requiredCard: "MISSED",
@@ -125,6 +165,19 @@ class AoeActions {
         if (!this.consumeHandCard(state, player, card, cardIndex, deckManager)) {
             return { success: false, message: "Card not in hand." };
         }
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+            {
+                kind: "PLAYED_CARD",
+                card,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                originZone: "HAND",
+                destinationZone: "DISCARD",
+                actionLabel: `${card.name} (+1 HP All)`,
+                vfxType: "heal",
+                vfxAoe: true,
+            },
+        ]);
         const suzyEvents = [];
         skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, suzyEvents);
         const res = aoe_pipeline_1.AoePipeline.executeInstantAoe(state, player, card, "ALL_PLAYERS", (target) => {
@@ -155,6 +208,17 @@ class AoeActions {
         if (!this.consumeHandCard(state, player, card, cardIndex, deckManager)) {
             return { success: false, message: "Card not in hand." };
         }
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+            {
+                kind: "PLAYED_CARD",
+                card,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                originZone: "HAND",
+                destinationZone: "DISCARD",
+                actionLabel: card.name,
+            },
+        ]);
         const suzyEvents = [];
         skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, suzyEvents);
         const res = aoe_pipeline_1.AoePipeline.executeDraftStoreAoe(state, player, card, deckManager);
@@ -188,10 +252,35 @@ class AoeActions {
             return { success: false, message: "Card not in hand." };
         }
         const extraIdx = player.handCards.findIndex((c) => c.id === extraCardId);
+        let extraCard;
         if (extraIdx !== -1) {
-            const extraCard = player.handCards.splice(extraIdx, 1)[0];
+            extraCard = player.handCards.splice(extraIdx, 1)[0];
             atomic_effects_1.AtomicEffects.discardCard(state, extraCard, deckManager);
         }
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+            {
+                kind: "PLAYED_CARD",
+                card,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                originZone: "HAND",
+                destinationZone: "DISCARD",
+                actionLabel: card.name,
+            },
+            ...(extraCard
+                ? [
+                    {
+                        kind: "EXTRA_COST",
+                        card: extraCard,
+                        actorPlayerId: player.id,
+                        actorPlayerName: player.name,
+                        originZone: "HAND",
+                        destinationZone: "DISCARD",
+                        actionLabel: `Discard Cost (${extraCard.name})`,
+                    },
+                ]
+                : []),
+        ]);
         const selectionMap = new Map();
         for (const sel of command?.targetSelections || []) {
             selectionMap.set(sel.targetPlayerId, sel);

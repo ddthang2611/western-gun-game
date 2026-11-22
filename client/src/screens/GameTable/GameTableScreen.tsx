@@ -100,20 +100,20 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
     showError: ui.showError,
   });
 
-  const animations = useTableAnimations(isMock ? "" : liveSession.state.myPlayerId);
-
-  useEffect(() => {
-    newHandCardsRef.current = animations.concealHandCards;
-  }, [animations.concealHandCards]);
   const mockSession = useMockTableSimulation({
     externalHeroes,
-    animations,
     showError: ui.showError,
   });
 
   const session = isMock ? mockSession : liveSession;
   const { state } = session;
   const isWsConnected = isMock ? true : liveSession.isWsConnected;
+
+  const animations = useTableAnimations(state.myPlayerId, state.arenaChain);
+
+  useEffect(() => {
+    newHandCardsRef.current = animations.concealHandCards;
+  }, [animations.concealHandCards]);
 
   useEffect(() => {
     gameEventRef.current = (event) => {
@@ -122,11 +122,7 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
         getPlayers: liveSession.getPlayers,
         triggerVfx: animations.triggerVfx,
         enqueueFlight: animations.enqueueFlight,
-        scheduleStaggered: animations.scheduleStaggered,
         scheduleTimeout: animations.scheduleTimeout,
-        addEphemeralCards: animations.addEphemeralCards,
-        removeEphemeralCards: animations.removeEphemeralCards,
-        onDiscardReveal: liveSession.recordDiscardReveal,
         onHoldHandCard: animations.holdHandCard,
         onOpenElGringoPicker: ui.openElGringoPicker,
       });
@@ -142,14 +138,24 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
         myHand: session.myHand,
         myHeroes: session.myHeroes,
         myHp: session.myHp,
+        isArenaBlockingActions: animations.isArenaBlockingActions,
       }),
-    [state, isMock, isWsConnected, session.myHand, session.myHeroes, session.myHp]
+    [
+      animations.isArenaBlockingActions,
+      isMock,
+      isWsConnected,
+      session.myHand,
+      session.myHeroes,
+      session.myHp,
+      state,
+    ]
   );
 
   const selection = useTableSelection({
     isMock,
     isMyTurn: baseCtx.isMyTurn,
     isTurnLocked: baseCtx.isTurnLocked,
+    isArenaLocked: baseCtx.isArenaLocked,
     isActionLocked: baseCtx.isActionLocked,
     isWsConnected,
     currentPhase: state.currentPhase,
@@ -164,12 +170,17 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
     reconcileHandRef.current = selection.reconcileHandSelection;
   }, [selection.reconcileHandSelection]);
 
+  const { resetAnimations } = animations;
+  const { handleCancelSelection } = selection;
+  const { resetUi } = ui;
+
   useEffect(() => {
     matchResetRef.current = () => {
-      selection.handleCancelSelection();
-      ui.resetUi();
+      resetAnimations();
+      handleCancelSelection();
+      resetUi();
     };
-  }, [selection.handleCancelSelection, ui.resetUi]);
+  }, [resetAnimations, handleCancelSelection, resetUi]);
 
   const vm = useMemo(
     () =>
@@ -191,9 +202,22 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
         phase3DiscardIds: selection.phase3DiscardIds,
         skillMode: selection.skillMode,
         skillDiscardIds: selection.skillDiscardIds,
-        ephemeralCheckCards: animations.ephemeralCheckCards,
+        visibleArenaCards: animations.visibleArenaCards,
+        isArenaBlockingActions: animations.isArenaBlockingActions,
+        isStepAnimating: animations.isStepAnimating,
+        concealedInPlayCardIds: animations.concealedInPlayCardIds,
       }),
-    [animations.ephemeralCheckCards, isMock, isWsConnected, selection, session, state]
+    [
+      animations.concealedInPlayCardIds,
+      animations.isArenaBlockingActions,
+      animations.isStepAnimating,
+      animations.visibleArenaCards,
+      isMock,
+      isWsConnected,
+      selection,
+      session,
+      state,
+    ]
   );
 
   const actions = useTableActions({
@@ -278,9 +302,15 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
             selectedTargetId={selection.selectedTargetId}
             weaponRange={vm.activeEquipments.weapon?.range || 1}
             canTarget={!vm.isActionLocked && (!vm.requiresExtraDiscard || selection.discardCostIds.length >= 1)}
-            disabled={vm.isTurnLocked}
+            disabled={vm.isTurnLocked || vm.isArenaLocked}
+            concealedInPlayCardIds={animations.concealedInPlayCardIds}
             onSelectTarget={actions.handleSelectTarget}
-            centerNode={<InFlightChain cards={vm.displayInFlightCards} />}
+            centerNode={
+              <InFlightChain
+                cards={vm.displayInFlightCards}
+                isExiting={animations.isArenaExiting}
+              />
+            }
           />
         </div>
         <TableSidebar
@@ -306,6 +336,7 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
         currentPhase={state.currentPhase}
         isMyTurn={vm.isMyTurn}
         isLocked={vm.isTurnLocked}
+        isArenaLocked={vm.isArenaLocked}
         excessCardsCount={vm.excessCardsCount}
         phase3DiscardCount={selection.phase3DiscardIds.length}
         activeSkillHint={vm.activeSkillHint}
@@ -332,9 +363,10 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
         selectedCardIds={!isMock && state.currentPhase === 3 ? selection.phase3DiscardIds : selection.skillDiscardIds}
         discardCardIds={selection.discardCostIds}
         concealedCardIds={animations.concealedHandCardIds}
+        concealedInPlayCardIds={animations.concealedInPlayCardIds}
         selectedGreenCardId={selection.selectedGreenCardId}
         isCurrentTurn={vm.isMyTurn && state.matchPhase !== "CHARACTER_SELECT"}
-        isLocked={vm.isTurnLocked}
+        isLocked={vm.isTurnLocked || vm.isArenaLocked}
         onSelectCard={selection.handleSelectHandCard}
         onTriggerGreenCard={selection.handleTriggerGreenCard}
       />

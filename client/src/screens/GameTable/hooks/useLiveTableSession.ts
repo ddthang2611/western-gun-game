@@ -301,14 +301,6 @@ export function useLiveTableSession({
     }
   }, [sendMessage]);
 
-  const recordDiscardReveal = useCallback((card: Card) => {
-    setState((prev) => ({
-      ...prev,
-      discardCount: prev.discardCount + 1,
-      topDiscard: card,
-    }));
-  }, []);
-
   const getMyPlayerId = useCallback(() => myPlayerIdRef.current, []);
   const getPlayers = useCallback(() => playersRef.current, []);
 
@@ -325,7 +317,6 @@ export function useLiveTableSession({
     sendLiveCommand,
     sendLobbyReset,
     sendDeleteMatch,
-    recordDiscardReveal,
     getMyPlayerId,
     getPlayers,
   };

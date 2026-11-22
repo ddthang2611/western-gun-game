@@ -18,6 +18,28 @@ class LobbyManager {
     disconnectTimers = new Map();
     wsRateLimiter = new ws_utils_1.SocketRateLimiter(30, 2000, 20);
     playerNames = new Map();
+    getDefaultSettings() {
+        return {
+            dualCharacterEnabled: false,
+            dualCharacterHpRule: "strict",
+            expansions: ["base", "dodge_city"],
+        };
+    }
+    // Clear match and room state cleanly
+    resetRoomToEmptyState() {
+        game_handler_1.GameSessionManager.getInstance().endSession(this.state.roomId);
+        this.kickedPlayerIds.clear();
+        this.state.roomExists = false;
+        this.state.hostId = "";
+        this.state.roomName = "Saloon Table #1";
+        this.state.status = "waiting";
+        this.state.players = [];
+        this.state.settings = this.getDefaultSettings();
+        this.persistLobbyState();
+    }
+    getHostId() {
+        return this.state.hostId;
+    }
     state = {
         roomExists: false,
         roomId: "western_main_room",
@@ -25,11 +47,7 @@ class LobbyManager {
         hostId: "",
         status: "waiting",
         players: [],
-        settings: {
-            dualCharacterEnabled: false,
-            dualCharacterHpRule: "strict",
-            expansions: ["base", "dodge_city"],
-        },
+        settings: this.getDefaultSettings(),
         expansionCatalog: expansion_config_1.EXPANSION_CONFIG,
         minPlayers: Number(process.env.MIN_PLAYERS || 3),
         maxPlayers: 8,
@@ -175,8 +193,8 @@ class LobbyManager {
                 // Sync active match snapshot
                 const gameManager = game_handler_1.GameSessionManager.getInstance();
                 const activeEngine = gameManager.getSession(this.state.roomId);
-                if (activeEngine) {
-                    gameManager.broadcastGameSnapshot(this.state.roomId, activeEngine, this);
+                if (activeEngine && this.state.players.some((p) => p.id === existingPlayer.player_id)) {
+                    gameManager.sendPlayerSnapshot(activeEngine, existingPlayer.player_id, this.state.roomId, this);
                 }
             }
             else {
@@ -322,11 +340,11 @@ class LobbyManager {
                     name: player.player_name,
                 });
                 this.broadcastLobbyState();
-                // If game is in progress, sync game state immediately to all players
+                // Sync active match snapshot
                 const gameManager = game_handler_1.GameSessionManager.getInstance();
                 const activeEngine = gameManager.getSession(this.state.roomId);
                 if (activeEngine && this.state.players.some((p) => p.id === player.player_id)) {
-                    gameManager.broadcastGameSnapshot(this.state.roomId, activeEngine, this);
+                    gameManager.sendPlayerSnapshot(activeEngine, player.player_id, this.state.roomId, this);
                 }
                 return currentToken;
             }
@@ -342,12 +360,14 @@ class LobbyManager {
                 const playerName = this.playerNames.get(playerId) ||
                     session_repository_1.SessionRepository.getInstance().getPlayerByToken(currentToken)?.player_name ||
                     "Host";
+                game_handler_1.GameSessionManager.getInstance().endSession(this.state.roomId);
                 this.kickedPlayerIds.clear();
                 this.state.roomExists = true;
                 this.state.roomId = "western_main_room";
                 this.state.roomName = rawName ? rawName.slice(0, 32) : "Saloon Table #1";
                 this.state.hostId = playerId;
                 this.state.status = "waiting";
+                this.state.settings = this.getDefaultSettings();
                 this.state.players = [
                     {
                         id: playerId,
@@ -408,10 +428,11 @@ class LobbyManager {
                     p.seatIndex = seatIdx;
                 });
                 if (this.state.players.length === 0) {
-                    this.state.roomExists = false;
-                    this.state.hostId = "";
+                    this.resetRoomToEmptyState();
                 }
-                this.persistLobbyState();
+                else {
+                    this.persistLobbyState();
+                }
                 this.broadcastLobbyState();
                 return currentToken;
             }
@@ -529,9 +550,14 @@ class LobbyManager {
                     throw new Error("Session not authenticated.");
                 }
                 if (!this.state.roomExists) {
-                    throw new Error("No active room exists.");
+                    this.send(ws, "LOBBY_STATE", this.state);
+                    return currentToken;
                 }
                 const activeEngine = game_handler_1.GameSessionManager.getInstance().getSession(this.state.roomId);
+                if (this.state.status === "waiting" && !activeEngine) {
+                    this.send(ws, "LOBBY_STATE", this.state);
+                    return currentToken;
+                }
                 const isFinished = Boolean(activeEngine?.getState().gameOver);
                 const isMember = this.state.players.some((p) => p.id === requesterId);
                 if (requesterId !== this.state.hostId && !(isFinished && isMember)) {
@@ -544,6 +570,45 @@ class LobbyManager {
                     p.isReady = p.isHost;
                 });
                 this.persistLobbyState();
+                this.broadcastLobbyState();
+                return currentToken;
+            }
+            case "DELETE_MATCH":
+            case "ABORT_MATCH": {
+                const requesterId = this.resolvePlayerId(ws, currentToken);
+                if (!requesterId) {
+                    throw new Error("Session not authenticated.");
+                }
+                if (!this.state.roomExists) {
+                    throw new Error("No active room exists.");
+                }
+                if (requesterId !== this.state.hostId) {
+                    throw new Error("Only the Host can delete the current match.");
+                }
+                game_handler_1.GameSessionManager.getInstance().endSession(this.state.roomId);
+                this.kickedPlayerIds.clear();
+                this.state.status = "waiting";
+                this.state.players.forEach((p) => {
+                    p.isReady = p.isHost;
+                });
+                this.persistLobbyState();
+                this.broadcastLobbyState();
+                return currentToken;
+            }
+            case "DELETE_ROOM":
+            case "CLOSE_ROOM": {
+                const requesterId = this.resolvePlayerId(ws, currentToken);
+                if (!requesterId) {
+                    throw new Error("Session not authenticated.");
+                }
+                if (!this.state.roomExists) {
+                    this.send(ws, "LOBBY_STATE", this.state);
+                    return currentToken;
+                }
+                if (requesterId !== this.state.hostId) {
+                    throw new Error("Only the Host can delete this room.");
+                }
+                this.resetRoomToEmptyState();
                 this.broadcastLobbyState();
                 return currentToken;
             }

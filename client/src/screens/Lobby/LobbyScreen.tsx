@@ -17,7 +17,7 @@ export interface LobbyScreenProps {
 const EXPANSION_OPTIONS: ExpansionOptionInfo[] = [
   { id: "dodge_city", label: "Dodge City (15 Heroes + Green Cards)", active: true },
   { id: "high_noon", label: "High Noon (13 Round Events)", active: false },
-  { id: "fistful_of_cards", label: "A Fistful of Cards (15 Round Events)", active: true },
+  { id: "fistful_of_cards", label: "A Fistful of Cards (15 Round Events)", active: false },
 ];
 
 export const LobbyScreen: React.FC<LobbyScreenProps> = ({

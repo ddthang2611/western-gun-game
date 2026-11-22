@@ -80,6 +80,10 @@ export function useTableActions({
       );
       return;
     }
+    if (vm.isArenaLocked) {
+      showError("Wait for Card Arena cards to finish clearing.");
+      return;
+    }
     if (vm.isActionLocked) {
       showError("Active skills can only be used during Phase 2 of your turn.");
       return;
@@ -161,6 +165,7 @@ export function useTableActions({
     skillMode,
     vm.activeHand,
     vm.isActionLocked,
+    vm.isArenaLocked,
     vm.isTurnLocked,
   ]);
 
@@ -171,6 +176,10 @@ export function useTableActions({
           ? "Match is paused. Actions are locked."
           : "Connection lost. Reconnecting..."
       );
+      return;
+    }
+    if (vm.isArenaLocked) {
+      showError("Wait for Card Arena cards to finish clearing.");
       return;
     }
 
@@ -346,6 +355,7 @@ export function useTableActions({
     triggerVfx,
     vm.effectiveSkillHeroes,
     vm.isActionLocked,
+    vm.isArenaLocked,
     vm.isMyTurn,
     vm.isTurnLocked,
     vm.requiresExtraDiscard,
@@ -360,6 +370,10 @@ export function useTableActions({
           ? "Match is paused. Actions are locked."
           : "Connection lost. Reconnecting..."
       );
+      return;
+    }
+    if (vm.isArenaLocked) {
+      showError("Wait for Card Arena cards to finish clearing.");
       return;
     }
     if (!isMock && !vm.isMyTurn) return;
@@ -379,13 +393,14 @@ export function useTableActions({
     isWsConnected,
     sendLiveCommand,
     showError,
+    vm.isArenaLocked,
     vm.isMyTurn,
     vm.isTurnLocked,
   ]);
 
   const handleSelectTarget = useCallback(
     (id: string) => {
-      if (vm.isActionLocked) return;
+      if (vm.isActionLocked || vm.isArenaLocked) return;
       if (vm.requiresExtraDiscard && discardCostIds.length < 1) {
         showError(
           `${vm.selectedCard?.name || "Card"}: Select 1 extra card in hand first.`
@@ -399,6 +414,7 @@ export function useTableActions({
       setSelectedTargetId,
       showError,
       vm.isActionLocked,
+      vm.isArenaLocked,
       vm.requiresExtraDiscard,
       vm.selectedCard?.name,
     ]

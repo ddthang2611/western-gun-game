@@ -5,6 +5,7 @@ const deck_manager_1 = require("../deck/deck_manager");
 const seat_manager_1 = require("../board/seat_manager");
 const skill_hooks_1 = require("../interact/skill_hooks");
 const atomic_effects_1 = require("../interact/primitives/atomic_effects");
+const arena_chain_manager_1 = require("../arena/arena_chain_manager");
 const DYNAMITE_RANKS = new Set(["2", "3", "4", "5", "6", "7", "8", "9"]);
 class JudgementPhase {
     // Check Dynamite explosion condition
@@ -47,6 +48,34 @@ class JudgementPhase {
                 const check = skill_hooks_1.SkillHooks.executeDrawCheck(state, player, "DYNAMITE", (card, st) => !this.isDynamiteExploded(card, st));
                 events.push(...check.events);
                 const exploded = check.drawnCards.length > 0 && !check.success;
+                const dynArenaEntries = arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                    {
+                        kind: "CHECK_SOURCE",
+                        card: judgement.card,
+                        actorPlayerId: player.id,
+                        actorPlayerName: player.name,
+                        originZone: "JUDGEMENT",
+                        destinationZone: exploded ? "DISCARD" : "JUDGEMENT",
+                        actionLabel: "DYNAMITE Judgement",
+                    },
+                    ...check.drawnCards.map((drawnCard) => {
+                        const cardExploded = this.isDynamiteExploded(drawnCard, state);
+                        return {
+                            kind: "CHECK_RESULT",
+                            card: drawnCard,
+                            actorPlayerId: player.id,
+                            actorPlayerName: player.name,
+                            originZone: "DECK",
+                            destinationZone: "DISCARD",
+                            actionLabel: `${drawnCard.rank} ${drawnCard.suit} (${cardExploded ? "EXPLODED" : "PASSED"})`,
+                            outcome: (cardExploded ? "EXPLODED" : "PASSED"),
+                            vfxType: exploded && drawnCard.id === check.chosenCard?.id
+                                ? "dynamite"
+                                : undefined,
+                            vfxTargetId: exploded && drawnCard.id === check.chosenCard?.id ? player.id : undefined,
+                        };
+                    }),
+                ]);
                 events.push({
                     type: "JUDGEMENT_RESOLVED",
                     payload: {
@@ -55,6 +84,7 @@ class JudgementPhase {
                         judgementType: "DYNAMITE",
                         judgementCard: judgement.card,
                         drawnCard: check.chosenCard,
+                        drawnCards: check.drawnCards,
                         result: exploded ? "EXPLODED" : "PASSED",
                         damage: exploded ? 3 : 0,
                     },
@@ -93,6 +123,9 @@ class JudgementPhase {
                         attachedTimestamp: Date.now(),
                     };
                     nextSeat.judgements.push(passedJudgement);
+                    if (dynArenaEntries[0]) {
+                        dynArenaEntries[0].destinationPlayerId = nextSeat.id;
+                    }
                     events.push({
                         type: "DYNAMITE_PASSED",
                         payload: {
@@ -115,6 +148,30 @@ class JudgementPhase {
                 const check = skill_hooks_1.SkillHooks.executeDrawCheck(state, player, "JAIL", (card, st) => this.isJailEscaped(card, st));
                 this.discardJudgementCard(state, judgement.card);
                 events.push(...check.events);
+                arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                    {
+                        kind: "CHECK_SOURCE",
+                        card: judgement.card,
+                        actorPlayerId: player.id,
+                        actorPlayerName: player.name,
+                        originZone: "JUDGEMENT",
+                        destinationZone: "DISCARD",
+                        actionLabel: "JAIL Judgement",
+                    },
+                    ...check.drawnCards.map((drawnCard) => {
+                        const escaped = this.isJailEscaped(drawnCard, state);
+                        return {
+                            kind: "CHECK_RESULT",
+                            card: drawnCard,
+                            actorPlayerId: player.id,
+                            actorPlayerName: player.name,
+                            originZone: "DECK",
+                            destinationZone: "DISCARD",
+                            actionLabel: `${drawnCard.rank} ${drawnCard.suit} (${escaped ? "ESCAPED" : "LOCKED"})`,
+                            outcome: (escaped ? "ESCAPED" : "LOCKED"),
+                        };
+                    }),
+                ]);
                 events.push({
                     type: "JUDGEMENT_RESOLVED",
                     payload: {
@@ -123,6 +180,7 @@ class JudgementPhase {
                         judgementType: "JAIL",
                         judgementCard: judgement.card,
                         drawnCard: check.chosenCard,
+                        drawnCards: check.drawnCards,
                         result: check.success ? "ESCAPED" : "LOCKED",
                     },
                     timestamp: Date.now(),
