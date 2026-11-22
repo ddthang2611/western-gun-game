@@ -35,22 +35,36 @@ authRouter.post("/session", async (req: Request, res: Response) => {
     const remaining = rateLimiter.getRemainingLockSeconds("pin_auth", ip);
     return res.status(429).json({
       success: false,
+      code: "ACCOUNT_LOCKED",
+      params: { seconds: remaining },
       message: `Too many failed PIN attempts. Locked for ${remaining} seconds.`,
     });
   }
 
   const { name, pin } = req.body || {};
   if (typeof name !== "string" || typeof pin !== "string") {
-    return res.status(400).json({ success: false, message: "Player name and PIN are required." });
+    return res.status(400).json({
+      success: false,
+      code: "PLAYER_NAME_AND_PIN_REQUIRED",
+      message: "Player name and PIN are required.",
+    });
   }
 
   const cleanName = name.trim();
   const cleanPin = pin.trim();
   if (cleanName.length < 1 || cleanName.length > 24) {
-    return res.status(400).json({ success: false, message: "Player name must be 1-24 characters." });
+    return res.status(400).json({
+      success: false,
+      code: "PLAYER_NAME_LENGTH",
+      message: "Player name must be 1-24 characters.",
+    });
   }
   if (cleanPin.length < 1 || cleanPin.length > 16) {
-    return res.status(400).json({ success: false, message: "PIN must be 1-16 characters." });
+    return res.status(400).json({
+      success: false,
+      code: "PIN_LENGTH",
+      message: "PIN must be 1-16 characters.",
+    });
   }
 
   try {

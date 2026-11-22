@@ -5,7 +5,9 @@ const event_engine_1 = require("../../events/event_engine");
 const target_validator_1 = require("../../combat/target_validator");
 const skill_hooks_1 = require("../skill_hooks");
 const atomic_effects_1 = require("../primitives/atomic_effects");
+const arena_chain_manager_1 = require("../../arena/arena_chain_manager");
 const inventory_1 = require("../../utils/inventory");
+const card_registry_1 = require("../../cards/card_registry");
 class EquipmentAction {
     // Check if blue extra already equipped
     static hasExtraEquipName(player, cardName) {
@@ -17,10 +19,17 @@ class EquipmentAction {
         if (blockReason) {
             return { success: false, message: blockReason };
         }
-        const isWeapon = card.category === "weapon" || (card.border === "blue" && Boolean(card.weaponRange));
-        const isGreen = card.border === "green" ||
-            card.category === "green_delayed" ||
-            card.category === "green_delay";
+        const def = card_registry_1.CardRegistry.get(card);
+        const isWeapon = def
+            ? def.slotKey === "weapon"
+            : card.category === "weapon" || (card.border === "blue" && Boolean(card.weaponRange));
+        const isGreen = def
+            ? def.zone === "EQUIP_GREEN"
+            : card.border === "green" ||
+                card.category === "green_delayed" ||
+                card.category === "green_delay" ||
+                card.category === "green_active";
+        const isBlue = def ? def.zone === "EQUIP_BLUE" : card.border === "blue";
         // Validate all preconditions before splicing
         if (isWeapon) {
             if (player.equipments.weapon?.name === card.name) {
@@ -40,19 +49,20 @@ class EquipmentAction {
                 return { success: false, message: "You already have Dynamite in play." };
             }
         }
-        else if (card.border === "blue") {
-            if (card.name === "MUSTANG" && player.equipments.horseDef) {
+        else if (isBlue) {
+            const slotKey = def?.slotKey ?? arena_chain_manager_1.ArenaChainManager.resolveEquipmentSlotKey(card);
+            if (slotKey === "horseDef" && player.equipments.horseDef) {
                 return { success: false, message: "You already have Mustang equipped." };
             }
-            if (card.name === "SCOPE" && player.equipments.horseOff) {
+            if (slotKey === "horseOff" && player.equipments.horseOff) {
                 return { success: false, message: "You already have Scope equipped." };
             }
-            if (card.name === "BARREL" && player.equipments.barrel) {
+            if (slotKey === "barrel" && player.equipments.barrel) {
                 return { success: false, message: "You already have Barrel equipped." };
             }
-            if (card.name !== "MUSTANG" &&
-                card.name !== "SCOPE" &&
-                card.name !== "BARREL" &&
+            if (slotKey !== "horseDef" &&
+                slotKey !== "horseOff" &&
+                slotKey !== "barrel" &&
                 this.hasExtraEquipName(player, card.name)) {
                 return { success: false, message: `You already have ${card.name} equipped.` };
             }
@@ -73,6 +83,19 @@ class EquipmentAction {
                 atomic_effects_1.AtomicEffects.discardCard(state, player.equipments.weapon, deckManager);
             }
             player.equipments.weapon = card;
+            arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                {
+                    kind: "EQUIP_PLACEMENT",
+                    card,
+                    actorPlayerId: player.id,
+                    actorPlayerName: player.name,
+                    originZone: "HAND",
+                    destinationZone: "EQUIPMENT",
+                    destinationPlayerId: player.id,
+                    destinationSlotKey: "weapon",
+                    actionLabel: `Equip ${card.name}`,
+                },
+            ]);
             events.push({
                 type: "EQUIPMENT_EQUIPPED",
                 payload: {
@@ -89,6 +112,19 @@ class EquipmentAction {
         if (card.name === "JAIL" && targetPlayer) {
             if (skill_hooks_1.SkillHooks.isImmuneToCard(targetPlayer, card, player, state)) {
                 atomic_effects_1.AtomicEffects.discardCard(state, card, deckManager);
+                arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                    {
+                        kind: "PLAYED_CARD",
+                        card,
+                        actorPlayerId: player.id,
+                        actorPlayerName: player.name,
+                        targetPlayerId: targetPlayer.id,
+                        targetPlayerName: targetPlayer.name,
+                        originZone: "HAND",
+                        destinationZone: "DISCARD",
+                        actionLabel: `${card.name} -> ${targetPlayer.name} (Immune)`,
+                    },
+                ]);
                 events.push({
                     type: "APACHE_KID_IMMUNITY",
                     payload: {
@@ -110,6 +146,22 @@ class EquipmentAction {
                 attachedTimestamp: Date.now(),
             };
             targetPlayer.judgements.push(newJail);
+            arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                {
+                    kind: "EQUIP_PLACEMENT",
+                    card,
+                    actorPlayerId: player.id,
+                    actorPlayerName: player.name,
+                    targetPlayerId: targetPlayer.id,
+                    targetPlayerName: targetPlayer.name,
+                    originZone: "HAND",
+                    destinationZone: "JUDGEMENT",
+                    destinationPlayerId: targetPlayer.id,
+                    actionLabel: `${card.name} -> ${targetPlayer.name}`,
+                    vfxType: "jail",
+                    vfxTargetId: targetPlayer.id,
+                },
+            ]);
             events.push({
                 type: "JAIL_ATTACHED",
                 payload: {
@@ -133,6 +185,20 @@ class EquipmentAction {
                 attachedTimestamp: Date.now(),
             };
             player.judgements.push(newDynamite);
+            arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                {
+                    kind: "EQUIP_PLACEMENT",
+                    card,
+                    actorPlayerId: player.id,
+                    actorPlayerName: player.name,
+                    originZone: "HAND",
+                    destinationZone: "JUDGEMENT",
+                    destinationPlayerId: player.id,
+                    actionLabel: `Place ${card.name}`,
+                    vfxType: "dynamite",
+                    vfxTargetId: player.id,
+                },
+            ]);
             events.push({
                 type: "DYNAMITE_ATTACHED",
                 payload: {
@@ -145,14 +211,15 @@ class EquipmentAction {
             skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, events);
             return { success: true, events };
         }
-        if (card.border === "blue") {
-            if (card.name === "MUSTANG") {
+        if (isBlue) {
+            const slotKey = def?.slotKey ?? arena_chain_manager_1.ArenaChainManager.resolveEquipmentSlotKey(card);
+            if (slotKey === "horseDef") {
                 player.equipments.horseDef = card;
             }
-            else if (card.name === "SCOPE") {
+            else if (slotKey === "horseOff") {
                 player.equipments.horseOff = card;
             }
-            else if (card.name === "BARREL") {
+            else if (slotKey === "barrel") {
                 player.equipments.barrel = card;
             }
             else {
@@ -165,6 +232,19 @@ class EquipmentAction {
                 player.equipments.extras = extras;
                 player.equipments.extra = extras[0];
             }
+            arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+                {
+                    kind: "EQUIP_PLACEMENT",
+                    card,
+                    actorPlayerId: player.id,
+                    actorPlayerName: player.name,
+                    originZone: "HAND",
+                    destinationZone: "EQUIPMENT",
+                    destinationPlayerId: player.id,
+                    destinationSlotKey: arena_chain_manager_1.ArenaChainManager.resolveEquipmentSlotKey(card),
+                    actionLabel: `Equip ${card.name}`,
+                },
+            ]);
             events.push({
                 type: "EQUIPMENT_EQUIPPED",
                 payload: {
@@ -184,6 +264,18 @@ class EquipmentAction {
             attachedTurnRound: state.roundNumber,
         };
         player.greenCards.push(greenCard);
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+            {
+                kind: "EQUIP_PLACEMENT",
+                card,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                originZone: "HAND",
+                destinationZone: "GREEN",
+                destinationPlayerId: player.id,
+                actionLabel: `Place ${card.name}`,
+            },
+        ]);
         events.push({
             type: "GREEN_CARD_EQUIPPED",
             payload: {

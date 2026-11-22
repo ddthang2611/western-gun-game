@@ -32,6 +32,13 @@ export interface PendingReaction {
   ricochetTargetArea?: "EQUIPMENT" | "GREEN" | "JUDGEMENT";
   ricochetTargetCardId?: string;
   rouletteChainNext?: boolean;
+  rouletteStartPlayerId?: string;
+  duelInitiatorId?: string;
+  deferredMollyDraws?: Record<string, number>;
+  canUseBeer?: boolean;
+  canUseSidKetchum?: boolean;
+  originalDamage?: number;
+  rescueBeersUsed?: number;
   createdAt: number;
 }
 
@@ -44,11 +51,46 @@ export interface ReactionConfig {
 }
 
 export interface GeneralStoreDraftState {
+  type?: "GENERAL_STORE_DRAFT";
   originPlayerId: string;
   storePool: EngineCard[];
   draftOrder: string[];
   currentPickerIndex: number;
 }
+
+export interface BrawlCardPickState {
+  type: "BRAWL_CARD_PICK";
+  actorPlayerId: string;
+  sourceCard: EngineCard;
+  remainingTargetIds: string[];
+  currentTargetId: string;
+  affectedCount: number;
+}
+
+export type LuckyDukeReason = "BARREL" | "JOURDONNAIS" | "JAIL" | "DYNAMITE" | "VENDETTA";
+
+export interface LuckyDukePickState {
+  type: "LUCKY_DUKE_PICK";
+  playerId: string;
+  reason: LuckyDukeReason;
+  drawnCards: EngineCard[];
+  judgementCard?: EngineCard;
+  judgementId?: string;
+  sourceReactionId?: string;
+}
+
+export interface ElGringoPickState {
+  type: "EL_GRINGO_PICK";
+  victimId: string;
+  attackerId: string;
+  remainingSteals: number;
+}
+
+export type PendingInteraction =
+  | GeneralStoreDraftState
+  | BrawlCardPickState
+  | LuckyDukePickState
+  | ElGringoPickState;
 
 export interface DuelState {
   initiatorPlayerId: string;

@@ -13,7 +13,10 @@ import { EngineCharacter, HpRuleType } from "../engine/types/state";
 import { PlayerCommand, DomainEvent } from "../engine/types/actions";
 import { InteractManager } from "../engine/interact/interact_manager";
 import { SkillHooks } from "../engine/interact/skill_hooks";
-import { getAllEquippedCards } from "../engine/utils/inventory";
+import {
+  getAllEquippedCards,
+  pickFirstTargetCard,
+} from "../engine/utils/inventory";
 import { CatalogRepository } from "../db/catalog_repository";
 import { SessionRepository } from "../db/session_repository";
 import { MatchEventRow } from "../db/schema";
@@ -25,6 +28,7 @@ import {
   StoredLogEntry,
   formatEventToLog,
   getLogsForPlayer,
+  getStructuredLogsForPlayer,
 } from "./combat_log_formatter";
 import { buildTableState } from "./table_state_presenter";
 
@@ -38,6 +42,7 @@ export class GameSessionManager {
   private matchEventSeqs: Map<string, number> = new Map();
   private matchIds: Map<string, string> = new Map();
   private inactivityTimers: Map<string, NodeJS.Timeout> = new Map();
+  private arenaTimers: Map<string, NodeJS.Timeout> = new Map();
 
   public static getInstance(): GameSessionManager {
     if (!GameSessionManager.instance) {
@@ -63,6 +68,52 @@ export class GameSessionManager {
     }
   }
 
+  // Clear room Card Arena settle timer
+  private clearArenaTimer(roomId: string): void {
+    const existing = this.arenaTimers.get(roomId);
+    if (existing) {
+      clearTimeout(existing);
+      this.arenaTimers.delete(roomId);
+    }
+  }
+
+  // Synchronize authoritative Card Arena settle timer
+  private syncArenaTimer(
+    roomId: string,
+    engine: GameEngine,
+    lobbyManager?: LobbyManager
+  ): void {
+    this.clearArenaTimer(roomId);
+    if (!lobbyManager || !engine.isArenaPacingEnabled()) return;
+
+    const simState = engine.getState();
+    const chain = simState.arenaChain;
+    if (!chain || chain.status !== "SETTLING") {
+      return;
+    }
+
+    if (!simState.gameOver && this.isMatchPaused(engine, lobbyManager)) {
+      return;
+    }
+
+    const remainingMs = Math.max(0, (chain.settleUntil || 0) - Date.now());
+    const timer = setTimeout(() => {
+      this.arenaTimers.delete(roomId);
+      if (this.engines.get(roomId) !== engine) return;
+      const currentState = engine.getState();
+      if (!currentState.gameOver && this.isMatchPaused(engine, lobbyManager)) {
+        return;
+      }
+      const cleared = engine.completeArenaSettling();
+      if (cleared.changed) {
+        this.persistEventsAndState(roomId, [], engine);
+        this.broadcastGameSnapshot(roomId, engine, lobbyManager);
+      }
+    }, remainingMs);
+    timer.unref?.();
+    this.arenaTimers.set(roomId, timer);
+  }
+
   // Schedule room inactivity timer when active
   private refreshInactivityTimer(
     roomId: string,
@@ -74,6 +125,9 @@ export class GameSessionManager {
 
     const simState = engine.getState();
     if (simState.gameOver || simState.matchPhase === "FINISHED") {
+      return;
+    }
+    if (simState.arenaChain?.status === "SETTLING") {
       return;
     }
     if (this.isMatchPaused(engine, lobbyManager)) {
@@ -99,6 +153,10 @@ export class GameSessionManager {
     const simState = engine.getState();
     if (simState.gameOver || simState.matchPhase === "FINISHED") return;
     if (this.isMatchPaused(engine, lobbyManager)) return;
+    if (simState.arenaChain?.status === "SETTLING") {
+      this.syncArenaTimer(roomId, engine, lobbyManager);
+      return;
+    }
 
     const collectedEvents: DomainEvent[] = [];
     let mutated = false;
@@ -123,7 +181,67 @@ export class GameSessionManager {
     } else {
       InteractManager.pruneStaleReactions(simState);
 
-      if (simState.pendingReactions.length > 0) {
+      if (simState.activeChain.length > 0) {
+        const head = simState.activeChain[0];
+        if (head?.type === "BRAWL_CARD_PICK") {
+          const target = simState.players.get(head.currentTargetId);
+          const pick = target ? pickFirstTargetCard(target) : null;
+          if (target && pick) {
+            const res = engine.handleCommand({
+              playerId: head.actorPlayerId,
+              type: "SELECT_STOLEN_CARD",
+              targetPlayerId: target.id,
+              targetArea: pick.targetArea,
+              targetCardId: pick.targetCardId,
+            });
+            if (res.success) {
+              mutated = true;
+              if (res.events?.length) collectedEvents.push(...res.events);
+            }
+          }
+        } else if (head?.type === "LUCKY_DUKE_PICK") {
+          const preferred =
+            head.drawnCards.find((c) =>
+              SkillHooks.isDrawCheckSuccess(head.reason, c, simState)
+            ) || head.drawnCards[0];
+          if (preferred) {
+            const res = engine.handleCommand({
+              playerId: head.playerId,
+              type: "SELECT_STOLEN_CARD",
+              cardId: preferred.id,
+            });
+            if (res.success) {
+              mutated = true;
+              if (res.events?.length) collectedEvents.push(...res.events);
+            }
+          }
+        } else if (head?.type === "EL_GRINGO_PICK") {
+          const res = engine.handleCommand({
+            playerId: head.victimId,
+            type: "SELECT_STOLEN_CARD",
+            targetPlayerId: head.attackerId,
+            targetArea: "HAND",
+          });
+          if (res.success) {
+            mutated = true;
+            if (res.events?.length) collectedEvents.push(...res.events);
+          }
+        } else if (head && "storePool" in head) {
+          const pickerId = head.draftOrder?.[head.currentPickerIndex];
+          const cardId = head.storePool?.[0]?.id;
+          if (pickerId && cardId) {
+            const res = engine.handleCommand({
+              playerId: pickerId,
+              type: "SELECT_STOLEN_CARD",
+              cardId,
+            });
+            if (res.success) {
+              mutated = true;
+              if (res.events?.length) collectedEvents.push(...res.events);
+            }
+          }
+        }
+      } else if (simState.pendingReactions.length > 0) {
         const head = simState.pendingReactions[0];
         let cmd: PlayerCommand;
         if (head.type === "EVENT_DALTONS_DISCARD") {
@@ -148,21 +266,6 @@ export class GameSessionManager {
         if (res.success) {
           mutated = true;
           if (res.events?.length) collectedEvents.push(...res.events);
-        }
-      } else if (simState.activeChain.length > 0) {
-        const draft = simState.activeChain[0];
-        const pickerId = draft?.draftOrder?.[draft.currentPickerIndex];
-        const cardId = draft?.storePool?.[0]?.id;
-        if (pickerId && cardId) {
-          const res = engine.handleCommand({
-            playerId: pickerId,
-            type: "SELECT_STOLEN_CARD",
-            cardId,
-          });
-          if (res.success) {
-            mutated = true;
-            if (res.events?.length) collectedEvents.push(...res.events);
-          }
         }
       } else if (simState.pendingTurnStartChoice) {
         const choice = simState.pendingTurnStartChoice;
@@ -279,6 +382,7 @@ export class GameSessionManager {
 
   public endSession(roomId: string): void {
     this.clearInactivityTimer(roomId);
+    this.clearArenaTimer(roomId);
     this.engines.delete(roomId);
     this.combatLogs.delete(roomId);
     this.matchEventSeqs.delete(roomId);
@@ -384,6 +488,7 @@ export class GameSessionManager {
         defaultEnableCharacterSelect: true,
         defaultEnable3PlayerVariant: saved.is3PlayerVariant,
         expansions: saved.expansions,
+        enableArenaPacing: true,
       }
     );
 
@@ -492,6 +597,7 @@ export class GameSessionManager {
         defaultEnableCharacterSelect: true,
         defaultEnable3PlayerVariant: is3PVariant,
         expansions,
+        enableArenaPacing: true,
       });
 
       const matchResult = engine.startMatch(
@@ -507,6 +613,7 @@ export class GameSessionManager {
       );
 
       this.clearInactivityTimer(roomId);
+      this.clearArenaTimer(roomId);
       const nextMatchId = crypto.randomUUID();
       const initialEvents = matchResult.events || [];
       const repo = SessionRepository.getInstance();
@@ -649,11 +756,9 @@ export class GameSessionManager {
     if (!engine.getState().players.has(playerId)) return;
 
     const snapshot = engine.getFilteredSnapshot(playerId);
-    const logs = getLogsForPlayer(
-      this.combatLogs.get(roomId) || [],
-      playerId,
-      100
-    );
+    const roomLogs = this.combatLogs.get(roomId) || [];
+    const logs = getLogsForPlayer(roomLogs, playerId, 100);
+    const structuredLogs = getStructuredLogsForPlayer(roomLogs, playerId, 100);
     const tableState = buildTableState(
       snapshot,
       playerId,
@@ -662,7 +767,8 @@ export class GameSessionManager {
       this.isMatchPaused(engine, lobbyManager),
       (pId) => lobbyManager.isPlayerOnline(pId),
       this.matchIds.get(roomId),
-      lobbyManager.getHostId()
+      lobbyManager.getHostId(),
+      structuredLogs
     );
 
     lobbyManager.sendToPlayer(playerId, "TABLE_STATE", tableState);
@@ -676,6 +782,7 @@ export class GameSessionManager {
     lobbyManager: LobbyManager
   ): void {
     this.emitPlayerSnapshot(engine, playerId, roomId, lobbyManager);
+    this.syncArenaTimer(roomId, engine, lobbyManager);
     this.refreshInactivityTimer(roomId, engine, lobbyManager);
   }
 
@@ -688,6 +795,7 @@ export class GameSessionManager {
     for (const playerId of engine.getState().players.keys()) {
       this.emitPlayerSnapshot(engine, playerId, roomId, lobbyManager);
     }
+    this.syncArenaTimer(roomId, engine, lobbyManager);
     this.refreshInactivityTimer(roomId, engine, lobbyManager);
   }
 
@@ -732,6 +840,7 @@ export class GameSessionManager {
       for (const pId of participantIds) {
         lobbyManager.sendToPlayer(pId, "COMBAT_LOG_UPDATE", {
           combatLog: getLogsForPlayer(logs, pId, 50),
+          structuredCombatLog: getStructuredLogsForPlayer(logs, pId, 50),
         });
       }
     }

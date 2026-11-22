@@ -15,11 +15,13 @@ import { filterActiveExpansions } from "./events/expansion_config";
 import { FogOfWarFilter, FilteredWorldSnapshot } from "./state/fog_of_war";
 import { WinConditionEvaluator } from "./elimination/win_condition";
 import { InteractManager } from "./interact/interact_manager";
+import { ArenaChainManager } from "./arena/arena_chain_manager";
 
 export interface GameEngineOptions {
   defaultEnableCharacterSelect?: boolean;
   defaultEnable3PlayerVariant?: boolean;
   expansions?: string[];
+  enableArenaPacing?: boolean;
 }
 
 export interface SerializedEngineState
@@ -35,6 +37,7 @@ export class GameEngine {
   private allEventCards: EngineEventCard[];
   private defaultEnableCharSelect: boolean;
   private defaultEnable3PVariant?: boolean;
+  private enableArenaPacing: boolean;
   private processedCommandIds: string[] = [];
   private processedCommandSet: Set<string> = new Set();
 
@@ -48,6 +51,7 @@ export class GameEngine {
     this.allEventCards = [...eventCards];
     this.defaultEnableCharSelect = Boolean(options?.defaultEnableCharacterSelect);
     this.defaultEnable3PVariant = options?.defaultEnable3PlayerVariant;
+    this.enableArenaPacing = Boolean(options?.enableArenaPacing);
 
     this.state = {
       roomId,
@@ -67,6 +71,8 @@ export class GameEngine {
       is3PlayerVariant: false,
       expansions: options?.expansions
         ? [...options.expansions]
+        : eventCards.length > 0
+        ? ["base", "dodge_city", "high_noon", "fistful_of_cards"]
         : filterActiveExpansions(["base", "dodge_city", "high_noon", "fistful_of_cards"]),
       players: new Map<string, EnginePlayer>(),
       drawDeck: DeckManager.shuffleCards(this.allRawCards),
@@ -81,6 +87,8 @@ export class GameEngine {
       pendingPhase1Choice: null,
       activeChain: [],
       pendingReactions: [],
+      arenaChain: ArenaChainManager.createIdleChain(),
+      arenaChainCounter: 0,
     };
   }
 
@@ -129,6 +137,8 @@ export class GameEngine {
     this.state.pendingPhase1Choice = null;
     this.state.activeChain = [];
     this.state.pendingReactions = [];
+    this.state.arenaChain = ArenaChainManager.createIdleChain();
+    this.state.arenaChainCounter = 0;
     this.state.gameOver = undefined;
     this.state.discardPile = [];
     this.state.eventDiscardPile = [];
@@ -183,6 +193,7 @@ export class GameEngine {
         TurnManager.startTurn(this.state, sheriff, initialEvents);
       }
       this.appendWinEventIfNeeded(initialEvents);
+      ArenaChainManager.finalizeAfterCommand(this.state, 0, this.enableArenaPacing);
     }
 
     return {
@@ -237,6 +248,19 @@ export class GameEngine {
       };
     }
 
+    const arenaGuard = ArenaChainManager.checkCommandAllowed(
+      this.state,
+      command,
+      this.enableArenaPacing
+    );
+    if (!arenaGuard.allowed) {
+      return {
+        success: false,
+        message: arenaGuard.message || "Wait for Card Arena to finish resolving.",
+      };
+    }
+
+    const entriesBeforeCount = ArenaChainManager.ensureChain(this.state).entries.length;
     const events: DomainEvent[] = [];
     const result = this.routeCommand(player, command, events);
     if (!result.success) {
@@ -265,9 +289,28 @@ export class GameEngine {
       }
     }
 
+    ArenaChainManager.finalizeAfterCommand(
+      this.state,
+      entriesBeforeCount,
+      this.enableArenaPacing
+    );
+
     this.state.stateSeq = (this.state.stateSeq ?? 0) + 1;
     this.recordCommandId(commandKey);
     return { success: true, events };
+  }
+
+  // Clear Card Arena once settling timer expires
+  public completeArenaSettling(): { changed: boolean; stateSeq: number } {
+    const changed = ArenaChainManager.completeSettling(this.state);
+    if (changed) {
+      this.state.stateSeq = (this.state.stateSeq ?? 0) + 1;
+    }
+    return { changed, stateSeq: this.state.stateSeq };
+  }
+
+  public isArenaPacingEnabled(): boolean {
+    return this.enableArenaPacing;
   }
 
   // Route validated command to handler
@@ -428,7 +471,7 @@ export class GameEngine {
         };
       }
 
-      const res = InteractManager.resolveActivateGreenCard(this.state, command, events);
+      const res = InteractManager.resolveActivateGreenCard(this.state, command);
       this.mergeResultEvents(events, res.events);
       if (!res.success) {
         return { success: false, message: res.message, events };
@@ -569,7 +612,13 @@ export class GameEngine {
       defaultEnableCharacterSelect: options?.defaultEnableCharacterSelect ?? true,
       defaultEnable3PlayerVariant: options?.defaultEnable3PlayerVariant ?? cloned.is3PlayerVariant,
       expansions: options?.expansions ?? cloned.expansions,
+      enableArenaPacing: options?.enableArenaPacing ?? false,
     });
+
+    const restoredArena =
+      cloned.arenaChain && Array.isArray(cloned.arenaChain.entries)
+        ? cloned.arenaChain
+        : ArenaChainManager.createIdleChain();
 
     engine.state = {
       ...cloned,
@@ -584,6 +633,8 @@ export class GameEngine {
       eventDiscardPile: Array.isArray(cloned.eventDiscardPile) ? cloned.eventDiscardPile : [],
       activeChain: Array.isArray(cloned.activeChain) ? cloned.activeChain : [],
       pendingReactions: Array.isArray(cloned.pendingReactions) ? cloned.pendingReactions : [],
+      arenaChain: restoredArena,
+      arenaChainCounter: typeof cloned.arenaChainCounter === "number" ? cloned.arenaChainCounter : 0,
       expansions: Array.isArray(cloned.expansions) ? cloned.expansions : ["base"],
       activeEvent: cloned.activeEvent ?? null,
       firstEliminatedPlayerId: cloned.firstEliminatedPlayerId ?? null,

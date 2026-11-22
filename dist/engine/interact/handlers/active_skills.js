@@ -1,13 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ActiveSkills = void 0;
-const deck_manager_1 = require("../../deck/deck_manager");
 const target_validator_1 = require("../../combat/target_validator");
 const skill_hooks_1 = require("../skill_hooks");
 const atomic_effects_1 = require("../primitives/atomic_effects");
+const arena_chain_manager_1 = require("../../arena/arena_chain_manager");
 class ActiveSkills {
     // Active character skills handler
-    static handleActiveSkill(state, command, events) {
+    static handleActiveSkill(state, command, events, deckManager) {
         const player = state.players.get(command.playerId);
         if (!player)
             return { success: false, message: "Player not found." };
@@ -15,20 +15,20 @@ class ActiveSkills {
             return { success: false, message: "Dead players cannot act." };
         const skillType = String(command.payload?.skillType ?? command.payload?.skill ?? "");
         if (skillType === "SID_KETCHUM_HEAL") {
-            return ActiveSkills.handleSidKetchumHeal(state, player, command, events);
+            return ActiveSkills.handleSidKetchumHeal(state, player, command, events, deckManager);
         }
         if (skillType === "CHUCK_WENGAM_HP" || skillType === "CHUCK_WENGAM_SACRIFICE") {
-            return ActiveSkills.handleChuckWengamHp(state, player, skillType, events);
+            return ActiveSkills.handleChuckWengamHp(state, player, skillType, events, deckManager);
         }
         if (skillType === "JOSE_DELGADO_DRAW") {
-            return ActiveSkills.handleJoseDelgadoDraw(state, player, command, events);
+            return ActiveSkills.handleJoseDelgadoDraw(state, player, command, events, deckManager);
         }
         if (skillType === "DOC_HOLYDAY_BANG") {
-            return ActiveSkills.handleDocHolydayBang(state, player, command, events);
+            return ActiveSkills.handleDocHolydayBang(state, player, command, events, deckManager);
         }
         return { success: false, message: `Unknown active skill: ${skillType}` };
     }
-    static handleSidKetchumHeal(state, player, command, events) {
+    static handleSidKetchumHeal(state, player, command, events, deckManager) {
         if (player.isGhost) {
             return { success: false, message: "Ghosts have no life points." };
         }
@@ -50,14 +50,27 @@ class ActiveSkills {
             return { success: false, message: "Selected cards not found in hand." };
         }
         for (const card of discarded) {
-            deck_manager_1.DeckManager.discardCard(state, card);
+            atomic_effects_1.AtomicEffects.discardCard(state, card, deckManager);
         }
-        player.hp = Math.min(player.hp + 1, player.maxHp);
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, discarded.map((card, idx) => ({
+            kind: "EXTRA_COST",
+            card,
+            actorPlayerId: player.id,
+            actorPlayerName: player.name,
+            originZone: "HAND",
+            destinationZone: "DISCARD",
+            actionLabel: "Sid Ketchum (+1 HP)",
+            vfxType: idx === 0 ? "heal" : undefined,
+            vfxTargetId: idx === 0 ? player.id : undefined,
+        })));
+        atomic_effects_1.AtomicEffects.applyHeal(state, player, 1, undefined, events, deckManager);
         events.push({
             type: "ACTIVE_SKILL_USED",
             payload: {
                 playerId: player.id,
+                playerName: player.name,
                 skill: "SID_KETCHUM_HEAL",
+                detail: "discarded 2 cards to heal 1 HP",
                 discardedCount: 2,
                 currentHp: player.hp,
             },
@@ -66,7 +79,7 @@ class ActiveSkills {
         skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, events);
         return { success: true, events };
     }
-    static handleChuckWengamHp(state, player, skillName, events) {
+    static handleChuckWengamHp(state, player, skillName, events, deckManager) {
         if (!skill_hooks_1.SkillHooks.hasSkill(player, "Chuck Wengam", state)) {
             return { success: false, message: "Player does not have Chuck Wengam ability." };
         }
@@ -90,14 +103,34 @@ class ActiveSkills {
             },
             timestamp: Date.now(),
         });
-        const { cards: drawn, events: drawEvents } = deck_manager_1.DeckManager.drawCards(state, 2);
+        const { cards: drawn, events: drawEvents } = atomic_effects_1.AtomicEffects.drawCards(state, 2, deckManager);
         events.push(...drawEvents);
         player.handCards.push(...drawn);
+        if (drawn.length > 0) {
+            events.push({
+                type: "CARDS_DRAWN",
+                visibleTo: [player.id],
+                payload: {
+                    playerId: player.id,
+                    playerName: player.name,
+                    count: drawn.length,
+                    cards: drawn,
+                },
+                maskedPayload: {
+                    playerId: player.id,
+                    playerName: player.name,
+                    count: drawn.length,
+                },
+                timestamp: Date.now(),
+            });
+        }
         events.push({
             type: "ACTIVE_SKILL_USED",
             payload: {
                 playerId: player.id,
+                playerName: player.name,
                 skill: skillName,
+                detail: `sacrificed 1 HP to draw ${drawn.length} card(s)`,
                 currentHp: player.hp,
                 drawnCount: drawn.length,
             },
@@ -106,7 +139,7 @@ class ActiveSkills {
         skill_hooks_1.SkillHooks.onTakeDamage(state, player, undefined, 1, events);
         return { success: true, events };
     }
-    static handleJoseDelgadoDraw(state, player, command, events) {
+    static handleJoseDelgadoDraw(state, player, command, events, deckManager) {
         if (!skill_hooks_1.SkillHooks.hasSkill(player, "Jose Delgado", state)) {
             return { success: false, message: "Player does not have Jose Delgado ability." };
         }
@@ -134,17 +167,51 @@ class ActiveSkills {
             return { success: false, message: "Must discard a blue card." };
         }
         player.handCards.splice(cardIdx, 1);
-        deck_manager_1.DeckManager.discardCard(state, card);
+        atomic_effects_1.AtomicEffects.discardCard(state, card, deckManager);
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+            {
+                kind: "EXTRA_COST",
+                card,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                originZone: "HAND",
+                destinationZone: "DISCARD",
+                actionLabel: "Jose Delgado (+2)",
+                vfxType: "draw",
+            },
+        ]);
         state.joseDelgadoCountThisTurn += 1;
         skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, events);
-        const { cards: drawn, events: drawEvents } = deck_manager_1.DeckManager.drawCards(state, 2);
+        const { cards: drawn, events: drawEvents } = atomic_effects_1.AtomicEffects.drawCards(state, 2, deckManager);
         events.push(...drawEvents);
         player.handCards.push(...drawn);
+        if (drawn.length > 0) {
+            events.push({
+                type: "CARDS_DRAWN",
+                visibleTo: [player.id],
+                payload: {
+                    playerId: player.id,
+                    playerName: player.name,
+                    sourceCard: card,
+                    count: drawn.length,
+                    cards: drawn,
+                },
+                maskedPayload: {
+                    playerId: player.id,
+                    playerName: player.name,
+                    sourceCard: card,
+                    count: drawn.length,
+                },
+                timestamp: Date.now(),
+            });
+        }
         events.push({
             type: "ACTIVE_SKILL_USED",
             payload: {
                 playerId: player.id,
+                playerName: player.name,
                 skill: "JOSE_DELGADO_DRAW",
+                detail: `discarded ${card.name} to draw ${drawn.length} card(s)`,
                 discardedCardId: card.id,
                 drawnCount: drawn.length,
                 usesThisTurn: state.joseDelgadoCountThisTurn,
@@ -153,7 +220,7 @@ class ActiveSkills {
         });
         return { success: true, events };
     }
-    static handleDocHolydayBang(state, player, command, events) {
+    static handleDocHolydayBang(state, player, command, events, deckManager) {
         if (!skill_hooks_1.SkillHooks.hasSkill(player, "Doc Holyday", state)) {
             return { success: false, message: "Player does not have Doc Holyday ability." };
         }
@@ -211,8 +278,21 @@ class ActiveSkills {
             return { success: false, message: "Selected discard cards not found in hand." };
         }
         for (const card of discarded) {
-            deck_manager_1.DeckManager.discardCard(state, card);
+            atomic_effects_1.AtomicEffects.discardCard(state, card, deckManager);
         }
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, discarded.map((card, idx) => ({
+            kind: idx === 0 ? "PLAYED_CARD" : "EXTRA_COST",
+            card,
+            actorPlayerId: player.id,
+            actorPlayerName: player.name,
+            targetPlayerId: target.id,
+            targetPlayerName: target.name,
+            originZone: "HAND",
+            destinationZone: "DISCARD",
+            actionLabel: idx === 0 ? `Doc Holyday BANG! -> ${target.name}` : "Doc Holyday Cost",
+            vfxType: idx === 0 ? "bullet" : undefined,
+            vfxTargetId: idx === 0 ? target.id : undefined,
+        })));
         state.docHolydayUsedThisTurn += 1;
         skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, events);
         // Suitless skill avoids Apache Kid

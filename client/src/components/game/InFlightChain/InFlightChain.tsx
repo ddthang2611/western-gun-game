@@ -1,31 +1,38 @@
 import React, { useLayoutEffect, useRef } from "react";
-import type { InFlightCard } from "../../../types/game";
+import type { ArenaOutcomeTag, InFlightCard } from "../../../types/game";
+import { useI18n } from "../../../i18n";
 import { CardView } from "../CardView/CardView";
 import "./InFlightChain.scss";
 
 export interface InFlightChainProps {
   cards: InFlightCard[];
+  isExiting?: boolean;
 }
 
-export const InFlightChain: React.FC<InFlightChainProps> = ({ cards }) => {
+const OUTCOME_TONE: Record<ArenaOutcomeTag, "good" | "bad"> = {
+  PASSED: "good",
+  ESCAPED: "good",
+  CORRECT: "good",
+  FAILED: "bad",
+  EXPLODED: "bad",
+  LOCKED: "bad",
+  WRONG: "bad",
+};
+
+export const InFlightChain: React.FC<InFlightChainProps> = ({
+  cards,
+  isExiting = false,
+}) => {
+  const { t, tOutcome } = useI18n();
   const fanRef = useRef<HTMLDivElement | null>(null);
-  // Deduplicate AoE reactions sharing one card
-  const uniqueCards = React.useMemo(() => {
-    const seen = new Set<string>();
-    return (cards || []).filter((item) => {
-      const key = item.isFlipReveal ? item.id : item.card?.id || item.id;
-      if (!key) return true;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }, [cards]);
-  const cardCount = uniqueCards.length;
-  // Keep 36px left edge visible
-  const maxOverlap = 74;
+  const safeCards = cards || [];
+  const cardCount = safeCards.length;
+
+  // Keep enough left edge visible while fitting multi-target AoE chains cleanly
+  const maxOverlap = cardCount > 8 ? 84 : 62;
   const overlapMargin =
     cardCount > 1
-      ? Math.min(maxOverlap, Math.floor((maxOverlap * (cardCount - 1)) / cardCount))
+      ? Math.min(maxOverlap, Math.floor((maxOverlap * (cardCount - 1)) / Math.max(cardCount, 2)))
       : 0;
 
   useLayoutEffect(() => {
@@ -34,45 +41,49 @@ export const InFlightChain: React.FC<InFlightChainProps> = ({ cards }) => {
     fan.style.setProperty("--chain-overlap", cardCount > 1 ? `-${overlapMargin}px` : "0px");
   }, [cardCount, overlapMargin]);
 
-  if (uniqueCards.length === 0) {
+  if (cardCount === 0) {
     return (
-      <div className="inflight-chain inflight-chain--empty">
-        <span className="inflight-chain__placeholder">Card Arena</span>
+      <div className="inflight-chain inflight-chain--empty" data-flight-anchor="card-arena">
+        <span className="inflight-chain__placeholder">{t("arena.defaultTitle")}</span>
       </div>
     );
   }
 
   return (
-    <div className="inflight-chain">
+    <div
+      className={`inflight-chain${isExiting ? " inflight-chain--exiting" : ""}`}
+      data-flight-anchor="card-arena"
+    >
       <div ref={fanRef} className="inflight-chain__fan">
-        {uniqueCards.map((item, index) => (
-          <div
-            key={item.id || index}
-            className={`inflight-chain__card-slot${
-              item.isFlipReveal ? " inflight-chain__card-slot--flip" : ""
-            }`}
-            title={`${item.sourcePlayerName}${
-              item.targetPlayerName ? ` -> ${item.targetPlayerName}` : ""
-            }: ${item.actionText}`}
-          >
-            {item.isFlipReveal ? (
-              <div className="inflight-chain__flipper">
-                <div className="inflight-chain__face inflight-chain__face--front">
-                  <CardView card={item.card} isPlayable={false} />
-                </div>
-                <div className="inflight-chain__face inflight-chain__face--back">
-                  <img
-                    src="/assets/images/ui/card_back.png"
-                    alt="Face-down check card"
-                    draggable={false}
-                  />
-                </div>
+        {safeCards.map((item, index) => {
+          const outcome = item.outcome ?? item.meta?.outcome;
+          const outcomeTone = outcome ? OUTCOME_TONE[outcome] : undefined;
+          const kindLabel = item.kind ? t(`arena.kinds.${item.kind}`, undefined, item.actionText) : item.actionText;
+          const actorCaption = item.targetPlayerName
+            ? `${item.sourcePlayerName} -> ${item.targetPlayerName}`
+            : item.sourcePlayerName;
+          return (
+            <div
+              key={item.id || index}
+              className="inflight-chain__card-slot"
+              title={`${actorCaption}: ${kindLabel}`}
+            >
+              <div className="inflight-chain__card-frame">
+                <CardView card={item.card} isPlayable={false} />
+                {outcome && (
+                  <span
+                    className={`inflight-chain__outcome inflight-chain__outcome--${outcomeTone}`}
+                  >
+                    {tOutcome(outcome)}
+                  </span>
+                )}
               </div>
-            ) : (
-              <CardView card={item.card} isPlayable={false} />
-            )}
-          </div>
-        ))}
+              <span className="inflight-chain__actor-tag" title={actorCaption}>
+                {item.sourcePlayerName}
+              </span>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

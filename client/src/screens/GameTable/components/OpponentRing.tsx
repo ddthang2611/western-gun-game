@@ -20,6 +20,7 @@ export interface OpponentRingProps {
   weaponRange: number;
   canTarget?: boolean;
   disabled?: boolean;
+  concealedInPlayCardIds?: string[];
   onSelectTarget: (id: string) => void;
   centerNode?: React.ReactNode;
 }
@@ -35,6 +36,7 @@ export const OpponentRing: React.FC<OpponentRingProps> = ({
   weaponRange,
   canTarget = true,
   disabled = false,
+  concealedInPlayCardIds,
   onSelectTarget,
   centerNode,
 }) => {
@@ -105,6 +107,7 @@ export const OpponentRing: React.FC<OpponentRingProps> = ({
         isTargetable={isCardTargeted}
         isInRange={inRange}
         distance={opp.distanceFromMe}
+        concealedInPlayCardIds={concealedInPlayCardIds}
         onSelectTarget={() => {
           if (!targetingAllowed) return;
           onSelectTarget(opp.id);

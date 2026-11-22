@@ -21,12 +21,18 @@ exports.catalogRouter.post("/unlock", async (req, res) => {
         const remaining = rateLimiter.getRemainingLockSeconds("db_unlock", ip);
         return res.status(429).json({
             success: false,
+            code: "DB_UNLOCK_RATE_LIMITED",
+            params: { seconds: remaining },
             message: `Too many failed database unlock attempts. IP temporarily locked for ${remaining} seconds.`,
         });
     }
     const { secretKey } = req.body || {};
     if (!secretKey || typeof secretKey !== "string" || !secretKey.trim()) {
-        return res.status(400).json({ success: false, message: "Secret key is required." });
+        return res.status(400).json({
+            success: false,
+            code: "SECRET_KEY_REQUIRED",
+            message: "Secret key is required.",
+        });
     }
     const wasAlreadyUnlocked = (0, database_1.isDatabaseUnlocked)();
     const result = await (0, database_1.unlockCatalogDatabaseAsync)(secretKey.trim());
@@ -50,7 +56,10 @@ exports.catalogRouter.post("/unlock", async (req, res) => {
 // Guard middleware to ensure catalog database is unlocked before serving game content
 function requireUnlockedDatabase(_req, res, next) {
     if (!(0, database_1.isDatabaseUnlocked)()) {
-        return res.status(423).json({ error: "Database is locked. Please unlock first." });
+        return res.status(423).json({
+            code: "DATABASE_LOCKED",
+            error: "Database is locked. Please unlock first.",
+        });
     }
     next();
 }

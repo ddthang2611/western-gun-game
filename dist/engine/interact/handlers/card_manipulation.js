@@ -5,6 +5,7 @@ const target_validator_1 = require("../../combat/target_validator");
 const event_engine_1 = require("../../events/event_engine");
 const skill_hooks_1 = require("../skill_hooks");
 const atomic_effects_1 = require("../primitives/atomic_effects");
+const arena_chain_manager_1 = require("../../arena/arena_chain_manager");
 const inventory_1 = require("../../utils/inventory");
 class CardManipulation {
     // Check target area availability
@@ -118,14 +119,44 @@ class CardManipulation {
             const played = player.handCards.splice(resolvedHandIndex, 1)[0];
             atomic_effects_1.AtomicEffects.discardCard(state, played, deckManager);
         }
+        let extraCardDiscarded;
         if (card.name === "RAG TIME" && extraCardId) {
             const extraIdx = player.handCards.findIndex((c) => c.id === extraCardId);
             if (extraIdx !== -1) {
-                const extraCard = player.handCards.splice(extraIdx, 1)[0];
-                atomic_effects_1.AtomicEffects.discardCard(state, extraCard, deckManager);
+                extraCardDiscarded = player.handCards.splice(extraIdx, 1)[0];
+                atomic_effects_1.AtomicEffects.discardCard(state, extraCardDiscarded, deckManager);
             }
         }
+        arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
+            {
+                kind: "PLAYED_CARD",
+                card,
+                actorPlayerId: player.id,
+                actorPlayerName: player.name,
+                targetPlayerId: targetPlayer.id,
+                targetPlayerName: targetPlayer.name,
+                originZone: fromGreenEntryId ? "GREEN" : "HAND",
+                destinationZone: "DISCARD",
+                actionLabel: `${card.name} -> ${targetPlayer.name}`,
+            },
+            ...(extraCardDiscarded
+                ? [
+                    {
+                        kind: "EXTRA_COST",
+                        card: extraCardDiscarded,
+                        actorPlayerId: player.id,
+                        actorPlayerName: player.name,
+                        originZone: "HAND",
+                        destinationZone: "DISCARD",
+                        actionLabel: `Discard Cost (${extraCardDiscarded.name})`,
+                    },
+                ]
+                : []),
+        ]);
         const events = [];
+        if (!fromGreenEntryId) {
+            skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, events);
+        }
         // Check Apache Kid card immunity
         if (skill_hooks_1.SkillHooks.isImmuneToCard(targetPlayer, card, player, state)) {
             events.push({
@@ -150,9 +181,6 @@ class CardManipulation {
                     timestamp: Date.now(),
                 });
             }
-            else {
-                skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, events);
-            }
             return { success: true, events };
         }
         const transferred = isSteal
@@ -174,9 +202,6 @@ class CardManipulation {
                 },
                 timestamp: Date.now(),
             });
-        }
-        else {
-            skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, events);
         }
         return { success: true, events };
     }

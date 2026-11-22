@@ -1,9 +1,90 @@
 import { EngineCard, EngineEventCard, ActiveJudgement, ActiveGreenCard } from "./cards";
+import type { PendingInteraction } from "../interact/interact_types";
 
 export type RoleType = "sheriff" | "deputy" | "outlaw" | "renegade";
 export type TurnPhase = 0 | 1 | 2 | 3;
 export type MatchPhase = "CHARACTER_SELECT" | "PLAYING" | "FINISHED";
 export type HpRuleType = "strict" | "balanced" | "juggernaut";
+
+export type ArenaChainStatus = "IDLE" | "ACTIVE_CHAIN" | "SETTLING";
+
+export type EquipmentSlotKey =
+  | "weapon"
+  | "barrel"
+  | "horseDef"
+  | "horseOff"
+  | "hideout"
+  | "binocular";
+
+export type ArenaOriginZone =
+  | "HAND"
+  | "GREEN"
+  | "EQUIPMENT"
+  | "JUDGEMENT"
+  | "DECK"
+  | "DISCARD"
+  | "HERO"
+  | "EVENT";
+
+export type ArenaDestinationZone =
+  | "DISCARD"
+  | "EQUIPMENT"
+  | "GREEN"
+  | "JUDGEMENT"
+  | "HAND"
+  | "DECK";
+
+export type ArenaEntryKind =
+  | "PLAYED_CARD"
+  | "EQUIP_PLACEMENT"
+  | "EXTRA_COST"
+  | "CHECK_SOURCE"
+  | "CHECK_RESULT"
+  | "DEFENSE_CARD"
+  | "DISCARD_CARD"
+  | "REVEAL_CARD";
+
+export type ArenaOutcomeTag =
+  | "PASSED"
+  | "FAILED"
+  | "EXPLODED"
+  | "ESCAPED"
+  | "LOCKED"
+  | "CORRECT"
+  | "WRONG";
+
+export type ArenaVfxType = "bullet" | "heal" | "jail" | "dynamite" | "draw";
+
+export interface ArenaCardEntry {
+  id: string;
+  stepIndex: number;
+  batchIndex: number;
+  kind: ArenaEntryKind;
+  card: EngineCard;
+  actorPlayerId: string;
+  actorPlayerName: string;
+  targetPlayerId?: string;
+  targetPlayerName?: string;
+  originZone: ArenaOriginZone;
+  originSlotKey?: EquipmentSlotKey;
+  destinationZone?: ArenaDestinationZone;
+  destinationPlayerId?: string;
+  destinationSlotKey?: EquipmentSlotKey;
+  actionLabel: string;
+  outcome?: ArenaOutcomeTag;
+  vfxType?: ArenaVfxType;
+  vfxTargetId?: string;
+  vfxAoe?: boolean;
+  addedAt: number;
+}
+
+export interface ArenaChainState {
+  chainId: string;
+  status: ArenaChainStatus;
+  entries: ArenaCardEntry[];
+  stepLockUntil: number;
+  settleUntil: number;
+}
 
 export interface EngineCharacter {
   id: string;
@@ -102,10 +183,14 @@ export interface SimulationState {
   pendingCharacterSelect: Map<string, PendingCharacterChoice>;
   pendingTurnStartChoice: PendingTurnStartChoice | null;
   pendingPhase1Choice: PendingPhase1Choice | null;
-  activeChain: any[];
+  activeChain: PendingInteraction[];
   pendingReactions: any[];
+  arenaChain: ArenaChainState;
+  arenaChainCounter?: number;
   gameOver?: {
     winner: string | null;
     message: string;
+    outcomeCode?: string;
+    outcomeParams?: Record<string, string | number | null>;
   };
 }

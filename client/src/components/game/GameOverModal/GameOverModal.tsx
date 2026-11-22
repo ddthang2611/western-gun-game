@@ -1,5 +1,6 @@
 import React from "react";
 import type { GameOverInfo, Player, RoleType } from "../../../types/game";
+import { useI18n } from "../../../i18n";
 import { Modal } from "../../ui/Modal/Modal";
 import { Panel } from "../../ui/Panel/Panel";
 import { Button } from "../../ui/Button/Button";
@@ -12,30 +13,48 @@ export interface GameOverModalProps {
   onReturnToLobby: () => void;
 }
 
-const WINNER_LABELS: Record<string, string> = {
-  SHERIFF_AND_DEPUTIES: "Law & Order Prevails (Sheriff & Deputies Win)",
-  OUTLAWS: "Outlaws Take the Town (Outlaws Win)",
-  RENEGADE: "Last Gunfighter Standing (Renegade Wins)",
-};
-
 export const GameOverModal: React.FC<GameOverModalProps> = ({
   gameOver,
   players,
   myRole,
   onReturnToLobby,
 }) => {
-  const headline = (gameOver.winner && WINNER_LABELS[gameOver.winner]) || "Match Completed";
+  const { t, tRole } = useI18n();
+  const headline = gameOver.winner
+    ? t(`modals.gameOver.winner.${gameOver.winner}`, undefined, t("modals.gameOver.title"))
+    : t("modals.gameOver.title");
+
+  const localizedParams = gameOver.outcomeParams
+    ? {
+        ...gameOver.outcomeParams,
+        killerRole: gameOver.outcomeParams.killerRole
+          ? tRole(String(gameOver.outcomeParams.killerRole))
+          : undefined,
+        victimRole: gameOver.outcomeParams.victimRole
+          ? tRole(String(gameOver.outcomeParams.victimRole))
+          : undefined,
+        survivorRole: gameOver.outcomeParams.survivorRole
+          ? tRole(String(gameOver.outcomeParams.survivorRole))
+          : undefined,
+      }
+    : undefined;
+
+  const outcomeMessage = gameOver.outcomeCode
+    ? t(`modals.gameOver.outcome.${gameOver.outcomeCode}`, localizedParams, gameOver.message)
+    : gameOver.message;
 
   return (
     <Modal isOpen={true} size="medium">
       <Modal.Header
         title={headline}
-        subtitle={`Role: ${(myRole || "Hidden").toUpperCase()}`}
+        subtitle={t("modals.gameOver.roleSubtitle", {
+          role: tRole(myRole).toUpperCase(),
+        })}
       />
 
       <Modal.Body>
         <Panel>
-          <div className="game-over-modal__outcome">{gameOver.message}</div>
+          <div className="game-over-modal__outcome">{outcomeMessage}</div>
         </Panel>
 
         <Panel>
@@ -43,10 +62,11 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             {players.map((p) => (
               <div key={p.id} className="game-over-modal__player-row">
                 <span>
-                  <strong>{p.name}</strong> {p.hp <= 0 ? "(Eliminated)" : `(${p.hp}/${p.maxHp} HP)`}
+                  <strong>{p.name}</strong>{" "}
+                  {p.hp <= 0 ? t("modals.gameOver.eliminated") : `(${p.hp}/${p.maxHp} HP)`}
                 </span>
                 <span className="game-over-modal__player-role">
-                  {p.role || "Hidden"}
+                  {p.role ? tRole(p.role) : t("roles.unknown")}
                 </span>
               </div>
             ))}
@@ -56,7 +76,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
 
       <Modal.Footer>
         <Button variant="primary" onClick={onReturnToLobby}>
-          Return to Lobby
+          {t("modals.gameOver.returnLobby")}
         </Button>
       </Modal.Footer>
     </Modal>

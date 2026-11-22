@@ -1,5 +1,6 @@
 import { EngineCard, Suit } from "../types/cards";
 import { EnginePlayer, SimulationState } from "../types/state";
+import { CardRegistry } from "../cards/card_registry";
 
 export interface DrawContext {
   state: SimulationState;
@@ -100,14 +101,10 @@ const EVENT_RULES: Record<string, EventRuleHandler> = {
   },
   EVENT_FOC_THE_JUDGE: {
     canPlayCard: (_state, _player, card) => {
-      if (
-        card.border === "blue" ||
-        card.border === "green" ||
-        card.category === "weapon" ||
-        card.category === "equipment" ||
-        card.category === "green_delayed" ||
-        card.category === "green_delay"
-      ) {
+      const isInPlayCard = CardRegistry.get(card)
+        ? CardRegistry.isEquippableCard(card)
+        : card.border === "blue" || card.border === "green";
+      if (isInPlayCard) {
         return "The Judge forbids playing cards in front of any player";
       }
       return null;

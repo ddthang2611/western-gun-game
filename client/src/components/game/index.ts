@@ -7,5 +7,6 @@ export * from "./DefenseModal/DefenseModal";
 export * from "./GameOverModal/GameOverModal";
 export * from "./GeneralStoreModal/GeneralStoreModal";
 export * from "./InFlightChain/InFlightChain";
+export * from "./LuckyDukeModal/LuckyDukeModal";
 export * from "./OpponentSeat/OpponentSeat";
 export * from "./TurnPromptModal/TurnPromptModal";

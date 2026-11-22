@@ -28,7 +28,7 @@ function mapClientEquipments(equipments) {
     };
 }
 // Convert sanitized snapshot to client TableState
-function buildTableState(snapshot, playerId, engine, combatLog, matchPaused, isPlayerOnline) {
+function buildTableState(snapshot, playerId, engine, combatLog, matchPaused, isPlayerOnline, matchId, hostId, structuredCombatLog = []) {
     const simState = engine.getState();
     const myPlayer = snapshot.players.find((p) => p.id === playerId);
     const mySimPlayer = simState.players.get(playerId);
@@ -45,7 +45,7 @@ function buildTableState(snapshot, playerId, engine, combatLog, matchPaused, isP
             id: p.id,
             name: p.name,
             seatIndex: p.seatIndex,
-            isHost: false,
+            isHost: Boolean(hostId && hostId === p.id),
             isReady: true,
             isOnline: online && (!p.isDead || Boolean(p.isGhost)),
             isDead: p.isDead,
@@ -79,7 +79,7 @@ function buildTableState(snapshot, playerId, engine, combatLog, matchPaused, isP
     let outlaw = 0;
     let renegade = 0;
     simState.players.forEach((p) => {
-        if (!p.isDead) {
+        if (!p.isDead && !p.isGhost) {
             if (p.role === "sheriff" || p.role === "deputy")
                 police++;
             else if (p.role === "outlaw")
@@ -88,34 +88,49 @@ function buildTableState(snapshot, playerId, engine, combatLog, matchPaused, isP
                 renegade++;
         }
     });
-    const seenInFlightKeys = new Set();
-    const mappedInFlight = (snapshot.pendingReactionTargets || [])
-        .filter((r) => {
-        const key = r.sourceCard?.id ||
-            `${r.sourcePlayerId}:${r.type}:${r.sourceCard?.name || ""}`;
-        if (seenInFlightKeys.has(key))
-            return false;
-        seenInFlightKeys.add(key);
-        return true;
-    })
-        .map((r) => ({
-        id: r.id,
-        card: mapClientCard(r.sourceCard) ?? {
-            id: r.id,
-            name: r.type,
-            border: "brown",
-            rank: "A",
-            suit: "hearts",
-            desc: r.type,
+    const now = Date.now();
+    const rawArena = snapshot.arenaChain || {
+        chainId: "",
+        status: "IDLE",
+        entries: [],
+        stepLockUntil: 0,
+        settleUntil: 0,
+    };
+    const mappedArenaEntries = (rawArena.entries || []).map((entry) => ({
+        ...entry,
+        card: mapClientCard(entry.card),
+    }));
+    const mappedArenaChain = {
+        chainId: rawArena.chainId,
+        status: rawArena.status,
+        entries: mappedArenaEntries,
+        stepLockRemainingMs: rawArena.stepLockUntil > now ? rawArena.stepLockUntil - now : 0,
+        settleRemainingMs: rawArena.settleUntil > now ? rawArena.settleUntil - now : 0,
+    };
+    const mappedInFlight = mappedArenaEntries.map((entry) => ({
+        id: entry.id,
+        card: entry.card,
+        sourcePlayerName: entry.actorPlayerName,
+        targetPlayerName: entry.targetPlayerName,
+        actionText: entry.actionLabel,
+        kind: entry.kind,
+        outcome: entry.outcome,
+        meta: {
+            actor: entry.actorPlayerName,
+            target: entry.targetPlayerName,
+            kind: entry.kind,
+            outcome: entry.outcome,
+            actionLabel: entry.actionLabel,
         },
-        sourcePlayerName: nameById.get(r.sourcePlayerId) || "Unknown",
-        targetPlayerName: nameById.get(r.targetPlayerId) || "Unknown",
-        actionText: `${r.type} (${r.currentCount}/${r.requiredCount})`,
     }));
     const mappedMyPending = snapshot.myPendingReaction
         ? {
             ...snapshot.myPendingReaction,
-            sourcePlayerName: nameById.get(snapshot.myPendingReaction.sourcePlayerId) || "Unknown",
+            sourcePlayerName: snapshot.myPendingReaction.sourcePlayerId === "SYSTEM"
+                ? "Event"
+                : snapshot.myPendingReaction.sourcePlayerId === "ENV_DAMAGE"
+                    ? "Environment"
+                    : nameById.get(snapshot.myPendingReaction.sourcePlayerId) || "Unknown",
             sourceCard: mapClientCard(snapshot.myPendingReaction.sourceCard),
             ...(snapshot.myPendingReaction.ricochetTargetArea
                 ? { ricochetTargetArea: snapshot.myPendingReaction.ricochetTargetArea }
@@ -136,10 +151,44 @@ function buildTableState(snapshot, playerId, engine, combatLog, matchPaused, isP
             pool: snapshot.generalStore.pool.map((c) => mapClientCard(c)),
         }
         : null;
+    const mappedBrawlPick = snapshot.pendingBrawlPick
+        ? {
+            actorPlayerId: snapshot.pendingBrawlPick.actorPlayerId,
+            actorPlayerName: nameById.get(snapshot.pendingBrawlPick.actorPlayerId) || "Unknown",
+            currentTargetId: snapshot.pendingBrawlPick.currentTargetId,
+            currentTargetName: nameById.get(snapshot.pendingBrawlPick.currentTargetId) || "Unknown",
+            remainingCount: snapshot.pendingBrawlPick.remainingCount,
+            sourceCard: mapClientCard(snapshot.pendingBrawlPick.sourceCard),
+        }
+        : null;
+    const mappedLuckyDukePick = snapshot.pendingLuckyDukePick
+        ? {
+            playerId: snapshot.pendingLuckyDukePick.playerId,
+            playerName: nameById.get(snapshot.pendingLuckyDukePick.playerId) || "Unknown",
+            reason: snapshot.pendingLuckyDukePick.reason,
+            drawnCards: snapshot.pendingLuckyDukePick.drawnCards.map((c) => ({
+                ...mapClientCard(c),
+                matches: c.matches,
+            })),
+        }
+        : null;
+    const mappedElGringoPick = snapshot.pendingElGringoPick
+        ? {
+            victimId: snapshot.pendingElGringoPick.victimId,
+            victimName: nameById.get(snapshot.pendingElGringoPick.victimId) || "Unknown",
+            attackerId: snapshot.pendingElGringoPick.attackerId,
+            attackerName: nameById.get(snapshot.pendingElGringoPick.attackerId) || "Unknown",
+            remainingSteals: snapshot.pendingElGringoPick.remainingSteals,
+        }
+        : null;
+    const hostName = hostId ? nameById.get(hostId) : undefined;
     return {
         roomId: snapshot.roomId,
+        matchId,
+        isHost: Boolean(hostId && hostId === playerId),
         stateSeq: snapshot.stateSeq,
-        hostInfo: `Room: ${snapshot.roomId}`,
+        hostName,
+        hostInfo: hostName ? `Host: ${hostName}` : snapshot.roomId,
         matchPhase: snapshot.matchPhase,
         roundNumber: snapshot.roundNumber,
         myPlayerId: playerId,
@@ -161,7 +210,9 @@ function buildTableState(snapshot, playerId, engine, combatLog, matchPaused, isP
         pendingTurnStartChoice: snapshot.pendingTurnStartChoice,
         pendingPhase1Choice: snapshot.pendingPhase1Choice,
         inFlightCards: mappedInFlight,
+        arenaChain: mappedArenaChain,
         combatLog: combatLog.slice(0, 50),
+        structuredCombatLog: structuredCombatLog.slice(0, 50),
         roleCounts: { police, outlaw, renegade },
         myRole: snapshot.myState?.role || undefined,
         myHp: myPlayer?.hp ?? 0,
@@ -182,6 +233,9 @@ function buildTableState(snapshot, playerId, engine, combatLog, matchPaused, isP
         myPendingReaction: mappedMyPending,
         pendingReactions: mappedPendingReactions,
         generalStore: mappedGeneralStore,
+        pendingBrawlPick: mappedBrawlPick,
+        pendingLuckyDukePick: mappedLuckyDukePick,
+        pendingElGringoPick: mappedElGringoPick,
         gameOver: snapshot.gameOver || null,
         matchPaused,
     };

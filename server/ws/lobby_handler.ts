@@ -229,17 +229,17 @@ export class LobbyManager {
           try {
             parsed = JSON.parse(data.toString());
           } catch {
-            this.send(ws, "ERROR", { message: "Invalid message format" });
+            this.send(ws, "ERROR", { code: "INVALID_MESSAGE_FORMAT", message: "Invalid message format" });
             return;
           }
 
           if (!isValidClientMessage(parsed)) {
-            this.send(ws, "ERROR", { message: "Invalid message format" });
+            this.send(ws, "ERROR", { code: "INVALID_MESSAGE_FORMAT", message: "Invalid message format" });
             return;
           }
 
           if (!this.wsRateLimiter.allow(ws, parsed.type)) {
-            this.send(ws, "ERROR", { message: "Rate limit exceeded. Slow down." });
+            this.send(ws, "ERROR", { code: "RATE_LIMIT_EXCEEDED", message: "Rate limit exceeded. Slow down." });
             return;
           }
 
@@ -718,7 +718,7 @@ export class LobbyManager {
       case "SELECT_STOLEN_CARD": {
         const playerId = this.resolvePlayerId(ws, currentToken);
         if (!playerId) {
-          this.send(ws, "ERROR", { message: "Unauthenticated session." });
+          this.send(ws, "ERROR", { code: "UNAUTHENTICATED_SESSION", message: "Unauthenticated session." });
           return currentToken;
         }
 

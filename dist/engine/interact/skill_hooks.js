@@ -1,12 +1,10 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.SkillHooks = void 0;
-const crypto_1 = __importDefault(require("crypto"));
 const deck_manager_1 = require("../deck/deck_manager");
 const event_rule_registry_1 = require("../events/event_rule_registry");
+const skill_registry_1 = require("../cards/skill_registry");
+const DYNAMITE_RANKS = new Set(["2", "3", "4", "5", "6", "7", "8", "9"]);
 class SkillHooks {
     // Check character skill and suppression
     static hasSkill(player, charName, state) {
@@ -35,15 +33,19 @@ class SkillHooks {
         const activeTurn = turnPlayer ?? (state ? state.players.get(state.turnPlayerId) : undefined);
         if (activeTurn &&
             owner.id !== activeTurn.id &&
-            SkillHooks.hasSkill(activeTurn, "Belle Star", state)) {
+            skill_registry_1.SkillRegistry.getActiveDefinitions(activeTurn, state).some((d) => d.passive?.negateOthersInPlayDuringOwnTurn)) {
             return false;
         }
         return true;
     }
     // Slab the Killer attack modifier
     static getMissedRequiredForAttack(attacker, card, state) {
-        if (card.name === "BANG!" && SkillHooks.hasSkill(attacker, "Slab the Killer", state)) {
-            return 2;
+        if (card.name === "BANG!") {
+            for (const def of skill_registry_1.SkillRegistry.getActiveDefinitions(attacker, state)) {
+                if (def.passive?.standardBangMissedRequired) {
+                    return def.passive.standardBangMissedRequired;
+                }
+            }
         }
         return 1;
     }
@@ -53,69 +55,75 @@ class SkillHooks {
             return false;
         }
         const suit = SkillHooks.getEffectiveSuit(card, state);
-        if (SkillHooks.hasSkill(defender, "Apache Kid", state) && suit === "diamonds") {
-            return true;
-        }
-        return false;
+        return skill_registry_1.SkillRegistry.getActiveDefinitions(defender, state).some((d) => d.passive?.immuneToOtherPlayersSuit === suit);
     }
     // Calamity Janet and Elena Fuente
     static canSubstituteCard(player, card, targetRole, state) {
-        if (targetRole === "MISSED" && SkillHooks.hasSkill(player, "Elena Fuente", state)) {
-            return true;
-        }
-        if (SkillHooks.hasSkill(player, "Calamity Janet", state)) {
-            if (targetRole === "MISSED" && card.name === "BANG!")
+        for (const def of skill_registry_1.SkillRegistry.getActiveDefinitions(player, state)) {
+            if (targetRole === "MISSED" && def.substitution?.allowAnyHandAsMissed) {
                 return true;
-            if (targetRole === "BANG" && card.name === "MISSED!")
+            }
+            if (targetRole === "MISSED" && card.name === "BANG!" && def.substitution?.allowBangAsMissed) {
                 return true;
+            }
+            if (targetRole === "BANG" && card.name === "MISSED!" && def.substitution?.allowMissedAsBang) {
+                return true;
+            }
         }
         return false;
     }
     // Jourdonnais innate Barrel check
     static hasInnateBarrel(player, state) {
-        return SkillHooks.hasSkill(player, "Jourdonnais", state);
+        return skill_registry_1.SkillRegistry.getActiveDefinitions(player, state).some((d) => d.passive?.innateBarrel);
     }
     // Willy the Kid unlimited BANG!
     static hasUnlimitedBang(player, state) {
-        return SkillHooks.hasSkill(player, "Willy the Kid", state);
+        return skill_registry_1.SkillRegistry.getActiveDefinitions(player, state).some((d) => d.passive?.unlimitedBang);
     }
     // Paul Regret defense distance bonus
     static getDistanceDefenseBonus(defender, state) {
-        return SkillHooks.hasSkill(defender, "Paul Regret", state) ? 1 : 0;
+        let bonus = 0;
+        for (const def of skill_registry_1.SkillRegistry.getActiveDefinitions(defender, state)) {
+            bonus += def.passive?.defenseDistanceBonus ?? 0;
+        }
+        return bonus;
     }
     // Rose Doolan offense distance bonus
     static getDistanceOffenseBonus(attacker, state) {
-        return SkillHooks.hasSkill(attacker, "Rose Doolan", state) ? -1 : 0;
+        let bonus = 0;
+        for (const def of skill_registry_1.SkillRegistry.getActiveDefinitions(attacker, state)) {
+            bonus += def.passive?.offenseDistanceBonus ?? 0;
+        }
+        return bonus;
     }
     // Sean Mallory end-turn hand limit
     static getPhase3HandLimit(player, state) {
-        return SkillHooks.hasSkill(player, "Sean Mallory", state) ? 10 : player.hp;
+        for (const def of skill_registry_1.SkillRegistry.getActiveDefinitions(player, state)) {
+            if (def.passive?.phase3HandLimit !== undefined) {
+                return def.passive.phase3HandLimit;
+            }
+        }
+        return player.hp;
     }
     // Tequila Joe Beer heal amount
     static getBeerHealAmount(player, state) {
-        return SkillHooks.hasSkill(player, "Tequila Joe", state) ? 2 : 1;
-    }
-    // Lucky Duke Draw! check execution
-    static executeDrawCheck(state, player, reason, condition) {
-        const events = [];
-        const isLuckyDuke = SkillHooks.hasSkill(player, "Lucky Duke", state);
-        const count = isLuckyDuke ? 2 : 1;
-        const { cards: drawn, events: drawEvents } = deck_manager_1.DeckManager.drawCards(state, count);
-        events.push(...drawEvents);
-        let chosenCard = drawn[0];
-        let success = false;
-        if (drawn.length > 0) {
-            success = condition(drawn[0], state);
-            if (!success && isLuckyDuke && drawn.length > 1) {
-                if (condition(drawn[1], state)) {
-                    chosenCard = drawn[1];
-                    success = true;
-                }
+        for (const def of skill_registry_1.SkillRegistry.getActiveDefinitions(player, state)) {
+            if (def.passive?.beerHealAmount !== undefined) {
+                return def.passive.beerHealAmount;
             }
         }
-        for (const card of drawn) {
-            deck_manager_1.DeckManager.discardCard(state, card);
+        return 1;
+    }
+    // Evaluate Draw! condition by reason
+    static isDrawCheckSuccess(reason, card, state) {
+        const suit = SkillHooks.getEffectiveSuit(card, state);
+        if (reason === "DYNAMITE") {
+            return !(suit === "spades" && DYNAMITE_RANKS.has(card.rank));
         }
+        return suit === "hearts";
+    }
+    // Emit finalized Draw! check result
+    static emitDrawCheckResult(state, player, reason, isLuckyDuke, drawn, chosenCard, success, events) {
         const effectiveSuit = chosenCard
             ? SkillHooks.getEffectiveSuit(chosenCard, state)
             : undefined;
@@ -136,6 +144,46 @@ class SkillHooks {
             },
             timestamp: Date.now(),
         });
+    }
+    // Lucky Duke Draw! check execution
+    static executeDrawCheck(state, player, reason, condition, luckyMeta) {
+        const events = [];
+        const isLuckyDuke = SkillHooks.hasSkill(player, "Lucky Duke", state);
+        const count = isLuckyDuke ? 2 : 1;
+        const { cards: drawn, events: drawEvents } = deck_manager_1.DeckManager.drawCards(state, count);
+        events.push(...drawEvents);
+        if (isLuckyDuke && drawn.length === 2) {
+            const pickState = {
+                type: "LUCKY_DUKE_PICK",
+                playerId: player.id,
+                reason,
+                drawnCards: drawn,
+                ...(luckyMeta?.judgementCard ? { judgementCard: luckyMeta.judgementCard } : {}),
+                ...(luckyMeta?.judgementId ? { judgementId: luckyMeta.judgementId } : {}),
+                ...(luckyMeta?.sourceReactionId ? { sourceReactionId: luckyMeta.sourceReactionId } : {}),
+            };
+            state.activeChain.push(pickState);
+            events.push({
+                type: "LUCKY_DUKE_DRAW_PENDING",
+                payload: {
+                    playerId: player.id,
+                    playerName: player.name,
+                    reason,
+                    drawnCards: drawn,
+                },
+                timestamp: Date.now(),
+            });
+            return {
+                pendingInteraction: pickState,
+                success: false,
+                drawnCards: drawn,
+                events,
+            };
+        }
+        const chosenCard = drawn[0];
+        const success = chosenCard ? condition(chosenCard, state) : false;
+        deck_manager_1.DeckManager.discardCardsRespectingMine(state, drawn);
+        SkillHooks.emitDrawCheckResult(state, player, reason, isLuckyDuke, drawn, chosenCard, success, events);
         return { success, drawnCards: drawn, chosenCard, events };
     }
     // Suzy Lafayette empty hand draw
@@ -184,44 +232,40 @@ class SkillHooks {
         if (SkillHooks.hasSkill(victim, "El Gringo", state) &&
             attacker &&
             attacker.id !== victim.id &&
-            !attacker.isDead) {
-            for (let i = 0; i < damageAmount; i++) {
-                if (attacker.handCards.length === 0)
-                    break;
-                const randIdx = crypto_1.default.randomInt(0, attacker.handCards.length);
-                const stolenCard = attacker.handCards.splice(randIdx, 1)[0];
-                victim.handCards.push(stolenCard);
-                events.push({
-                    type: "EL_GRINGO_STOLEN",
-                    visibleTo: [victim.id, attacker.id],
-                    payload: {
-                        victimId: victim.id,
-                        attackerId: attacker.id,
-                        card: stolenCard,
-                    },
-                    maskedPayload: {
-                        victimId: victim.id,
-                        attackerId: attacker.id,
-                        card: {
-                            id: "SECRET",
-                            name: "Card from hand",
-                            suit: "UNKNOWN",
-                            rank: "UNKNOWN",
-                        },
-                    },
-                    timestamp: Date.now(),
-                });
-            }
-            SkillHooks.checkSuzyLafayette(state, attacker, events);
+            !attacker.isDead &&
+            attacker.handCards.length > 0) {
+            const remainingSteals = Math.min(damageAmount, attacker.handCards.length);
+            const gringoState = {
+                type: "EL_GRINGO_PICK",
+                victimId: victim.id,
+                attackerId: attacker.id,
+                remainingSteals,
+            };
+            state.activeChain.push(gringoState);
+            events.push({
+                type: "EL_GRINGO_PICK_PENDING",
+                payload: {
+                    victimId: victim.id,
+                    victimName: victim.name,
+                    attackerId: attacker.id,
+                    attackerName: attacker.name,
+                    remainingSteals,
+                },
+                timestamp: Date.now(),
+            });
         }
     }
     // Molly Stark out-of-turn draw
-    static onPlayOutOfTurn(state, player, events) {
-        if (player.isDead || state.turnPlayerId === player.id)
+    static onPlayOutOfTurn(state, player, events, count = 1) {
+        if (player.isDead ||
+            (!player.isGhost && player.hp <= 0) ||
+            state.turnPlayerId === player.id ||
+            count <= 0) {
             return;
+        }
         if (!SkillHooks.hasSkill(player, "Molly Stark", state))
             return;
-        const { cards: drawn, events: drawEvents } = deck_manager_1.DeckManager.drawCards(state, 1);
+        const { cards: drawn, events: drawEvents } = deck_manager_1.DeckManager.drawCards(state, count);
         events.push(...drawEvents);
         if (drawn.length === 0)
             return;
@@ -230,49 +274,40 @@ class SkillHooks {
             type: "MOLLY_STARK_TRIGGERED",
             payload: {
                 playerId: player.id,
+                playerName: player.name,
                 drawnCount: drawn.length,
             },
             timestamp: Date.now(),
         });
     }
-    // Greg Digger and Herb Hunter
-    static onPlayerEliminated(state, deadPlayer, events) {
-        state.players.forEach((player) => {
-            if (player.isDead || player.id === deadPlayer.id)
-                return;
-            if (!player.isGhost && player.hp > 0 && SkillHooks.hasSkill(player, "Greg Digger", state)) {
-                const heal = Math.min(2, player.maxHp - player.hp);
-                if (heal > 0) {
-                    player.hp += heal;
-                    events.push({
-                        type: "GREG_DIGGER_HEALED",
-                        payload: {
-                            playerId: player.id,
-                            playerName: player.name,
-                            healedAmount: heal,
-                            currentHp: player.hp,
-                        },
-                        timestamp: Date.now(),
-                    });
-                }
-            }
-            if (SkillHooks.hasSkill(player, "Herb Hunter", state)) {
-                const { cards: drawn, events: drawEvents } = deck_manager_1.DeckManager.drawCards(state, 2);
-                events.push(...drawEvents);
-                if (drawn.length > 0) {
-                    player.handCards.push(...drawn);
-                    events.push({
-                        type: "HERB_HUNTER_DRAW",
-                        payload: {
-                            playerId: player.id,
-                            playerName: player.name,
-                            drawnCount: drawn.length,
-                        },
-                        timestamp: Date.now(),
-                    });
-                }
-            }
-        });
+    // Queue Molly Stark deferred draw
+    static queueDeferredMollyDraw(state, reaction, player) {
+        if (player.isDead || (!player.isGhost && player.hp <= 0))
+            return;
+        if (state.turnPlayerId === player.id)
+            return;
+        if (!SkillHooks.hasSkill(player, "Molly Stark", state))
+            return;
+        if (!reaction.deferredMollyDraws) {
+            reaction.deferredMollyDraws = {};
+        }
+        reaction.deferredMollyDraws[player.id] =
+            (reaction.deferredMollyDraws[player.id] ?? 0) + 1;
+    }
+    // Flush Molly Stark deferred draws
+    static flushDeferredMollyDraws(state, reaction, events) {
+        const deferred = reaction.deferredMollyDraws;
+        if (!deferred)
+            return;
+        for (const [pid, count] of Object.entries(deferred)) {
+            if (count <= 0)
+                continue;
+            const targetPlayer = state.players.get(pid);
+            if (!targetPlayer)
+                continue;
+            SkillHooks.onPlayOutOfTurn(state, targetPlayer, events, count);
+        }
+        delete reaction.deferredMollyDraws;
     }
     // Sid Ketchum near-death rescue check
     static canSidKetchumRescue(state, victim) {
@@ -313,9 +348,9 @@ class SkillHooks {
         return { success: true, events };
     }
     // Active character skills facade
-    static handleActiveSkill(state, command, events) {
+    static handleActiveSkill(state, command, events, deckManager) {
         const { ActiveSkills } = require("./handlers/active_skills");
-        return ActiveSkills.handleActiveSkill(state, command, events);
+        return ActiveSkills.handleActiveSkill(state, command, events, deckManager);
     }
 }
 exports.SkillHooks = SkillHooks;

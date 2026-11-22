@@ -1,0 +1,93 @@
+.wg-card-tooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #f4e6cf;
+  font-size: 0.78rem;
+  line-height: 1.42;
+}
+
+.wg-card-tooltip__badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.wg-card-tooltip__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  background: rgba(212, 175, 55, 0.18);
+  border: 1px solid rgba(212, 175, 55, 0.35);
+  color: #f5d882;
+
+  &--range {
+    background: rgba(91, 142, 74, 0.22);
+    border-color: rgba(145, 209, 120, 0.45);
+    color: #c7f0b4;
+  }
+
+  &--suit.is-red {
+    background: rgba(185, 45, 45, 0.24);
+    border-color: rgba(235, 110, 110, 0.45);
+    color: #ffb8b8;
+  }
+
+  &--suit.is-black {
+    background: rgba(120, 130, 145, 0.22);
+    border-color: rgba(180, 190, 205, 0.35);
+    color: #e4eaf2;
+  }
+}
+
+.wg-card-tooltip__summary {
+  font-weight: 700;
+  font-size: 0.74rem;
+  color: #ffe39a;
+}
+
+.wg-card-tooltip__desc {
+  margin: 0;
+  color: #f2e4cc;
+  word-break: break-word;
+}
+
+.wg-card-tooltip__secondary {
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px dashed rgba(212, 175, 55, 0.25);
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 0.71rem;
+  color: rgba(242, 228, 204, 0.76);
+}
+
+.wg-card-tooltip__secondary-tag {
+  flex-shrink: 0;
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 232, 179, 0.85);
+}
+
+.wg-card-tooltip__secondary-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.wg-card-tooltip__secondary-title {
+  font-weight: 700;
+  color: rgba(255, 232, 179, 0.9);
+}
+
+.wg-card-tooltip__secondary-desc {
+  line-height: 1.35;
+}

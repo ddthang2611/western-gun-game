@@ -35,9 +35,7 @@ export interface CardPickerConfig {
   allowInPlay?: boolean;
   sourceGreenCardId?: string;
   stealContext?: {
-    mode: "JESSE_STEAL_AND_DECK" | "PAT_BRENNAN_STEAL" | "EL_GRINGO";
-    attackerId?: string;
-    stolenCard?: Card;
+    mode: "JESSE_STEAL_AND_DECK" | "PAT_BRENNAN_STEAL";
   };
 }
 
@@ -58,6 +56,9 @@ export const EMPTY_LIVE_TABLE: TableState = {
   myPendingReaction: null,
   pendingReactions: [],
   generalStore: null,
+  pendingBrawlPick: null,
+  pendingLuckyDukePick: null,
+  pendingElGringoPick: null,
   gameOver: null,
   activeEvent: null,
   matchPaused: false,
@@ -75,6 +76,7 @@ export interface ComputeActionHintParams {
   discardCostIds: string[];
   isSniperBangSelected: boolean;
   canRicochetEquip: boolean;
+  t?: (key: string, params?: Record<string, string | number>, fallback?: string) => string;
 }
 
 // Derive contextual action hint banner
@@ -90,53 +92,121 @@ export function computeActionHint({
   discardCostIds,
   isSniperBangSelected,
   canRicochetEquip,
+  t,
 }: ComputeActionHintParams): string | null {
+  const tr = (key: string, params: Record<string, string | number>, fallback: string) =>
+    t ? t(key, params, fallback) : fallback;
+
   if (skillMode === "CHUCK_WENGAM_SACRIFICE") {
-    return "Chuck Wengam: Sacrifice 1 HP to draw 2 cards - Click Confirm Skill";
+    return tr(
+      "table.hints.chuck",
+      {},
+      "Chuck Wengam: Sacrifice 1 HP to draw 2 cards - Click Confirm Skill"
+    );
   }
   if (skillMode === "JOSE_DELGADO_DRAW") {
-    return `Jose Delgado: Select 1 blue card (${skillDiscardIds.length}/1) - Click Confirm Skill`;
+    return tr(
+      "table.hints.jose",
+      { count: skillDiscardIds.length },
+      `Jose Delgado: Select 1 blue card (${skillDiscardIds.length}/1) - Click Confirm Skill`
+    );
   }
   if (skillMode === "SID_KETCHUM_HEAL") {
-    return `Sid Ketchum: Select 2 cards (${skillDiscardIds.length}/2) - Click Confirm Skill`;
+    return tr(
+      "table.hints.sid",
+      { count: skillDiscardIds.length },
+      `Sid Ketchum: Select 2 cards (${skillDiscardIds.length}/2) - Click Confirm Skill`
+    );
   }
   if (skillMode === "DOC_HOLYDAY_BANG") {
-    return `Doc Holyday: Select 2 cards (${skillDiscardIds.length}/2) & a target - Click Confirm Skill`;
+    return tr(
+      "table.hints.doc",
+      { count: skillDiscardIds.length },
+      `Doc Holyday: Select 2 cards (${skillDiscardIds.length}/2) & a target - Click Confirm Skill`
+    );
   }
   if (selectedGreenCard) {
     return TARGETED_GREEN_CARDS.has(selectedGreenCard.card.name) && !selectedTargetId
-      ? `Green Ready: ${selectedGreenCard.card.name} - Select a target opponent, then click Play.`
-      : `Green Ready: ${selectedGreenCard.card.name} - Click Play to activate.`;
+      ? tr(
+          "table.hints.greenNeedTarget",
+          { card: selectedGreenCard.card.name },
+          `Green Ready: ${selectedGreenCard.card.name} - Select a target opponent, then click Play.`
+        )
+      : tr(
+          "table.hints.greenReady",
+          { card: selectedGreenCard.card.name },
+          `Green Ready: ${selectedGreenCard.card.name} - Click Activate to use.`
+        );
   }
   if (selectedCard && selectedCard.border === "green" && currentPhase !== 3) {
     return GREEN_DEFENSE_NAMES.has(selectedCard.name)
-      ? `Green Defense (${selectedCard.name}): Click Play to place in front of you (ready after your turn).`
-      : `Green Card (${selectedCard.name}): Click Play to place in play (ready next turn).`;
+      ? tr(
+          "table.hints.greenPlaceDefense",
+          { card: selectedCard.name },
+          `Green Defense (${selectedCard.name}): Click Play to place in front of you (ready next turn).`
+        )
+      : tr(
+          "table.hints.greenPlace",
+          { card: selectedCard.name },
+          `Green Card (${selectedCard.name}): Click Play to place in play (ready next turn).`
+        );
   }
   if (requiresExtraDiscard && selectedCard) {
     if (activeHandLength < 2) {
-      return `${selectedCard.name}: Requires 1 extra discard card, but your hand has no second card.`;
+      return tr(
+        "table.hints.extraNeedSecondCard",
+        { card: selectedCard.name },
+        `${selectedCard.name}: Requires 1 extra card from hand, but your hand has no second card.`
+      );
     }
     if (discardCostIds.length < 1) {
-      return `${selectedCard.name}: Select 1 extra card in hand to discard (0/1).`;
+      return tr(
+        "table.hints.extraSelectCost",
+        { card: selectedCard.name },
+        `${selectedCard.name}: Select 1 extra card from hand to pay cost (0/1).`
+      );
     }
     if (
       TARGETED_SINGLE_CARDS.has(selectedCard.name) ||
       MANIPULATE_CARDS.has(selectedCard.name)
     ) {
       return selectedTargetId
-        ? `${selectedCard.name}: Extra discard ready (1/1) - Click Play.`
-        : `${selectedCard.name}: Extra discard ready (1/1) - Select a target opponent.`;
+        ? tr(
+            "table.hints.extraReady",
+            { card: selectedCard.name },
+            `${selectedCard.name}: Extra card cost ready (1/1) - Click Play.`
+          )
+        : tr(
+            "table.hints.extraNeedTarget",
+            { card: selectedCard.name },
+            `${selectedCard.name}: Extra card cost ready (1/1) - Select a target opponent.`
+          );
     }
-    return `${selectedCard.name}: Extra discard ready (1/1) - Click Play.`;
+    return tr(
+      "table.hints.extraReady",
+      { card: selectedCard.name },
+      `${selectedCard.name}: Extra card cost ready (1/1) - Click Play.`
+    );
   }
   if (isSniperBangSelected) {
     return discardCostIds.length > 0
-      ? "Sniper: 2nd BANG! selected (requires 2 Missed!) - Select target & click Play."
-      : "Sniper: Select target for normal shot, or pick 2nd BANG! first.";
+      ? tr(
+          "table.hints.sniperReady",
+          {},
+          "Sniper: 2nd BANG! selected (requires 2 Missed!) - Select target & click Play."
+        )
+      : tr(
+          "table.hints.sniperPrompt",
+          {},
+          "Sniper: Select target for normal shot, or pick 2nd BANG! first."
+        );
   }
   if (canRicochetEquip) {
-    return "Ricochet: Click Play to shoot HP, or Ricochet Equip to shoot a card in play.";
+    return tr(
+      "table.hints.ricochet",
+      {},
+      "Ricochet: Click Play to shoot HP, or Ricochet Equip to shoot a card in play."
+    );
   }
   return null;
 }
@@ -159,7 +229,11 @@ export interface ComputeTableViewModelParams {
   phase3DiscardIds: string[];
   skillMode: SkillModeType;
   skillDiscardIds: string[];
-  ephemeralCheckCards: InFlightCard[];
+  visibleArenaCards: InFlightCard[];
+  isArenaBlockingActions: boolean;
+  isStepAnimating: boolean;
+  concealedInPlayCardIds: string[];
+  t?: (key: string, params?: Record<string, string | number>, fallback?: string) => string;
 }
 
 export interface TableViewModel {
@@ -176,6 +250,8 @@ export interface TableViewModel {
   activeJudgements: { hasJail: boolean; hasDynamite: boolean };
   isMyTurn: boolean;
   isTurnLocked: boolean;
+  isArenaLocked: boolean;
+  isStepAnimating: boolean;
   isActionLocked: boolean;
   activePlayerName: string | undefined;
   handLimit: number;
@@ -207,6 +283,7 @@ export interface BaseTableContext {
   activeHand: Card[];
   isMyTurn: boolean;
   isTurnLocked: boolean;
+  isArenaLocked: boolean;
   isActionLocked: boolean;
 }
 
@@ -218,8 +295,17 @@ export function deriveBaseTableContext(params: {
   myHand: Card[];
   myHeroes: Character[];
   myHp: number;
+  isArenaBlockingActions?: boolean;
 }): BaseTableContext {
-  const { state, isMock, isWsConnected, myHand, myHeroes, myHp } = params;
+  const {
+    state,
+    isMock,
+    isWsConnected,
+    myHand,
+    myHeroes,
+    myHp,
+    isArenaBlockingActions = false,
+  } = params;
   const myPlayerIndex = state.players.findIndex((p) => p.id === state.myPlayerId);
   const myPlayer = myPlayerIndex === -1 ? undefined : state.players[myPlayerIndex];
   const activeHeroes = isMock
@@ -240,8 +326,15 @@ export function deriveBaseTableContext(params: {
   const isMyTurn =
     isMock || (Boolean(state.myPlayerId) && state.activePlayerId === state.myPlayerId);
   const isTurnLocked = !isMock && (Boolean(state.matchPaused) || !isWsConnected);
+  const isArenaLocked = Boolean(
+    isArenaBlockingActions ||
+      (state.arenaChain &&
+        (state.arenaChain.status !== "IDLE" || state.arenaChain.entries.length > 0))
+  );
   const isActionLocked =
-    isTurnLocked || (!isMock && (!isMyTurn || state.currentPhase !== 2));
+    isTurnLocked ||
+    isArenaLocked ||
+    (!isMock && (!isMyTurn || state.currentPhase !== 2));
 
   return {
     myPlayerIndex,
@@ -253,6 +346,7 @@ export function deriveBaseTableContext(params: {
     activeHand,
     isMyTurn,
     isTurnLocked,
+    isArenaLocked,
     isActionLocked,
   };
 }
@@ -276,7 +370,11 @@ export function computeTableViewModel({
   phase3DiscardIds,
   skillMode,
   skillDiscardIds,
-  ephemeralCheckCards,
+  visibleArenaCards,
+  isArenaBlockingActions,
+  isStepAnimating,
+  concealedInPlayCardIds,
+  t,
 }: ComputeTableViewModelParams): TableViewModel {
   const base = deriveBaseTableContext({
     state,
@@ -285,6 +383,7 @@ export function computeTableViewModel({
     myHand,
     myHeroes,
     myHp,
+    isArenaBlockingActions,
   });
   const {
     myPlayerIndex,
@@ -296,6 +395,7 @@ export function computeTableViewModel({
     activeHand,
     isMyTurn,
     isTurnLocked,
+    isArenaLocked,
     isActionLocked,
   } = base;
   const opponents =
@@ -309,9 +409,27 @@ export function computeTableViewModel({
   const activeMaxHp = isMock ? myMaxHp : myPlayer?.maxHp ?? myMaxHp;
   const activeEquipments = isMock ? myEquipments : myPlayer?.equipments || myEquipments;
   const activeGreenCards = isMock ? myGreenCards : myPlayer?.greenCards || myGreenCards;
+  const concealedSet = concealedInPlayCardIds.length
+    ? new Set(concealedInPlayCardIds)
+    : undefined;
   const activeJudgements =
     !isMock && myPlayer
-      ? { hasJail: myPlayer.hasJail, hasDynamite: myPlayer.hasDynamite }
+      ? concealedSet
+        ? {
+            hasJail: (myPlayer.judgements || []).some(
+              (j) =>
+                j.type === "JAIL" &&
+                !concealedSet.has(j.id) &&
+                !(j.card && concealedSet.has(j.card.id))
+            ),
+            hasDynamite: (myPlayer.judgements || []).some(
+              (j) =>
+                j.type === "DYNAMITE" &&
+                !concealedSet.has(j.id) &&
+                !(j.card && concealedSet.has(j.card.id))
+            ),
+          }
+        : { hasJail: myPlayer.hasJail, hasDynamite: myPlayer.hasDynamite }
       : myJudgements;
 
   const activePlayerName = state.players.find(
@@ -361,37 +479,7 @@ export function computeTableViewModel({
       .map((j) => ({ id: j.card!.id, label: j.card!.name, card: j.card! })),
   ];
 
-  const activeEventEntry: InFlightCard[] = state.activeEvent
-    ? [
-        {
-          id: `active_evt_${state.activeEvent.id}`,
-          card: {
-            id: state.activeEvent.id,
-            name: state.activeEvent.name,
-            border: "brown",
-            rank: "A",
-            suit: "clubs",
-            desc: state.activeEvent.desc,
-            image: state.activeEvent.image,
-          },
-          sourcePlayerName:
-            state.activeEvent.pack === "fistful" ? "A Fistful of Cards" : "High Noon",
-          actionText: state.activeEvent.name,
-        },
-      ]
-    : [];
-  const combinedInFlight = [
-    ...activeEventEntry,
-    ...state.inFlightCards,
-    ...ephemeralCheckCards,
-  ];
-  const seenInFlight = new Set<string>();
-  const displayInFlightCards = combinedInFlight.filter((c) => {
-    const key = c.isFlipReveal ? c.id : c.card?.id || c.id;
-    if (seenInFlight.has(key)) return false;
-    seenInFlight.add(key);
-    return true;
-  });
+  const displayInFlightCards = visibleArenaCards;
 
   const activeSkillHint = computeActionHint({
     skillMode,
@@ -405,11 +493,13 @@ export function computeTableViewModel({
     discardCostIds,
     isSniperBangSelected,
     canRicochetEquip,
+    t,
   });
 
   const isSkillMode = skillMode !== null;
   const canConfirmSkill =
     !isTurnLocked &&
+    !isArenaLocked &&
     !isActionLocked &&
     (skillMode === "CHUCK_WENGAM_SACRIFICE"
       ? !isMock || myHp > 1
@@ -423,6 +513,7 @@ export function computeTableViewModel({
 
   const canConfirmAction =
     !isTurnLocked &&
+    !isArenaLocked &&
     !isSkillMode &&
     Boolean(
       (!isMock && isMyTurn && state.currentPhase === 3 && phase3DiscardIds.length > 0) ||
@@ -451,6 +542,8 @@ export function computeTableViewModel({
     activeJudgements,
     isMyTurn,
     isTurnLocked,
+    isArenaLocked,
+    isStepAnimating,
     isActionLocked,
     activePlayerName,
     handLimit,

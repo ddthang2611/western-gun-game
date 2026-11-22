@@ -5,21 +5,17 @@ import { DeckManager } from "../deck/deck_manager";
 import { SeatManager } from "../board/seat_manager";
 import { EliminationHandler } from "../elimination/elimination_handler";
 import { EventEngine } from "../events/event_engine";
+import { EventRuleRegistry } from "../events/event_rule_registry";
 import { SkillHooks } from "./skill_hooks";
 import { AtomicEffects } from "./primitives/atomic_effects";
 import { PendingReaction } from "./interact_types";
+import { ArenaChainManager } from "../arena/arena_chain_manager";
 import {
-  getAllEquippedCards,
   hasBarrelCard,
+  hasBlueCardInPlay,
   removeEquippedCardById,
 } from "../utils/inventory";
-
-const GREEN_DEFENSE_CARDS = new Set([
-  "SOMBRERO",
-  "IRON PLATE",
-  "TEN GALLON HAT",
-  "BIBLE",
-]);
+import { CardRegistry } from "../cards/card_registry";
 
 export class ReactionResolver {
   // Remove dead or inapplicable reactions
@@ -32,19 +28,17 @@ export class ReactionResolver {
       if (!target || target.isDead) {
         return false;
       }
-      if (r.type === "EVENT_DALTONS_DISCARD" && !this.hasAnyBlueCardInPlay(target)) {
+      if (r.type === "DUEL_RESPONSE") {
+        const opponent = state.players.get(r.sourcePlayerId);
+        if (!opponent || opponent.isDead) {
+          return false;
+        }
+      }
+      if (r.type === "EVENT_DALTONS_DISCARD" && !hasBlueCardInPlay(target)) {
         return false;
       }
       return true;
     });
-  }
-
-  // Check whether player has blue cards
-  private static hasAnyBlueCardInPlay(player: EnginePlayer): boolean {
-    if (getAllEquippedCards(player).length > 0) {
-      return true;
-    }
-    return (player.judgements || []).some((j) => j.card.border === "blue");
   }
 
   // Extract selected blue card from play
@@ -94,7 +88,7 @@ export class ReactionResolver {
     });
   }
 
-  // Handle Sid Ketchum near-death rescue
+  // Handle Beer and Sid near-death rescue
   private static resolveNearDeathRescue(
     state: SimulationState,
     player: EnginePlayer,
@@ -111,10 +105,8 @@ export class ReactionResolver {
       return { success: true, events };
     }
 
-    const isDeclining =
-      command.payload?.action === "TAKE_DAMAGE" ||
-      !command.discardCardIds ||
-      command.discardCardIds.length === 0;
+    const action = command.payload?.action;
+    const isDeclining = action === "TAKE_DAMAGE" || action === "DECLINE_RESCUE";
 
     if (isDeclining) {
       state.pendingReactions.splice(reactionIdx, 1);
@@ -128,70 +120,194 @@ export class ReactionResolver {
       return { success: true, events };
     }
 
-    if (!SkillHooks.hasSkill(player, "Sid Ketchum", state)) {
-      return { success: false, message: "Player does not have Sid Ketchum rescue." };
-    }
-
-    const discardIds = command.discardCardIds!;
-    if (new Set(discardIds).size !== discardIds.length) {
-      return { success: false, message: "Duplicate card IDs in rescue discard." };
-    }
-    if (discardIds.length < 2 || discardIds.length % 2 !== 0) {
-      return {
-        success: false,
-        message: "Near-death rescue requires pairs of cards (2 per 1 HP).",
-      };
-    }
-
-    for (const id of discardIds) {
-      if (!player.handCards.some((c) => c.id === id)) {
-        return { success: false, message: "Rescue discard card not in hand." };
+    if (command.cardId) {
+      const canBeerRevive =
+        SeatManager.getLivingContenders(state).length > 2 &&
+        !EventRuleRegistry.disablesBeerRescue(state);
+      if (!canBeerRevive) {
+        return {
+          success: false,
+          message: "Beer cannot be used for near-death rescue right now.",
+        };
       }
-    }
 
-    const discardedCards: EngineCard[] = [];
-    for (const id of discardIds) {
-      const idx = player.handCards.findIndex((c) => c.id === id);
-      if (idx !== -1) {
-        discardedCards.push(player.handCards.splice(idx, 1)[0]);
+      const cardIdx = player.handCards.findIndex((c) => c.id === command.cardId);
+      if (cardIdx === -1) {
+        return { success: false, message: "Beer card not in hand." };
       }
-    }
-    AtomicEffects.discardCards(state, discardedCards, deckManager);
 
-    const healAmount = discardedCards.length / 2;
-    player.hp = Math.min(player.hp + healAmount, player.maxHp);
-    SkillHooks.onPlayOutOfTurn(state, player, events);
+      const beerCard = player.handCards[cardIdx];
+      if (beerCard.name !== "BEER") {
+        return {
+          success: false,
+          message: "Only BEER can be played as a single near-death rescue card.",
+        };
+      }
 
-    if (player.hp > 0) {
-      state.pendingReactions.splice(reactionIdx, 1);
+      player.handCards.splice(cardIdx, 1);
+      AtomicEffects.discardCard(state, beerCard, deckManager);
+
+      ArenaChainManager.appendBatch(state, [
+        {
+          kind: "DEFENSE_CARD",
+          card: beerCard,
+          actorPlayerId: player.id,
+          actorPlayerName: player.name,
+          originZone: "HAND",
+          destinationZone: "DISCARD",
+          actionLabel: "BEER (Revive)",
+          vfxType: "heal",
+          vfxTargetId: player.id,
+        },
+      ]);
+
+      const beerHealEach = SkillHooks.getBeerHealAmount(player, state);
+      player.hp = Math.min(player.hp + beerHealEach, player.maxHp);
+
+      if (beerHealEach > 1) {
+        events.push({
+          type: "ACTIVE_SKILL_USED",
+          payload: {
+            playerId: player.id,
+            playerName: player.name,
+            skill: "Tequila Joe",
+            detail: `Beer healed +${beerHealEach} HP`,
+          },
+          timestamp: Date.now(),
+        });
+      }
+
       events.push({
-        type: "SID_KETCHUM_RESCUED",
+        type: "FATAL_DAMAGE_REVIVED_WITH_BEER",
         payload: {
           playerId: player.id,
           playerName: player.name,
-          healedAmount: healAmount,
+          card: beerCard,
+          healedAmount: beerHealEach,
           currentHp: player.hp,
-          discardedCards,
         },
         timestamp: Date.now(),
       });
+
+      if (state.turnPlayerId !== player.id) {
+        reaction.rescueBeersUsed = (reaction.rescueBeersUsed ?? 0) + 1;
+      }
+    } else {
+      if (!SkillHooks.hasSkill(player, "Sid Ketchum", state)) {
+        return { success: false, message: "Select a Beer card or decline rescue." };
+      }
+
+      const discardIds = command.discardCardIds;
+      if (!Array.isArray(discardIds) || discardIds.length === 0) {
+        return {
+          success: false,
+          message: "Select pairs of cards to discard for rescue or choose Decline Rescue.",
+        };
+      }
+      if (new Set(discardIds).size !== discardIds.length) {
+        return { success: false, message: "Duplicate card IDs in rescue discard." };
+      }
+      if (discardIds.length < 2 || discardIds.length % 2 !== 0) {
+        return {
+          success: false,
+          message: "Near-death rescue requires pairs of cards (2 per 1 HP).",
+        };
+      }
+
+      for (const id of discardIds) {
+        if (!player.handCards.some((c) => c.id === id)) {
+          return { success: false, message: "Rescue discard card not in hand." };
+        }
+      }
+
+      const discardedCards: EngineCard[] = [];
+      for (const id of discardIds) {
+        const idx = player.handCards.findIndex((c) => c.id === id);
+        if (idx !== -1) {
+          discardedCards.push(player.handCards.splice(idx, 1)[0]);
+        }
+      }
+      AtomicEffects.discardCards(state, discardedCards, deckManager);
+
+      ArenaChainManager.appendBatch(
+        state,
+        discardedCards.map((c, idx) => ({
+          kind: "DEFENSE_CARD" as const,
+          card: c,
+          actorPlayerId: player.id,
+          actorPlayerName: player.name,
+          originZone: "HAND" as const,
+          destinationZone: "DISCARD" as const,
+          actionLabel: "Sid Ketchum Rescue",
+          vfxType: idx === 0 ? ("heal" as const) : undefined,
+          vfxTargetId: idx === 0 ? player.id : undefined,
+        }))
+      );
+
+      const healAmount = discardedCards.length / 2;
+      player.hp = Math.min(player.hp + healAmount, player.maxHp);
+
+      if (player.hp > 0) {
+        events.push({
+          type: "SID_KETCHUM_RESCUED",
+          payload: {
+            playerId: player.id,
+            playerName: player.name,
+            healedAmount: healAmount,
+            currentHp: player.hp,
+            discardedCards,
+          },
+          timestamp: Date.now(),
+        });
+      } else {
+        events.push({
+          type: "HEAL_RESOLVED",
+          payload: {
+            playerId: player.id,
+            playerName: player.name,
+            healedAmount: healAmount,
+            currentHp: player.hp,
+            maxHp: player.maxHp,
+          },
+          timestamp: Date.now(),
+        });
+      }
+    }
+
+    if (player.hp > 0) {
+      state.pendingReactions.splice(reactionIdx, 1);
       SkillHooks.checkSuzyLafayette(state, player, events);
+      if ((reaction.rescueBeersUsed ?? 0) > 0) {
+        SkillHooks.onPlayOutOfTurn(state, player, events, reaction.rescueBeersUsed);
+      }
+      if (!player.isDead && player.hp > 0) {
+        SkillHooks.onTakeDamage(
+          state,
+          player,
+          attacker,
+          reaction.originalDamage ?? reaction.pendingDamage ?? 1,
+          events
+        );
+      }
       return { success: true, events };
     }
 
-    events.push({
-      type: "HEAL_RESOLVED",
-      payload: {
-        playerId: player.id,
-        playerName: player.name,
-        healedAmount: healAmount,
-        currentHp: player.hp,
-        maxHp: player.maxHp,
-      },
-      timestamp: Date.now(),
-    });
+    const canBeerRevive =
+      SeatManager.getLivingContenders(state).length > 2 &&
+      !EventRuleRegistry.disablesBeerRescue(state);
+    const beerCount = canBeerRevive
+      ? player.handCards.filter((c) => c.name === "BEER").length
+      : 0;
+    const beerHealEach = SkillHooks.getBeerHealAmount(player, state);
+    const hasSid = SkillHooks.canSidKetchumRescue(state, player);
+    const maxFeasibleHeal = AtomicEffects.computeMaxNearDeathHeal(
+      player.handCards.length,
+      canBeerRevive ? beerCount : 0,
+      beerHealEach,
+      hasSid
+    );
 
-    if (player.handCards.length < 2) {
+    if (player.hp + maxFeasibleHeal <= 0) {
       state.pendingReactions.splice(reactionIdx, 1);
       const elimRes = EliminationHandler.handleElimination(
         state,
@@ -202,6 +318,8 @@ export class ReactionResolver {
       events.push(...elimRes.events);
     } else {
       reaction.pendingDamage = Math.abs(player.hp) + 1;
+      reaction.canUseBeer = canBeerRevive && beerCount > 0;
+      reaction.canUseSidKetchum = hasSid;
     }
 
     return { success: true, events };
@@ -217,7 +335,7 @@ export class ReactionResolver {
   ): CommandResult {
     const events: DomainEvent[] = [];
 
-    if (!this.hasAnyBlueCardInPlay(player)) {
+    if (!hasBlueCardInPlay(player)) {
       state.pendingReactions.splice(reactionIdx, 1);
       return { success: true, events };
     }
@@ -240,6 +358,18 @@ export class ReactionResolver {
     }
 
     AtomicEffects.discardCard(state, removedCard, deckManager);
+    ArenaChainManager.appendBatch(state, [
+      {
+        kind: "DISCARD_CARD",
+        card: removedCard,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        originZone: "EQUIPMENT",
+        originSlotKey: ArenaChainManager.resolveEquipmentSlotKey(removedCard),
+        destinationZone: "DISCARD",
+        actionLabel: `The Daltons (${removedCard.name})`,
+      },
+    ]);
     state.pendingReactions.splice(reactionIdx, 1);
 
     events.push({
@@ -255,6 +385,88 @@ export class ReactionResolver {
     return { success: true, events };
   }
 
+  // Resolve Barrel or Jourdonnais check outcome
+  public static resolveBarrelOutcome(
+    state: SimulationState,
+    player: EnginePlayer,
+    reaction: PendingReaction,
+    checkSource: "BARREL" | "JOURDONNAIS",
+    chosenCard: EngineCard | undefined,
+    drawnCards: EngineCard[],
+    events: DomainEvent[]
+  ): void {
+    const sourceCheckCard =
+      checkSource === "BARREL"
+        ? ArenaChainManager.getRealBarrelCard(player)
+        : ArenaChainManager.buildJourdonnaisCard(player);
+
+    ArenaChainManager.appendBatch(state, [
+      {
+        kind: "CHECK_SOURCE",
+        card: sourceCheckCard,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        originZone: checkSource === "BARREL" ? "EQUIPMENT" : "HERO",
+        originSlotKey: checkSource === "BARREL" ? "barrel" : undefined,
+        actionLabel: checkSource === "BARREL" ? "BARREL Check" : "Jourdonnais Check",
+      },
+      ...drawnCards.map((drawnCard) => {
+        const cardPassed = SkillHooks.getEffectiveSuit(drawnCard, state) === "hearts";
+        return {
+          kind: "CHECK_RESULT" as const,
+          card: drawnCard,
+          actorPlayerId: player.id,
+          actorPlayerName: player.name,
+          originZone: "DECK" as const,
+          destinationZone: "DISCARD" as const,
+          actionLabel: `${drawnCard.rank} ${drawnCard.suit} (${cardPassed ? "PASSED" : "FAILED"})`,
+          outcome: (cardPassed ? "PASSED" : "FAILED") as "PASSED" | "FAILED",
+        };
+      }),
+    ]);
+
+    const success = Boolean(
+      chosenCard && SkillHooks.getEffectiveSuit(chosenCard, state) === "hearts"
+    );
+
+    if (success) {
+      reaction.currentCount += 1;
+      events.push({
+        type: "DEFENSE_CHECK_SUCCEEDED",
+        payload: {
+          playerId: player.id,
+          checkSource,
+          currentCount: reaction.currentCount,
+          requiredCount: reaction.requiredCount,
+        },
+        timestamp: Date.now(),
+      });
+
+      if (reaction.currentCount >= reaction.requiredCount) {
+        const idx = state.pendingReactions.findIndex((r) => r.id === reaction.id);
+        if (idx !== -1) {
+          state.pendingReactions.splice(idx, 1);
+        }
+        events.push({
+          type: "ATTACK_EVADED",
+          payload: {
+            targetId: player.id,
+            attackerId: reaction.sourcePlayerId,
+            sourceCard: reaction.sourceCard,
+          },
+          timestamp: Date.now(),
+        });
+        SkillHooks.flushDeferredMollyDraws(state, reaction, events);
+      }
+    } else {
+      events.push({
+        type: "DEFENSE_CHECK_FAILED",
+        payload: { playerId: player.id, checkSource },
+        timestamp: Date.now(),
+      });
+    }
+  }
+
   // Resolve pending player reaction
   public static resolve(
     state: SimulationState,
@@ -266,6 +478,9 @@ export class ReactionResolver {
     if (player.isDead) return { success: false, message: "Dead player cannot react." };
 
     this.pruneStaleReactions(state);
+    if (state.activeChain.length > 0) {
+      return { success: false, message: "Resolve pending card selection first." };
+    }
     if (state.pendingReactions.length === 0) {
       return { success: false, message: "No pending reaction." };
     }
@@ -393,7 +608,7 @@ export class ReactionResolver {
       } else {
         return {
           success: false,
-          message: "All available Draw! checks already used or negated.",
+          message: "All available Checks already used or negated.",
         };
       }
 
@@ -401,41 +616,21 @@ export class ReactionResolver {
         state,
         player,
         checkSource,
-        (c, st) => SkillHooks.getEffectiveSuit(c, st) === "hearts"
+        (c, st) => SkillHooks.getEffectiveSuit(c, st) === "hearts",
+        { sourceReactionId: reaction.id }
       );
       events.push(...drawCheck.events);
 
-      if (drawCheck.success) {
-        reaction.currentCount += 1;
-        events.push({
-          type: "DEFENSE_CHECK_SUCCEEDED",
-          payload: {
-            playerId: player.id,
-            checkSource,
-            currentCount: reaction.currentCount,
-            requiredCount: reaction.requiredCount,
-          },
-          timestamp: Date.now(),
-        });
-
-        if (reaction.currentCount >= reaction.requiredCount) {
-          state.pendingReactions.splice(reactionIdx, 1);
-          events.push({
-            type: "ATTACK_EVADED",
-            payload: {
-              targetId: player.id,
-              attackerId: reaction.sourcePlayerId,
-              sourceCard: reaction.sourceCard,
-            },
-            timestamp: Date.now(),
-          });
-        }
-      } else {
-        events.push({
-          type: "DEFENSE_CHECK_FAILED",
-          payload: { playerId: player.id, checkSource },
-          timestamp: Date.now(),
-        });
+      if (!drawCheck.pendingInteraction) {
+        ReactionResolver.resolveBarrelOutcome(
+          state,
+          player,
+          reaction,
+          checkSource,
+          drawCheck.chosenCard,
+          drawCheck.drawnCards,
+          events
+        );
       }
 
       return { success: true, events };
@@ -493,7 +688,7 @@ export class ReactionResolver {
           message: "Green card cannot be activated on the turn it was played.",
         };
       }
-      if (!GREEN_DEFENSE_CARDS.has(greenEntry.card.name)) {
+      if (!CardRegistry.isGreenDefenseCard(greenEntry.card)) {
         return {
           success: false,
           message: `Card ${greenEntry.card.name} is not a defensive green card.`,
@@ -502,6 +697,18 @@ export class ReactionResolver {
 
       greenCards.splice(gIdx, 1);
       AtomicEffects.discardCard(state, greenEntry.card, deckManager);
+
+      ArenaChainManager.appendBatch(state, [
+        {
+          kind: "DEFENSE_CARD",
+          card: greenEntry.card,
+          actorPlayerId: player.id,
+          actorPlayerName: player.name,
+          originZone: "GREEN",
+          destinationZone: "DISCARD",
+          actionLabel: `${greenEntry.card.name} (Missed!)`,
+        },
+      ]);
 
       if (greenEntry.card.name === "BIBLE") {
         const { cards: drawn, events: drawEvents } = AtomicEffects.drawCards(
@@ -513,8 +720,6 @@ export class ReactionResolver {
         events.push(...drawEvents);
         this.emitCardsDrawn(player, greenEntry.card, drawn, events);
       }
-
-      SkillHooks.onPlayOutOfTurn(state, player, events);
 
       reaction.currentCount += 1;
       events.push({
@@ -540,6 +745,7 @@ export class ReactionResolver {
           },
           timestamp: Date.now(),
         });
+        SkillHooks.flushDeferredMollyDraws(state, reaction, events);
       }
 
       return { success: true, events };
@@ -556,7 +762,9 @@ export class ReactionResolver {
       let isValidCard = false;
 
       if (reaction.requiredCard === "MISSED") {
-        if (
+        if (reaction.type === "EVENT_RUSSIAN_ROULETTE") {
+          isValidCard = card.name === "MISSED!";
+        } else if (
           card.name === "MISSED!" ||
           card.name === "DODGE" ||
           SkillHooks.canSubstituteCard(player, card, "MISSED", state)
@@ -583,6 +791,33 @@ export class ReactionResolver {
 
       player.handCards.splice(cardIdx, 1);
       AtomicEffects.discardCard(state, card, deckManager);
+
+      const duelNextTarget =
+        reaction.type === "DUEL_RESPONSE"
+          ? state.players.get(reaction.sourcePlayerId)
+          : undefined;
+      ArenaChainManager.appendBatch(state, [
+        {
+          kind: "DEFENSE_CARD",
+          card,
+          actorPlayerId: player.id,
+          actorPlayerName: player.name,
+          targetPlayerId: duelNextTarget?.id,
+          targetPlayerName: duelNextTarget?.name,
+          originZone: "HAND",
+          destinationZone: "DISCARD",
+          actionLabel:
+            reaction.type === "DUEL_RESPONSE" && duelNextTarget
+              ? `Duel ${card.name} -> ${duelNextTarget.name}`
+              : reaction.type === "INDIANS_DEFENSE"
+              ? `Indians! ${card.name}`
+              : reaction.type === "EVENT_RUSSIAN_ROULETTE"
+              ? `Russian Roulette (${card.name})`
+              : card.name,
+          vfxType: reaction.type === "DUEL_RESPONSE" ? "bullet" : undefined,
+          vfxTargetId: reaction.type === "DUEL_RESPONSE" ? duelNextTarget?.id : undefined,
+        },
+      ]);
 
       if (reaction.requiredCard === "MISSED" && card.name !== "MISSED!" && card.name !== "DODGE") {
         if (card.name === "BANG!" && SkillHooks.hasSkill(player, "Calamity Janet", state)) {
@@ -625,6 +860,8 @@ export class ReactionResolver {
         });
       }
 
+      SkillHooks.checkSuzyLafayette(state, player, events);
+
       if (card.name === "DODGE") {
         const { cards: dodgeCards, events: dodgeEvents } = AtomicEffects.drawCards(
           state,
@@ -636,11 +873,21 @@ export class ReactionResolver {
         this.emitCardsDrawn(player, card, dodgeCards, events);
       }
 
-      SkillHooks.onPlayOutOfTurn(state, player, events);
-      SkillHooks.checkSuzyLafayette(state, player, events);
+      if (reaction.type === "DUEL_RESPONSE" || reaction.requiredCount > 1) {
+        SkillHooks.queueDeferredMollyDraw(state, reaction, player);
+      } else {
+        SkillHooks.onPlayOutOfTurn(state, player, events, 1);
+      }
 
       if (reaction.type === "DUEL_RESPONSE") {
         const nextTargetId = reaction.sourcePlayerId;
+        const nextTarget = state.players.get(nextTargetId);
+        if (!nextTarget || nextTarget.isDead) {
+          state.pendingReactions.splice(reactionIdx, 1);
+          SkillHooks.flushDeferredMollyDraws(state, reaction, events);
+          return { success: true, events };
+        }
+
         reaction.sourcePlayerId = player.id;
         reaction.targetPlayerId = nextTargetId;
         reaction.currentCount = 0;
@@ -683,9 +930,10 @@ export class ReactionResolver {
         });
 
         const stopId =
-          reaction.sourcePlayerId && reaction.sourcePlayerId !== "SYSTEM"
+          reaction.rouletteStartPlayerId ||
+          (reaction.sourcePlayerId && reaction.sourcePlayerId !== "SYSTEM"
             ? reaction.sourcePlayerId
-            : state.turnPlayerId;
+            : state.turnPlayerId);
         const nextPlayer = SeatManager.getPlayerOnLeft(state, player.id);
 
         if (
@@ -696,7 +944,8 @@ export class ReactionResolver {
         ) {
           const nextReaction = EventEngine.createRussianRouletteReaction(
             state,
-            nextPlayer.id
+            nextPlayer.id,
+            stopId
           );
           state.pendingReactions.push(nextReaction);
           events.push({
@@ -741,13 +990,14 @@ export class ReactionResolver {
           },
           timestamp: Date.now(),
         });
+        SkillHooks.flushDeferredMollyDraws(state, reaction, events);
       }
 
       return { success: true, events };
     }
 
     // Action C: Resolve penalty or damage
-    if (command.payload?.action === "TAKE_DAMAGE" || !command.cardId) {
+    if (command.payload?.action === "TAKE_DAMAGE") {
       state.pendingReactions.splice(reactionIdx, 1);
 
       if (reaction.type === "EVENT_RICOCHET_DEFENSE") {
@@ -780,7 +1030,15 @@ export class ReactionResolver {
           ? reaction.pendingDamage ?? 2
           : reaction.pendingDamage ?? 1;
       const damageSourceAttacker =
-        reaction.type === "EVENT_RUSSIAN_ROULETTE" ? undefined : attacker;
+        reaction.type === "EVENT_RUSSIAN_ROULETTE"
+          ? undefined
+          : reaction.type === "DUEL_RESPONSE"
+          ? attacker && attacker.id !== player.id
+            ? attacker
+            : reaction.duelInitiatorId && reaction.duelInitiatorId !== player.id
+            ? state.players.get(reaction.duelInitiatorId)
+            : undefined
+          : attacker;
 
       if (reaction.type === "EVENT_RUSSIAN_ROULETTE") {
         events.push({
@@ -804,9 +1062,13 @@ export class ReactionResolver {
         deckManager
       );
       this.pruneStaleReactions(state);
+      SkillHooks.flushDeferredMollyDraws(state, reaction, events);
       return { success: true, events };
     }
 
+    if (!command.cardId) {
+      return { success: false, message: "Select a defense card or choose Take Damage." };
+    }
     return { success: false, message: "Invalid reaction action." };
   }
 }

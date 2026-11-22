@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import { GameSocketProvider } from "./hooks/useGameSocket";
 import { disconnectSocket } from "./services/wsClient";
+import { I18nProvider, useI18n } from "./i18n";
 import "./App.scss";
 
 const AuthScreen = lazy(() =>
@@ -18,11 +19,11 @@ const DevTestScreen = lazy(() =>
 
 type ScreenType = "auth" | "lobby" | "table" | "dev-test";
 
-const SCREEN_TITLES: Record<ScreenType, string> = {
-  auth: "Western Gun - Authentication",
-  lobby: "Western Gun - Lobby",
-  table: "Western Gun - Game Table",
-  "dev-test": "Western Gun - Dev UI Sandbox",
+const SCREEN_TITLE_KEYS: Record<ScreenType, string> = {
+  auth: "app.title.auth",
+  lobby: "app.title.lobby",
+  table: "app.title.table",
+  "dev-test": "app.title.devTest",
 };
 
 function isDevTestPath(): boolean {
@@ -30,7 +31,8 @@ function isDevTestPath(): boolean {
   return window.location.pathname.replace(/\/+$/, "") === "/dev-test";
 }
 
-function App() {
+function AppContent() {
+  const { t } = useI18n();
   const [currentScreen, setCurrentScreen] = useState<ScreenType>(() =>
     isDevTestPath() ? "dev-test" : "auth"
   );
@@ -39,8 +41,8 @@ function App() {
   const [returnedFromTable, setReturnedFromTable] = useState(false);
 
   useEffect(() => {
-    document.title = SCREEN_TITLES[currentScreen];
-  }, [currentScreen]);
+    document.title = t(SCREEN_TITLE_KEYS[currentScreen]);
+  }, [currentScreen, t]);
 
   useEffect(() => {
     if (isDevTestPath()) {
@@ -93,7 +95,7 @@ function App() {
 
   return (
     <div className="app-shell">
-      <Suspense fallback={<div className="app-loading">Loading Saloon...</div>}>
+      <Suspense fallback={<div className="app-loading">{t("app.loading")}</div>}>
         {currentScreen === "dev-test" && <DevTestScreen />}
 
         {currentScreen === "auth" && (
@@ -129,6 +131,14 @@ function App() {
         )}
       </Suspense>
     </div>
+  );
+}
+
+function App() {
+  return (
+    <I18nProvider>
+      <AppContent />
+    </I18nProvider>
   );
 }
 

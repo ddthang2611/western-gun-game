@@ -1,6 +1,24 @@
+import fs from 'fs'
 import path from 'path'
 import react from '@vitejs/plugin-react'
-import { createLogger, defineConfig } from 'vite'
+import { createLogger, defineConfig, type Plugin } from 'vite'
+
+function copyPublicWithoutAssetsSymlink(): Plugin {
+  return {
+    name: 'copy-public-without-assets-symlink',
+    closeBundle() {
+      const publicDir = path.resolve(import.meta.dirname, './public')
+      const outDir = path.resolve(import.meta.dirname, './dist')
+      if (!fs.existsSync(publicDir) || !fs.existsSync(outDir)) return
+      for (const entry of fs.readdirSync(publicDir)) {
+        if (entry === 'assets') continue
+        const src = path.join(publicDir, entry)
+        const dst = path.join(outDir, entry)
+        fs.cpSync(src, dst, { recursive: true, force: true })
+      }
+    },
+  }
+}
 
 const logger = createLogger()
 const originalLoggerError = logger.error.bind(logger)
@@ -19,7 +37,10 @@ logger.error = (msg, options) => {
 // https://vite.dev/config/
 export default defineConfig({
   customLogger: logger,
-  plugins: [react()],
+  plugins: [react(), copyPublicWithoutAssetsSymlink()],
+  build: {
+    copyPublicDir: false,
+  },
   resolve: {
     alias: {
       '@': path.resolve(import.meta.dirname, './src'),

@@ -51,7 +51,7 @@ export const allMockCharacters: CatalogCharacter[] = [
     pack: "base",
     name: "Jourdonnais",
     baseHp: 4,
-    desc: "Whenever he is the target of a BANG!, he may Draw!: on a Heart, he is missed.",
+    desc: "Whenever he is targeted by a BANG!, he may check the top card: on Hearts, the shot is canceled.",
     image: "/assets/images/characters/char_jourdonnais.png",
   },
   {
@@ -59,7 +59,7 @@ export const allMockCharacters: CatalogCharacter[] = [
     pack: "base",
     name: "Kit Carlson",
     baseHp: 4,
-    desc: "He looks at the top three cards of the deck and chooses the 2 to draw.",
+    desc: "During phase 1, he looks at the top 3 cards, chooses 2 into hand, and returns 1 to the top.",
     image: "/assets/images/characters/char_kit_carlson.png",
   },
   {
@@ -67,7 +67,7 @@ export const allMockCharacters: CatalogCharacter[] = [
     pack: "base",
     name: "Lucky Duke",
     baseHp: 4,
-    desc: "Each time he is required to Draw!, he flips the top two cards and chooses the result.",
+    desc: "Each time he must perform a Check, he checks the top 2 cards and chooses which result to apply.",
     image: "/assets/images/characters/char_lucky_duke.png",
   },
   {

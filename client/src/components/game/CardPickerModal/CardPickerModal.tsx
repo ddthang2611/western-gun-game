@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import type { Player, GreenCard } from "../../../types/game";
+import { useI18n } from "../../../i18n";
 import { getAllEquipments } from "../../../utils/equipments";
 import { CardView } from "../CardView/CardView";
 import { Modal } from "../../ui/Modal/Modal";
@@ -36,13 +37,17 @@ export const CardPickerModal: React.FC<CardPickerModalProps> = ({
   onConfirm,
   onCancel,
 }) => {
+  const { t, tCard } = useI18n();
   const [selected, setSelected] = useState<SelectedTargetCard | null>(null);
 
-  const actionVerb = action === "destroy" ? "DISCARD CARD" : "STEAL CARD";
   const resolvedCardName = cardName || (action === "destroy" ? "CAT BALOU" : "PANIC!");
-  const actionTitle = `${actionVerb} (${resolvedCardName})`;
+  const localizedCardName = tCard({ name: resolvedCardName }).primary.name;
+  const headerTitle =
+    action === "destroy"
+      ? t("modals.picker.removeHeader", { card: localizedCardName, target: targetPlayer.name })
+      : t("modals.picker.stealHeader", { card: localizedCardName, target: targetPlayer.name });
   const confirmButtonText =
-    action === "destroy" ? "Confirm Discard" : "Confirm Steal";
+    action === "destroy" ? t("modals.picker.confirmRemove") : t("modals.picker.confirmSteal");
 
   const equippedCards = getAllEquipments(targetPlayer.equipments);
 
@@ -60,7 +65,7 @@ export const CardPickerModal: React.FC<CardPickerModalProps> = ({
 
   return (
     <Modal isOpen={true} size="medium" onClose={onCancel}>
-      <Modal.Header title={`${actionTitle} -> Target: ${targetPlayer.name}`} />
+      <Modal.Header title={headerTitle} />
 
       <Modal.Body>
         <div className="card-picker__zones">
@@ -68,8 +73,9 @@ export const CardPickerModal: React.FC<CardPickerModalProps> = ({
           {allowHand && (
             <div
               className={`card-picker__zone${targetPlayer.handCount === 0 ? " card-picker__zone--empty" : ""}`}
-              aria-label="Hand cards"
+              aria-label={t("modals.picker.zoneHand")}
             >
+              <div className="card-picker__zone-title">{t("modals.picker.zoneHand")}</div>
               <div className="card-picker__card-list">
                 {Array.from({ length: targetPlayer.handCount }).map((_, idx) => (
                   <BlindHandCard
@@ -93,8 +99,9 @@ export const CardPickerModal: React.FC<CardPickerModalProps> = ({
           {allowInPlay && (
             <div
               className={`card-picker__zone${equippedCards.length === 0 ? " card-picker__zone--empty" : ""}`}
-              aria-label="Equipped cards"
+              aria-label={t("modals.picker.zoneEquip")}
             >
+              <div className="card-picker__zone-title">{t("modals.picker.zoneEquip")}</div>
               <div className="card-picker__card-list">
                 {equippedCards.map((card, idx) => {
                   const isCardSelected =
@@ -123,8 +130,9 @@ export const CardPickerModal: React.FC<CardPickerModalProps> = ({
           {allowInPlay && (
             <div
               className={`card-picker__zone${!hasInPlayTraps ? " card-picker__zone--empty" : ""}`}
-              aria-label="Judgement and green cards"
+              aria-label={t("modals.picker.zoneInPlayOther")}
             >
+              <div className="card-picker__zone-title">{t("modals.picker.zoneInPlayOther")}</div>
               <div className="card-picker__card-list">
                 {targetPlayer.greenCards &&
                   targetPlayer.greenCards.map((gCard: GreenCard) => {
@@ -148,7 +156,10 @@ export const CardPickerModal: React.FC<CardPickerModalProps> = ({
                   })}
                 {judgementEntries.map((j) => {
                   const trapType = j.type === "JAIL" ? "jail" : "dynamite";
-                  const label = j.type === "JAIL" ? "Jail" : "Dynamite";
+                  const trapCardName = j.type === "JAIL" ? "JAIL" : "DYNAMITE";
+                  const loc = tCard({ name: trapCardName });
+                  const label =
+                    loc.primary.subtitleVi || loc.primary.name;
                   return (
                     <JudgementTrapItem
                       key={j.id}
@@ -173,7 +184,7 @@ export const CardPickerModal: React.FC<CardPickerModalProps> = ({
       <Modal.Footer>
         {onCancel && (
           <Button variant="secondary" onClick={onCancel}>
-            Cancel
+            {t("common.cancel")}
           </Button>
         )}
         <Button

@@ -4,6 +4,7 @@ import type {
   PendingTurnStartChoiceInfo,
   Player,
 } from "../../../types/game";
+import { useI18n } from "../../../i18n";
 import { Modal } from "../../ui/Modal/Modal";
 import { Button } from "../../ui/Button/Button";
 
@@ -20,6 +21,7 @@ export const TurnStartPrompts: React.FC<TurnStartPromptsProps> = ({
   disabled,
   onResolveTurnStart,
 }) => {
+  const { t, tChar } = useI18n();
   const [selectedCharId, setSelectedCharId] = useState<string | null>(null);
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
 
@@ -27,11 +29,12 @@ export const TurnStartPrompts: React.FC<TurnStartPromptsProps> = ({
     const available = choice.availableCharacters || [];
     return (
       <Modal isOpen={true} size="medium">
-        <Modal.Header title="Vera Custer" />
+        <Modal.Header title={t("modals.prompt.veraTitle")} />
         <Modal.Body>
           <div className="turn-prompt__list">
             {available.map((entry) => {
               const picked = selectedCharId === entry.character.id;
+              const charLoc = tChar(entry.character);
               return (
                 <button
                   key={`${entry.ownerPlayerId}_${entry.character.id}`}
@@ -41,9 +44,9 @@ export const TurnStartPrompts: React.FC<TurnStartPromptsProps> = ({
                   className={`turn-prompt__option ${picked ? "turn-prompt__option--selected" : ""}`}
                 >
                   <div className="turn-prompt__option-title">
-                    {entry.character.name} ({entry.ownerName})
+                    {charLoc.primary.name} ({entry.ownerName})
                   </div>
-                  <div className="turn-prompt__option-desc">{entry.character.desc}</div>
+                  <div className="turn-prompt__option-desc">{charLoc.primary.desc}</div>
                 </button>
               );
             })}
@@ -62,7 +65,7 @@ export const TurnStartPrompts: React.FC<TurnStartPromptsProps> = ({
               setSelectedCharId(null);
             }}
           >
-            Confirm Copy
+            {t("modals.prompt.confirmCopy")}
           </Button>
         </Modal.Footer>
       </Modal>
@@ -72,7 +75,7 @@ export const TurnStartPrompts: React.FC<TurnStartPromptsProps> = ({
   const eligible = players.filter((p) => (choice.eligibleTargetIds || []).includes(p.id));
   return (
     <Modal isOpen={true} size="medium">
-      <Modal.Header title="Blood Brothers" />
+      <Modal.Header title={t("modals.prompt.bloodBrothersTitle")} />
       <Modal.Body>
         <div className="turn-prompt__list">
           {eligible.map((p) => (
@@ -101,7 +104,7 @@ export const TurnStartPrompts: React.FC<TurnStartPromptsProps> = ({
             setSelectedTargetId(null);
           }}
         >
-          Skip
+          {t("modals.prompt.skipTransfer")}
         </Button>
         <Button
           variant="primary"
@@ -112,7 +115,7 @@ export const TurnStartPrompts: React.FC<TurnStartPromptsProps> = ({
             setSelectedTargetId(null);
           }}
         >
-          Give 1 HP
+          {t("modals.prompt.giveHp")}
         </Button>
       </Modal.Footer>
     </Modal>

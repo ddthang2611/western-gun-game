@@ -14,6 +14,8 @@
   }
 
   &__vfx-impact {
+    transform-box: fill-box;
+    transform-origin: center;
     animation: vfxImpact 0.65s ease-out forwards;
   }
 }

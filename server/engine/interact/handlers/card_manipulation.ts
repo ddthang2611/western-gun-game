@@ -6,6 +6,7 @@ import { TargetValidator, TargetArea } from "../../combat/target_validator";
 import { EventEngine } from "../../events/event_engine";
 import { SkillHooks } from "../skill_hooks";
 import { AtomicEffects } from "../primitives/atomic_effects";
+import { ArenaChainManager } from "../../arena/arena_chain_manager";
 import { getAllEquippedCards } from "../../utils/inventory";
 
 export class CardManipulation {
@@ -152,15 +153,46 @@ export class CardManipulation {
       AtomicEffects.discardCard(state, played, deckManager);
     }
 
+    let extraCardDiscarded: EngineCard | undefined;
     if (card.name === "RAG TIME" && extraCardId) {
       const extraIdx = player.handCards.findIndex((c) => c.id === extraCardId);
       if (extraIdx !== -1) {
-        const extraCard = player.handCards.splice(extraIdx, 1)[0];
-        AtomicEffects.discardCard(state, extraCard, deckManager);
+        extraCardDiscarded = player.handCards.splice(extraIdx, 1)[0];
+        AtomicEffects.discardCard(state, extraCardDiscarded, deckManager);
       }
     }
 
+    ArenaChainManager.appendBatch(state, [
+      {
+        kind: "PLAYED_CARD",
+        card,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        targetPlayerId: targetPlayer.id,
+        targetPlayerName: targetPlayer.name,
+        originZone: fromGreenEntryId ? "GREEN" : "HAND",
+        destinationZone: "DISCARD",
+        actionLabel: `${card.name} -> ${targetPlayer.name}`,
+      },
+      ...(extraCardDiscarded
+        ? [
+            {
+              kind: "EXTRA_COST" as const,
+              card: extraCardDiscarded,
+              actorPlayerId: player.id,
+              actorPlayerName: player.name,
+              originZone: "HAND" as const,
+              destinationZone: "DISCARD" as const,
+              actionLabel: `Discard Cost (${extraCardDiscarded.name})`,
+            },
+          ]
+        : []),
+    ]);
+
     const events: DomainEvent[] = [];
+    if (!fromGreenEntryId) {
+      SkillHooks.checkSuzyLafayette(state, player, events);
+    }
 
     // Check Apache Kid card immunity
     if (SkillHooks.isImmuneToCard(targetPlayer, card, player, state)) {
@@ -186,8 +218,6 @@ export class CardManipulation {
           },
           timestamp: Date.now(),
         });
-      } else {
-        SkillHooks.checkSuzyLafayette(state, player, events);
       }
       return { success: true, events };
     }
@@ -229,8 +259,6 @@ export class CardManipulation {
         },
         timestamp: Date.now(),
       });
-    } else {
-      SkillHooks.checkSuzyLafayette(state, player, events);
     }
 
     return { success: true, events };

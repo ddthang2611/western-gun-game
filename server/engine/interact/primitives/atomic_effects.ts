@@ -9,6 +9,7 @@ import { TargetArea } from "../../combat/target_validator";
 import { SkillHooks } from "../skill_hooks";
 import { PendingReaction, ReactionConfig } from "../interact_types";
 import { EventRuleRegistry } from "../../events/event_rule_registry";
+import { ArenaChainManager } from "../../arena/arena_chain_manager";
 import { hasBarrelCard, removeEquippedCardById } from "../../utils/inventory";
 
 export interface DamageResult {
@@ -29,6 +30,18 @@ export interface ReactionCreateResult {
   isImmune: boolean;
   reaction?: PendingReaction;
 }
+
+export type DiscardReason =
+  | "PHASE_3_EXCESS"
+  | "PLAYED_CARD"
+  | "EXTRA_COST"
+  | "SKILL_COST"
+  | "REACTION_DEFENSE"
+  | "DESTROYED_IN_PLAY"
+  | "DESTROYED_FROM_HAND"
+  | "DRAW_CHECK"
+  | "ELIMINATION"
+  | "EVENT_CLEANUP";
 
 export class AtomicEffects {
   // Draw cards from state deck
@@ -52,9 +65,13 @@ export class AtomicEffects {
   public static discardCard(
     state: SimulationState,
     card: EngineCard,
-    deckManager?: DeckManager
+    deckManager?: DeckManager,
+    reason: DiscardReason = "PLAYED_CARD"
   ): void {
-    if (state.activeEvent?.effectCode === "EVENT_FOC_ABANDONED_MINE") {
+    if (
+      state.activeEvent?.effectCode === "EVENT_FOC_ABANDONED_MINE" &&
+      reason === "PHASE_3_EXCESS"
+    ) {
       if (deckManager) {
         deckManager.placeOnTopOfDeck(card);
       } else {
@@ -74,10 +91,11 @@ export class AtomicEffects {
   public static discardCards(
     state: SimulationState,
     cards: EngineCard[],
-    deckManager?: DeckManager
+    deckManager?: DeckManager,
+    reason: DiscardReason = "PLAYED_CARD"
   ): void {
     for (const card of cards) {
-      this.discardCard(state, card, deckManager);
+      this.discardCard(state, card, deckManager, reason);
     }
   }
 
@@ -93,28 +111,26 @@ export class AtomicEffects {
       return victim.handCards.splice(randIdx, 1)[0];
     }
 
+    if (!targetCardId) return null;
+
     if (targetArea === "EQUIPMENT") {
       return removeEquippedCardById(victim, targetCardId);
     }
 
     if (targetArea === "GREEN") {
       const greenCards = victim.greenCards || [];
-      const idx = targetCardId
-        ? greenCards.findIndex((g) => g.id === targetCardId || g.card.id === targetCardId)
-        : greenCards.length > 0
-        ? 0
-        : -1;
+      const idx = greenCards.findIndex(
+        (g) => g.id === targetCardId || g.card.id === targetCardId
+      );
       if (idx === -1) return null;
       return greenCards.splice(idx, 1)[0].card;
     }
 
     if (targetArea === "JUDGEMENT") {
       const judgements = victim.judgements || [];
-      const idx = targetCardId
-        ? judgements.findIndex((j) => j.id === targetCardId || j.card.id === targetCardId)
-        : judgements.length > 0
-        ? 0
-        : -1;
+      const idx = judgements.findIndex(
+        (j) => j.id === targetCardId || j.card.id === targetCardId
+      );
       if (idx === -1) return null;
       return judgements.splice(idx, 1)[0].card;
     }
@@ -215,6 +231,21 @@ export class AtomicEffects {
     if (!card) return null;
 
     this.discardCard(state, card, deckManager);
+    ArenaChainManager.appendBatch(state, [
+      {
+        kind: "DISCARD_CARD",
+        card,
+        actorPlayerId: victim.id,
+        actorPlayerName: victim.name,
+        originZone: targetArea,
+        originSlotKey:
+          targetArea === "EQUIPMENT"
+            ? ArenaChainManager.resolveEquipmentSlotKey(card)
+            : undefined,
+        destinationZone: "DISCARD",
+        actionLabel: `Destroyed (${card.name})`,
+      },
+    ]);
     this.emitAreaTransferEvent(destroyer, victim, targetArea, card, false, events);
 
     if (targetArea === "HAND") {
@@ -222,6 +253,24 @@ export class AtomicEffects {
     }
 
     return card;
+  }
+
+  // Compute max feasible near-death rescue heal
+  public static computeMaxNearDeathHeal(
+    handLength: number,
+    usableBeers: number,
+    beerHealEach: number,
+    hasSid: boolean
+  ): number {
+    let maxHeal = 0;
+    for (let b = 0; b <= usableBeers; b++) {
+      const sidPairs = hasSid ? Math.floor((handLength - b) / 2) : 0;
+      const total = b * beerHealEach + sidPairs;
+      if (total > maxHeal) {
+        maxHeal = total;
+      }
+    }
+    return maxHeal;
   }
 
   // Apply damage and handle survival
@@ -276,61 +325,42 @@ export class AtomicEffects {
       timestamp: Date.now(),
     });
 
-    let isRevived = false;
     const canBeerRevive =
       SeatManager.getLivingContenders(state).length > 2 &&
       !EventRuleRegistry.disablesBeerRescue(state);
+    const beerCount = canBeerRevive
+      ? victim.handCards.filter((c) => c.name === "BEER").length
+      : 0;
+    const beerHealEach = SkillHooks.getBeerHealAmount(victim, state);
+    const hasSid = SkillHooks.canSidKetchumRescue(state, victim);
+    const maxFeasibleHeal = this.computeMaxNearDeathHeal(
+      victim.handCards.length,
+      canBeerRevive ? beerCount : 0,
+      beerHealEach,
+      hasSid
+    );
 
-    // Auto-revive with Beer when lethal
-    while (victim.hp <= 0 && canBeerRevive) {
-      const beerIdx = victim.handCards.findIndex((c) => c.name === "BEER");
-      if (beerIdx === -1) break;
-
-      const beerCard = victim.handCards.splice(beerIdx, 1)[0];
-      this.discardCard(state, beerCard, deckManager);
-
-      const healAmount = SkillHooks.getBeerHealAmount(victim, state);
-      victim.hp = Math.min(victim.hp + healAmount, victim.maxHp);
-
-      SkillHooks.onPlayOutOfTurn(state, victim, events);
-      events.push({
-        type: "FATAL_DAMAGE_REVIVED_WITH_BEER",
-        payload: {
-          playerId: victim.id,
-          playerName: victim.name,
-          card: beerCard,
-          healedAmount: healAmount,
-          currentHp: victim.hp,
-        },
-        timestamp: Date.now(),
-      });
-      SkillHooks.checkSuzyLafayette(state, victim, events);
-
-      if (victim.hp > 0) {
-        isRevived = true;
-      }
-    }
-
-    // Queue Sid Ketchum near-death rescue
-    if (victim.hp <= 0 && SkillHooks.canSidKetchumRescue(state, victim)) {
+    // Queue interactive near-death rescue
+    if (victim.hp <= 0 && victim.hp + maxFeasibleHeal > 0) {
+      const canUseBeer = canBeerRevive && beerCount > 0;
       const rescueReaction: PendingReaction = {
-        id: `reaction_sid_rescue_${victim.id}_${Date.now()}_${Math.random()
+        id: `reaction_rescue_${victim.id}_${Date.now()}_${Math.random()
           .toString(36)
           .slice(2, 8)}`,
         type: "NEAR_DEATH_RESCUE",
         sourcePlayerId: attacker?.id ?? "ENV_DAMAGE",
         targetPlayerId: victim.id,
-        sourceCard: {
-          id: "sid_rescue",
+        sourceCard: sourceCard ?? {
+          id: hasSid && !canUseBeer ? "sid_rescue" : "near_death_rescue",
           seq: 0,
-          templateId: "sid_rescue",
+          templateId: hasSid && !canUseBeer ? "sid_rescue" : "near_death_rescue",
           pack: "base",
-          name: "SID_RESCUE",
+          name: hasSid && !canUseBeer ? "SID_RESCUE" : "NEAR_DEATH_RESCUE",
           border: "brown",
           category: "reaction",
           rank: "A",
           suit: "hearts",
-          desc: "Sid Ketchum rescue",
+          desc: "Near-death rescue",
         },
         requiredCard: "SID_RESCUE",
         requiredCount: 1,
@@ -339,20 +369,38 @@ export class AtomicEffects {
         canUseJourdonnais: false,
         barrelChecked: false,
         jourdonnaisChecked: false,
+        canUseBeer,
+        canUseSidKetchum: hasSid,
+        originalDamage: damageAmount,
         pendingDamage: Math.abs(victim.hp) + 1,
+        rescueBeersUsed: 0,
         createdAt: Date.now(),
       };
       state.pendingReactions.unshift(rescueReaction);
 
       events.push({
-        type: "SID_KETCHUM_RESCUE_PENDING",
+        type: "NEAR_DEATH_RESCUE_PENDING",
         payload: {
           playerId: victim.id,
           playerName: victim.name,
           neededHeal: Math.abs(victim.hp) + 1,
+          canUseBeer,
+          canUseSidKetchum: hasSid,
         },
         timestamp: Date.now(),
       });
+
+      if (hasSid) {
+        events.push({
+          type: "SID_KETCHUM_RESCUE_PENDING",
+          payload: {
+            playerId: victim.id,
+            playerName: victim.name,
+            neededHeal: Math.abs(victim.hp) + 1,
+          },
+          timestamp: Date.now(),
+        });
+      }
 
       return {
         events,
@@ -368,7 +416,7 @@ export class AtomicEffects {
       return {
         events,
         isEliminated: false,
-        isRevived,
+        isRevived: false,
         finalHp: victim.hp,
       };
     }

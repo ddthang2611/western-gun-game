@@ -1,5 +1,6 @@
 import React from "react";
 import type { LobbyPlayer } from "../../../types/game";
+import { useI18n } from "../../../i18n";
 
 export interface LobbyPlayerListProps {
   players: LobbyPlayer[];
@@ -20,10 +21,11 @@ export const LobbyPlayerList: React.FC<LobbyPlayerListProps> = ({
   status,
   onKickPlayer,
 }) => {
+  const { t } = useI18n();
   return (
     <div className="lobby-screen__panel">
       <h2 className="lobby-screen__panel-title">
-        Players in Room ({activeCount} / {maxPlayers || 8})
+        {t("lobby.playersTitle", { count: activeCount, max: maxPlayers || 8 })}
       </h2>
       <div className="lobby-screen__player-list">
         {players.map((p) => {
@@ -38,27 +40,27 @@ export const LobbyPlayerList: React.FC<LobbyPlayerListProps> = ({
               <div className="lobby-screen__player-meta">
                 <span className="lobby-screen__player-name">{p.name}</span>
                 {p.isHost && (
-                  <span className="lobby-screen__host-badge">HOST</span>
+                  <span className="lobby-screen__host-badge">{t("lobby.hostBadge")}</span>
                 )}
                 {isCurrent && (
-                  <span className="lobby-screen__me-badge">YOU</span>
+                  <span className="lobby-screen__me-badge">{t("lobby.youBadge")}</span>
                 )}
                 {!p.isOnline && (
-                  <span className="lobby-screen__offline-badge">OFFLINE</span>
+                  <span className="lobby-screen__offline-badge">{t("lobby.offlineBadge")}</span>
                 )}
               </div>
               <div className="lobby-screen__player-actions">
                 {p.isHost ? (
                   <span className="lobby-screen__status-tag lobby-screen__status-tag--ready">
-                    HOST
+                    {t("lobby.hostBadge")}
                   </span>
                 ) : p.isReady ? (
                   <span className="lobby-screen__status-tag lobby-screen__status-tag--ready">
-                    READY
+                    {t("lobby.ready")}
                   </span>
                 ) : (
                   <span className="lobby-screen__status-tag lobby-screen__status-tag--not-ready">
-                    NOT READY
+                    {t("lobby.notReady")}
                   </span>
                 )}
 
@@ -66,10 +68,10 @@ export const LobbyPlayerList: React.FC<LobbyPlayerListProps> = ({
                   <button
                     type="button"
                     onClick={() => onKickPlayer(p.id)}
-                    aria-label={`Kick ${p.name} from room`}
+                    aria-label={t("lobby.kickAria", { name: p.name })}
                     className="lobby-screen__kick-btn"
                   >
-                    Kick
+                    {t("lobby.kick")}
                   </button>
                 )}
               </div>

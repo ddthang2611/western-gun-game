@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import type { GeneralStoreInfo, Player } from "../../../types/game";
+import { useI18n } from "../../../i18n";
 import { Modal } from "../../ui/Modal/Modal";
 import { Panel } from "../../ui/Panel/Panel";
 import { Button } from "../../ui/Button/Button";
@@ -21,6 +22,7 @@ export const GeneralStoreModal: React.FC<GeneralStoreModalProps> = ({
   disabled = false,
   onPickCard,
 }) => {
+  const { t } = useI18n();
   const selectionKey = `${store.currentPickerId}:${store.pool.length}`;
   const [selectionState, setSelectionState] = useState<{
     key: string;
@@ -37,13 +39,18 @@ export const GeneralStoreModal: React.FC<GeneralStoreModalProps> = ({
     .map((id) => players.find((p) => p.id === id)?.name || id)
     .join(" -> ");
   const pickerLabel = isMyPick
-    ? `Your turn (${remainingOrderNames})`
-    : `Waiting: ${store.currentPickerName || pickerPlayer?.name || "opponent"} (${remainingOrderNames})`;
+    ? t("modals.generalStore.yourPick", { order: remainingOrderNames })
+    : t("modals.generalStore.picking", {
+        name: store.currentPickerName || pickerPlayer?.name || t("common.unknown"),
+        order: remainingOrderNames,
+      });
 
   return (
     <Modal isOpen={true} size="medium">
       <Modal.Header
-        title={`General Store (${store.originPlayerName || "Player"})`}
+        title={t("modals.generalStore.title", {
+          name: store.originPlayerName || t("common.player"),
+        })}
         subtitle={pickerLabel}
       />
 
@@ -79,7 +86,7 @@ export const GeneralStoreModal: React.FC<GeneralStoreModalProps> = ({
             disabled={!canPick || !selectedCardId}
             onClick={() => canPick && selectedCardId && onPickCard(selectedCardId)}
           >
-            {isMyPick ? "Take Card" : "Waiting..."}
+            {isMyPick ? t("modals.generalStore.takeCard") : t("modals.generalStore.waitingBtn")}
           </Button>
         </div>
       </Modal.Footer>

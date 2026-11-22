@@ -3,23 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.DistanceCalculator = void 0;
 const seat_manager_1 = require("./seat_manager");
 const skill_hooks_1 = require("../interact/skill_hooks");
+const inventory_1 = require("../utils/inventory");
 class DistanceCalculator {
-    // Collect unique extra equipment cards
-    static getUniqueExtras(player) {
-        const seen = new Set();
-        const result = [];
-        const addIfNew = (card) => {
-            if (!card || seen.has(card.id))
-                return;
-            seen.add(card.id);
-            result.push(card);
-        };
-        addIfNew(player.equipments.extra);
-        for (const card of player.equipments.extras || []) {
-            addIfNew(card);
-        }
-        return result;
-    }
     static calculateDistance(stateOrPlayers, fromArg, toArg) {
         const state = stateOrPlayers instanceof Map ? undefined : stateOrPlayers;
         const players = stateOrPlayers instanceof Map ? stateOrPlayers : stateOrPlayers.players;
@@ -44,7 +29,7 @@ class DistanceCalculator {
         if (skill_hooks_1.SkillHooks.isEquipmentEffective(defender, turnPlayer, state)) {
             if (defender.equipments.horseDef)
                 defModifiers += 1;
-            for (const card of this.getUniqueExtras(defender)) {
+            for (const card of (0, inventory_1.getAllEquippedCards)(defender)) {
                 if (card.name === "HIDEOUT")
                     defModifiers += 1;
                 if (card.name === "MUSTANG" && !defender.equipments.horseDef)
@@ -60,8 +45,8 @@ class DistanceCalculator {
         if (skill_hooks_1.SkillHooks.isEquipmentEffective(attacker, turnPlayer, state)) {
             if (attacker.equipments.horseOff)
                 offModifiers += 1;
-            for (const card of this.getUniqueExtras(attacker)) {
-                if (card.name === "BINOCULAR" || card.name === "BINOCULARS")
+            for (const card of (0, inventory_1.getAllEquippedCards)(attacker)) {
+                if ((0, inventory_1.normalizeEquipName)(card.name) === "BINOCULAR")
                     offModifiers += 1;
                 if (card.name === "SCOPE" && !attacker.equipments.horseOff)
                     offModifiers += 1;

@@ -5,6 +5,10 @@ exports.getAllEquippedCards = getAllEquippedCards;
 exports.hasEquippedCardByName = hasEquippedCardByName;
 exports.hasBarrelCard = hasBarrelCard;
 exports.removeEquippedCardById = removeEquippedCardById;
+exports.hasBlueCardInPlay = hasBlueCardInPlay;
+exports.countPlayerTotalCards = countPlayerTotalCards;
+exports.hasTargetCardInArea = hasTargetCardInArea;
+exports.pickFirstTargetCard = pickFirstTargetCard;
 // Normalize paired extra equipment names
 function normalizeEquipName(name) {
     return name === "BINOCULARS" ? "BINOCULAR" : name;
@@ -72,7 +76,9 @@ function removeEquippedCardById(player, targetCardId) {
             const extraIdx = eq.extras.findIndex((c) => c.id === targetCardId);
             if (extraIdx !== -1) {
                 const removed = eq.extras.splice(extraIdx, 1)[0];
-                eq.extra = eq.extras[0];
+                if (eq.extra?.id === removed.id) {
+                    eq.extra = eq.extras[0];
+                }
                 return removed;
             }
         }
@@ -105,7 +111,9 @@ function removeEquippedCardById(player, targetCardId) {
     }
     if (eq.extras && eq.extras.length > 0) {
         const removed = eq.extras.shift();
-        eq.extra = eq.extras[0];
+        if (eq.extra?.id === removed.id) {
+            eq.extra = eq.extras[0];
+        }
         return removed;
     }
     if (eq.extra) {
@@ -113,5 +121,51 @@ function removeEquippedCardById(player, targetCardId) {
         eq.extra = undefined;
         return removed;
     }
+    return null;
+}
+// Check whether player has blue cards
+function hasBlueCardInPlay(player) {
+    if (getAllEquippedCards(player).length > 0) {
+        return true;
+    }
+    return (player.judgements || []).some((j) => j.card.border === "blue");
+}
+// Count all cards on player
+function countPlayerTotalCards(player) {
+    return (player.handCards.length +
+        getAllEquippedCards(player).length +
+        (player.greenCards?.length || 0) +
+        (player.judgements?.length || 0));
+}
+// Check target card presence in area
+function hasTargetCardInArea(player, targetArea, targetCardId) {
+    if (targetArea === "HAND")
+        return player.handCards.length > 0;
+    if (!targetCardId)
+        return false;
+    if (targetArea === "EQUIPMENT") {
+        return getAllEquippedCards(player).some((c) => c.id === targetCardId);
+    }
+    if (targetArea === "GREEN") {
+        return (player.greenCards || []).some((g) => g.id === targetCardId || g.card.id === targetCardId);
+    }
+    if (targetArea === "JUDGEMENT") {
+        return (player.judgements || []).some((j) => j.id === targetCardId || j.card.id === targetCardId);
+    }
+    return false;
+}
+// Pick fallback target area and card
+function pickFirstTargetCard(player) {
+    if (player.handCards.length > 0)
+        return { targetArea: "HAND" };
+    const firstEquip = getAllEquippedCards(player)[0];
+    if (firstEquip)
+        return { targetArea: "EQUIPMENT", targetCardId: firstEquip.id };
+    const firstGreen = player.greenCards?.[0];
+    if (firstGreen)
+        return { targetArea: "GREEN", targetCardId: firstGreen.id };
+    const firstJudge = player.judgements?.[0];
+    if (firstJudge)
+        return { targetArea: "JUDGEMENT", targetCardId: firstJudge.id };
     return null;
 }

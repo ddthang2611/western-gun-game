@@ -104,29 +104,6 @@ export class SetupDealer {
     return this.shuffleArray(this.filterByExpansions(allCards, expansions));
   }
 
-  // Build shuffled event deck
-  public static buildEventDeck(
-    allEvents: EngineEventCard[],
-    expansions?: string[]
-  ): EngineEventCard[] {
-    const activeSet = new Set(expansions || []);
-    const filtered = activeSet.size > 0
-      ? allEvents.filter((ev) => activeSet.has(ev.pack))
-      : [];
-    if (filtered.length === 0) return [];
-
-    const nonFinal = this.shuffleArray(filtered.filter((ev) => !ev.isFinalCard)).slice(0, 12);
-    const finalCards = this.shuffleArray(filtered.filter((ev) => ev.isFinalCard));
-
-    // Final event sits at bottom
-    return finalCards.length > 0 ? [finalCards[0], ...nonFinal] : nonFinal;
-  }
-
-  // Draw next event from deck
-  public static drawNextEvent(state: SimulationState): EngineEventCard | undefined {
-    return state.eventDeck.pop();
-  }
-
   // Cryptographically secure Fisher-Yates shuffle
   private static shuffleArray<T>(arr: T[]): T[] {
     const list = [...arr];
@@ -230,20 +207,25 @@ export class SetupDealer {
     const use3PVariant = playerInfos.length === 3 && is3PlayerVariant;
     const roles = this.shuffleArray(this.getRoleDistribution(playerInfos.length, use3PVariant));
 
+    const requiredCount = dualCharacterMode ? 2 : 1;
+    const candidateCount = requiredCount === 2 ? 4 : 3;
+    const neededChars =
+      playerInfos.length * (enableCharacterSelect ? candidateCount : requiredCount);
+
     const filteredChars = this.filterByExpansions(allCharacters, expansions);
-    const charSource = filteredChars.length >= playerInfos.length ? filteredChars : allCharacters;
+    const charSource = filteredChars.length >= neededChars ? filteredChars : allCharacters;
     const characterPool = this.shuffleArray(charSource);
 
     if (state) {
       state.dualCharacterMode = dualCharacterMode;
       state.hpRule = hpRule;
+      state.is3PlayerVariant = use3PVariant;
       state.pendingCharacterSelect.clear();
     }
 
     const players = new Map<string, EnginePlayer>();
     let sheriffId = "";
     let deputyId = "";
-    const requiredCount = dualCharacterMode ? 2 : 1;
 
     playerInfos.forEach((user, index) => {
       const role = roles[index];
@@ -252,7 +234,6 @@ export class SetupDealer {
       if (role === "deputy" && !deputyId) deputyId = user.id;
 
       if (enableCharacterSelect && state) {
-        const candidateCount = requiredCount === 2 ? 4 : 3;
         const candidates = this.drawCharacters(characterPool, charSource, candidateCount);
         state.pendingCharacterSelect.set(user.id, {
           playerId: user.id,
@@ -331,7 +312,8 @@ export class SetupDealer {
     state: SimulationState,
     playerId: string,
     characterIds: string[],
-    events: DomainEvent[] = []
+    events: DomainEvent[] = [],
+    deckManager?: DeckManager
   ): CommandResult {
     if (state.matchPhase !== "CHARACTER_SELECT") {
       return { success: false, message: "Match is not in character selection phase." };
@@ -362,8 +344,28 @@ export class SetupDealer {
       return { success: false, message: "Selected characters must be distinct." };
     }
 
+    const claimedIds = new Set<string>();
+    state.players.forEach((other, oid) => {
+      if (oid === playerId) return;
+      for (const c of other.characters) {
+        claimedIds.add(c.id);
+      }
+    });
+    state.pendingCharacterSelect.forEach((otherEntry, oid) => {
+      if (oid === playerId || !otherEntry.selectedCharacterIds) return;
+      for (const cid of otherEntry.selectedCharacterIds) {
+        claimedIds.add(cid);
+      }
+    });
+
     const chosen: EngineCharacter[] = [];
     for (const cid of characterIds) {
+      if (claimedIds.has(cid)) {
+        return {
+          success: false,
+          message: "Selected character was already chosen by another player.",
+        };
+      }
       const match = entry.candidates.find((c) => c.id === cid);
       if (!match) {
         return { success: false, message: "Selected character is not in candidates." };
@@ -403,7 +405,7 @@ export class SetupDealer {
     if (allSelected) {
       state.pendingCharacterSelect.clear();
       state.matchPhase = "PLAYING";
-      this.dealStartingHands(state, events);
+      this.dealStartingHands(state, events, deckManager);
 
       events.push({
         type: "MATCH_STARTED",

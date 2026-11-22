@@ -1,4 +1,5 @@
 import React from "react";
+import { useI18n } from "../../../i18n";
 import type {
   Character,
   GameOverInfo,
@@ -12,6 +13,7 @@ import {
   DefenseModal,
   GameOverModal,
   GeneralStoreModal,
+  LuckyDukeModal,
   TurnPromptModal,
   type SelectedTargetCard,
 } from "../../../components/game";
@@ -63,21 +65,10 @@ export interface TableModalsProps {
   onSendLobbyReset: () => void;
   onCancelSelection: () => void;
   onShowError: (message: string) => void;
-  onReleaseHeldHandCard?: (cardId: string, delayMs?: number) => void;
-  onEnqueueFlight: (
-    fromSelector: string,
-    toSelector: string,
-    options?: {
-      cardImage?: string;
-      faceDown?: boolean;
-      label?: string;
-      durationMs?: number;
-    }
-  ) => void;
   mockHandlers: MockModalHandlers;
 }
 
-// Coordinate all seven table modal dialogs
+// Coordinate all table modal dialogs
 export const TableModals: React.FC<TableModalsProps> = ({
   state,
   vm,
@@ -103,12 +94,13 @@ export const TableModals: React.FC<TableModalsProps> = ({
   onSendLobbyReset,
   onCancelSelection,
   onShowError,
-  onReleaseHeldHandCard,
-  onEnqueueFlight,
   mockHandlers,
 }) => {
+  const { t } = useI18n();
   const {
     isTurnLocked,
+    isArenaLocked,
+    isStepAnimating,
     myPlayer,
     opponents,
     activeHand,
@@ -130,28 +122,68 @@ export const TableModals: React.FC<TableModalsProps> = ({
     isLiveCharSelectOpen ||
     (isMock && (showCharSelectModal || forcedModal === "char_select"));
 
+  // Wait for newly played/checked card in ACTIVE_CHAIN to land face-up in Card Arena before opening DefenseModal
+  const isArenaSettling = state.arenaChain?.status === "SETTLING";
   const isDefenseOpen = !isMock
-    ? Boolean(state.myPendingReaction)
+    ? Boolean(state.myPendingReaction) &&
+      !state.pendingBrawlPick &&
+      !state.pendingLuckyDukePick &&
+      !state.pendingElGringoPick &&
+      !isArenaSettling &&
+      !isStepAnimating
     : forcedModal === "defense";
   const effectiveDefenseReaction = !isMock
     ? state.myPendingReaction
     : mockScenarioReaction;
 
+  // Delay GeneralStoreModal & GameOverModal & TurnPromptModal until Card Arena finishes clearing
   const isGeneralStoreOpen = !isMock
-    ? Boolean(state.generalStore && state.generalStore.pool.length > 0)
+    ? Boolean(state.generalStore && state.generalStore.pool.length > 0) && !isArenaLocked
     : forcedModal === "general_store" && Boolean(mockScenarioGeneralStore);
   const effectiveGeneralStore = !isMock
     ? state.generalStore
     : mockScenarioGeneralStore;
 
   const isGameOverOpen = !isMock
-    ? Boolean(state.gameOver)
+    ? Boolean(state.gameOver) && !isArenaLocked
     : forcedModal === "game_over";
   const effectiveGameOver = !isMock ? state.gameOver : mockScenarioGameOver;
 
   const isCardPickerOpen =
     (cardPickerConfig.isOpen && Boolean(cardPickerConfig.targetPlayer)) ||
     (isMock && forcedModal === "card_picker" && Boolean(opponents[0]));
+
+  const brawlPick = !isMock ? state.pendingBrawlPick : null;
+  const brawlTargetPlayer =
+    brawlPick && brawlPick.actorPlayerId === state.myPlayerId
+      ? state.players.find((p) => p.id === brawlPick.currentTargetId)
+      : undefined;
+  const isBrawlPickerOpen =
+    Boolean(brawlTargetPlayer) &&
+    !isCardPickerOpen &&
+    !isArenaSettling &&
+    !isStepAnimating;
+
+  const luckyDukePick = !isMock ? state.pendingLuckyDukePick : null;
+  const isLuckyDukeOpen =
+    Boolean(luckyDukePick && luckyDukePick.playerId === state.myPlayerId) &&
+    !isCardPickerOpen &&
+    !isBrawlPickerOpen &&
+    !isArenaSettling &&
+    !isStepAnimating;
+
+  const elGringoPick = !isMock ? state.pendingElGringoPick : null;
+  const elGringoAttacker =
+    elGringoPick && elGringoPick.victimId === state.myPlayerId
+      ? state.players.find((p) => p.id === elGringoPick.attackerId)
+      : undefined;
+  const isElGringoPickerOpen =
+    Boolean(elGringoAttacker) &&
+    !isCardPickerOpen &&
+    !isBrawlPickerOpen &&
+    !isLuckyDukeOpen &&
+    !isArenaSettling &&
+    !isStepAnimating;
 
   return (
     <>
@@ -193,7 +225,7 @@ export const TableModals: React.FC<TableModalsProps> = ({
         />
       )}
 
-      {!isMock && (
+      {!isMock && !isArenaLocked && (
         <TurnPromptModal
           turnStartChoice={state.pendingTurnStartChoice}
           phase1Choice={state.pendingPhase1Choice}
@@ -201,15 +233,15 @@ export const TableModals: React.FC<TableModalsProps> = ({
           myHand={activeHand}
           myPlayerId={state.myPlayerId}
           topDiscard={state.topDiscard}
-          disabled={isTurnLocked}
+          disabled={isTurnLocked || isArenaLocked}
           isPickerOpen={cardPickerConfig.isOpen}
           onResolveTurnStart={(payload) => {
-            if (!isTurnLocked) {
+            if (!isTurnLocked && !isArenaLocked) {
               onSendLiveCommand("RESOLVE_TURN_START", payload);
             }
           }}
           onResolvePhase1={(payload) => {
-            if (!isTurnLocked) {
+            if (!isTurnLocked && !isArenaLocked) {
               onSendLiveCommand("RESOLVE_PHASE_1", payload);
             }
           }}
@@ -337,17 +369,13 @@ export const TableModals: React.FC<TableModalsProps> = ({
           cardName={cardPickerConfig.cardName || "CAT BALOU"}
           allowHand={cardPickerConfig.allowHand ?? true}
           allowInPlay={cardPickerConfig.allowInPlay ?? true}
-          onCancel={
-            cardPickerConfig.stealContext?.mode === "EL_GRINGO"
-              ? undefined
-              : () => {
-                  if (!cardPickerConfig.stealContext) {
-                    onCancelSelection();
-                  }
-                  setCardPickerConfig({ isOpen: false, action: "destroy" });
-                  onCloseForcedModal?.();
-                }
-          }
+          onCancel={() => {
+            if (!cardPickerConfig.stealContext) {
+              onCancelSelection();
+            }
+            setCardPickerConfig({ isOpen: false, action: "destroy" });
+            onCloseForcedModal?.();
+          }}
           onConfirm={(chosen) => {
             if (!isMock && isTurnLocked) {
               onShowError(
@@ -395,26 +423,6 @@ export const TableModals: React.FC<TableModalsProps> = ({
                     targetCardId,
                   },
                 });
-              } else if (stealCtx.mode === "EL_GRINGO") {
-                const rawImg = stealCtx.stolenCard?.image;
-                const imgPath = rawImg
-                  ? rawImg.startsWith("/") || rawImg.startsWith("http")
-                    ? rawImg
-                    : `/${rawImg}`
-                  : undefined;
-                onEnqueueFlight(
-                  `#seat-${stealCtx.attackerId || target.id}`,
-                  '[data-flight-anchor="my-hand-last"], [data-flight-anchor="my-hand"], .game-table__console-hand',
-                  {
-                    faceDown: !imgPath,
-                    cardImage: imgPath,
-                    label: stealCtx.stolenCard?.name,
-                    durationMs: 1400,
-                  }
-                );
-                if (stealCtx.stolenCard?.id) {
-                  onReleaseHeldHandCard?.(stealCtx.stolenCard.id, 1400);
-                }
               }
               setCardPickerConfig({ isOpen: false, action: "destroy" });
               return;
@@ -460,9 +468,86 @@ export const TableModals: React.FC<TableModalsProps> = ({
         />
       )}
 
+      {isBrawlPickerOpen && brawlTargetPlayer && brawlPick && (
+        <CardPickerModal
+          key={`brawl-${brawlTargetPlayer.id}-${brawlPick.remainingCount}`}
+          targetPlayer={brawlTargetPlayer}
+          action="destroy"
+          cardName={brawlPick.sourceCard?.name || "BRAWL"}
+          allowHand={true}
+          allowInPlay={true}
+          onCancel={undefined}
+          onConfirm={(chosen) => {
+            if (isTurnLocked) {
+              onShowError(
+                isWsConnected
+                  ? t("table.errors.paused")
+                  : t("table.errors.reconnecting")
+              );
+              return;
+            }
+            let targetArea: "HAND" | "EQUIPMENT" | "GREEN" | "JUDGEMENT" = "HAND";
+            if (chosen.region === "equipment") targetArea = "EQUIPMENT";
+            else if (chosen.region === "green") targetArea = "GREEN";
+            else if (chosen.region === "judgement") targetArea = "JUDGEMENT";
+
+            onSendLiveCommand("SELECT_STOLEN_CARD", {
+              targetPlayerId: brawlTargetPlayer.id,
+              targetArea,
+              targetCardId: chosen.cardId,
+            });
+          }}
+        />
+      )}
+
+      {isLuckyDukeOpen && luckyDukePick && (
+        <LuckyDukeModal
+          pick={luckyDukePick}
+          disabled={isTurnLocked}
+          onPickCard={(cardId) => {
+            if (isTurnLocked) {
+              onShowError(
+                isWsConnected
+                  ? t("table.errors.paused")
+                  : t("table.errors.reconnecting")
+              );
+              return;
+            }
+            onSendLiveCommand("SELECT_STOLEN_CARD", { cardId });
+          }}
+        />
+      )}
+
+      {isElGringoPickerOpen && elGringoAttacker && elGringoPick && (
+        <CardPickerModal
+          key={`el-gringo-${elGringoAttacker.id}-${elGringoPick.remainingSteals}`}
+          targetPlayer={elGringoAttacker}
+          action="steal"
+          cardName="EL GRINGO"
+          allowHand={true}
+          allowInPlay={false}
+          onCancel={undefined}
+          onConfirm={() => {
+            if (isTurnLocked) {
+              onShowError(
+                isWsConnected
+                  ? t("table.errors.paused")
+                  : t("table.errors.reconnecting")
+              );
+              return;
+            }
+            onSendLiveCommand("SELECT_STOLEN_CARD", {
+              targetPlayerId: elGringoAttacker.id,
+              targetArea: "HAND",
+            });
+          }}
+        />
+      )}
+
       <CombatLogModal
         isOpen={isCombatLogModalOpen || (isMock && forcedModal === "combat_log")}
         combatLog={state.combatLog}
+        structuredCombatLog={state.structuredCombatLog}
         onClose={() => {
           setIsCombatLogModalOpen(false);
           onCloseForcedModal?.();
@@ -472,21 +557,18 @@ export const TableModals: React.FC<TableModalsProps> = ({
       {!isMock && isDeleteMatchConfirmOpen && (
         <Modal isOpen={true} size="medium" onClose={onCancelDeleteMatch}>
           <Modal.Header
-            title="Delete Active Match?"
-            subtitle="Host Match Management"
+            title={t("lobby.deleteMatchTitle")}
+            subtitle={t("table.hostMatchManagement")}
           />
           <Modal.Body>
-            <p>
-              This will immediately end the current match, erase all active match state and combat
-              logs, and return all players to the waiting room.
-            </p>
+            <p>{t("table.deleteMatchConfirmBody")}</p>
           </Modal.Body>
           <Modal.Footer>
             <Button variant="secondary" onClick={onCancelDeleteMatch}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button variant="danger" onClick={onConfirmDeleteMatch}>
-              Delete Match
+              {t("table.deleteMatch")}
             </Button>
           </Modal.Footer>
         </Modal>

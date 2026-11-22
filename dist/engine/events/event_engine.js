@@ -9,6 +9,7 @@ const deck_manager_1 = require("../deck/deck_manager");
 const seat_manager_1 = require("../board/seat_manager");
 const skill_hooks_1 = require("../interact/skill_hooks");
 const event_rule_registry_1 = require("./event_rule_registry");
+const arena_chain_manager_1 = require("../arena/arena_chain_manager");
 const inventory_1 = require("../utils/inventory");
 class EventEngine {
     // Build event deck with final card
@@ -55,17 +56,13 @@ class EventEngine {
         });
         EventEngine.applyEntryEffect(state, nextEvent, events);
     }
-    // Prepare turn start state and choices
-    static prepareTurnStart(state, player, events) {
-        if (state.turnPlayerId && state.turnPlayerId !== player.id) {
-            state.vendettaExtraTurnUsed = false;
-        }
-        player.copiedCharacter = null;
-        player.forcedPlayCardId = null;
+    // Revive or ghost dead turn player
+    static resolveDeadPlayerTurnEntry(state, player, events) {
+        if (!player.isDead)
+            return;
         const code = state.activeEvent?.effectCode;
         if (code === "EVENT_FOC_DEAD_MAN" &&
-            state.firstEliminatedPlayerId === player.id &&
-            player.isDead) {
+            state.firstEliminatedPlayerId === player.id) {
             player.isDead = false;
             player.isGhost = false;
             player.hp = Math.min(2, player.maxHp);
@@ -84,7 +81,7 @@ class EventEngine {
                 timestamp: Date.now(),
             });
         }
-        else if (code === "EVENT_HN_GHOST_TOWN" && player.isDead) {
+        else if (code === "EVENT_HN_GHOST_TOWN") {
             player.isGhost = true;
             player.isDead = false;
             player.hp = 0;
@@ -97,6 +94,16 @@ class EventEngine {
                 timestamp: Date.now(),
             });
         }
+    }
+    // Prepare turn start state and choices
+    static prepareTurnStart(state, player, events) {
+        if (state.turnPlayerId && state.turnPlayerId !== player.id) {
+            state.vendettaExtraTurnUsed = false;
+        }
+        player.copiedCharacter = null;
+        player.forcedPlayCardId = null;
+        EventEngine.resolveDeadPlayerTurnEntry(state, player, events);
+        const code = state.activeEvent?.effectCode;
         if (player.isDead) {
             return {
                 needsHighNoonDamage: false,
@@ -238,24 +245,49 @@ class EventEngine {
         }
         return { success: false, message: "Unsupported turn start choice." };
     }
+    // Resolve Vendetta Draw! outcome
+    static resolveVendettaOutcome(state, player, chosenCard, drawnCards, events) {
+        if (drawnCards.length > 0) {
+            arena_chain_manager_1.ArenaChainManager.appendBatch(state, drawnCards.map((drawnCard) => {
+                const passed = skill_hooks_1.SkillHooks.getEffectiveSuit(drawnCard, state) === "hearts";
+                return {
+                    kind: "CHECK_RESULT",
+                    card: drawnCard,
+                    actorPlayerId: player.id,
+                    actorPlayerName: player.name,
+                    originZone: "DECK",
+                    destinationZone: "DISCARD",
+                    actionLabel: `Vendetta (${passed ? "PASSED" : "FAILED"})`,
+                    outcome: (passed ? "PASSED" : "FAILED"),
+                };
+            }));
+        }
+        const success = Boolean(chosenCard && skill_hooks_1.SkillHooks.getEffectiveSuit(chosenCard, state) === "hearts");
+        if (success) {
+            state.vendettaExtraTurnUsed = true;
+            events.push({
+                type: "EVENT_VENDETTA_EXTRA_TURN",
+                payload: {
+                    playerId: player.id,
+                    playerName: player.name,
+                },
+                timestamp: Date.now(),
+            });
+            return { extraTurnGranted: true };
+        }
+        state.vendettaExtraTurnUsed = false;
+        return { extraTurnGranted: false };
+    }
     // Handle Ghost exit and Vendetta
     static onTurnEnd(state, player, events) {
         if (player.isGhost) {
-            for (const card of player.handCards) {
-                deck_manager_1.DeckManager.discardCard(state, card);
-            }
+            deck_manager_1.DeckManager.discardCardsRespectingMine(state, player.handCards);
             player.handCards = [];
-            for (const eqCard of (0, inventory_1.getAllEquippedCards)(player)) {
-                deck_manager_1.DeckManager.discardCard(state, eqCard);
-            }
+            deck_manager_1.DeckManager.discardCardsRespectingMine(state, (0, inventory_1.getAllEquippedCards)(player));
             player.equipments = { extras: [] };
-            for (const green of player.greenCards) {
-                deck_manager_1.DeckManager.discardCard(state, green.card);
-            }
+            deck_manager_1.DeckManager.discardCardsRespectingMine(state, player.greenCards.map((g) => g.card));
             player.greenCards = [];
-            for (const judge of player.judgements) {
-                deck_manager_1.DeckManager.discardCard(state, judge.card);
-            }
+            deck_manager_1.DeckManager.discardCardsRespectingMine(state, player.judgements.map((j) => j.card));
             player.judgements = [];
             player.isGhost = false;
             player.isDead = true;
@@ -276,18 +308,10 @@ class EventEngine {
             !state.vendettaExtraTurnUsed) {
             const check = skill_hooks_1.SkillHooks.executeDrawCheck(state, player, "VENDETTA", (card, st) => skill_hooks_1.SkillHooks.getEffectiveSuit(card, st) === "hearts");
             events.push(...check.events);
-            if (check.success) {
-                state.vendettaExtraTurnUsed = true;
-                events.push({
-                    type: "EVENT_VENDETTA_EXTRA_TURN",
-                    payload: {
-                        playerId: player.id,
-                        playerName: player.name,
-                    },
-                    timestamp: Date.now(),
-                });
-                return { extraTurnGranted: true };
+            if (check.pendingInteraction) {
+                return { extraTurnGranted: false, pendingInteraction: true };
             }
+            return this.resolveVendettaOutcome(state, player, check.chosenCard, check.drawnCards, events);
         }
         state.vendettaExtraTurnUsed = false;
         return { extraTurnGranted: false };
@@ -297,7 +321,7 @@ class EventEngine {
         return event_rule_registry_1.EventRuleRegistry.canPlayCard(state, player, card);
     }
     // Create Russian Roulette reaction entry
-    static createRussianRouletteReaction(state, targetPlayerId) {
+    static createRussianRouletteReaction(state, targetPlayerId, rouletteStartPlayerId) {
         const sourceCard = state.activeEvent
             ? EventEngine.createEventSourceCard(state.activeEvent)
             : EventEngine.createFallbackEventCard("foc_russian_roulette", "fistful_of_cards", "Russian Roulette");
@@ -318,6 +342,7 @@ class EventEngine {
             jourdonnaisChecked: false,
             pendingDamage: 2,
             rouletteChainNext: true,
+            rouletteStartPlayerId: rouletteStartPlayerId ?? targetPlayerId,
             createdAt: Date.now(),
         };
     }
@@ -395,7 +420,7 @@ class EventEngine {
             const ordered = seat_manager_1.SeatManager.getClockwisePlayers(state, originId, true).filter((p) => !p.isDead && !p.isGhost);
             const sourceCard = EventEngine.createEventSourceCard(eventCard);
             for (const player of ordered) {
-                if (EventEngine.hasBlueCardInPlay(player)) {
+                if ((0, inventory_1.hasBlueCardInPlay)(player)) {
                     state.pendingReactions.push({
                         id: `react_daltons_${player.id}_${Date.now()}_${Math.random()
                             .toString(36)
@@ -421,14 +446,9 @@ class EventEngine {
             const originId = state.sheriffId || state.turnPlayerId;
             const ordered = seat_manager_1.SeatManager.getClockwisePlayers(state, originId, true).filter((p) => !p.isDead && !p.isGhost);
             if (ordered.length > 0) {
-                state.pendingReactions.push(EventEngine.createRussianRouletteReaction(state, ordered[0].id));
+                state.pendingReactions.push(EventEngine.createRussianRouletteReaction(state, ordered[0].id, ordered[0].id));
             }
         }
-    }
-    static hasBlueCardInPlay(player) {
-        const hasEquip = (0, inventory_1.getAllEquippedCards)(player).length > 0;
-        const hasBlueJudgement = player.judgements.some((j) => j.card.border === "blue");
-        return hasEquip || hasBlueJudgement;
     }
     static createEventSourceCard(eventCard, nameOverride) {
         return {

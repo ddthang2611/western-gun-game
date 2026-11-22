@@ -126,6 +126,7 @@ export class AoePipeline {
 
     const effectiveOrder = draftOrder.slice(0, drawnCards.length);
     const draftState: GeneralStoreDraftState = {
+      type: "GENERAL_STORE_DRAFT",
       originPlayerId: originPlayer.id,
       storePool: drawnCards,
       draftOrder: effectiveOrder,

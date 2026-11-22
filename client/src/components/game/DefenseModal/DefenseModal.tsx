@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import type { Card, Character, GreenCard, PendingReactionInfo } from "../../../types/game";
+import { useI18n } from "../../../i18n";
 import { Modal } from "../../ui/Modal/Modal";
 import { Panel } from "../../ui/Panel/Panel";
 import { Button } from "../../ui/Button/Button";
@@ -32,12 +33,6 @@ export interface DefenseModalProps {
 }
 
 const GREEN_MISSED_NAMES = new Set(["SOMBRERO", "IRON PLATE", "TEN GALLON HAT", "BIBLE"]);
-
-const AREA_LABELS: Record<string, string> = {
-  EQUIPMENT: "Equipment",
-  GREEN: "Green Card",
-  JUDGEMENT: "Judgement",
-};
 
 function isCardEligible(
   card: Card,
@@ -99,7 +94,8 @@ export const DefenseModal: React.FC<DefenseModalProps> = ({
   onSidRescue,
   onTakeDamage,
 }) => {
-  const selectionKey = `${reaction.id}:${reaction.currentCount}:${myHand.length}:${myGreenCards.length}:${myBlueCardsInPlay.length}`;
+  const { locale, t, tCard, tSuitSymbol } = useI18n();
+  const selectionKey = `${reaction.id}:${reaction.currentCount}:${myHp ?? 0}:${myHand.length}:${myGreenCards.length}:${myBlueCardsInPlay.length}`;
   const [selectionState, setSelectionState] = useState<{
     key: string;
     cardId: string | null;
@@ -113,7 +109,14 @@ export const DefenseModal: React.FC<DefenseModalProps> = ({
   const selectedBlueCardId = selectionState.key === selectionKey ? selectionState.blueCardId : null;
   const rescueIds = selectionState.key === selectionKey ? selectionState.rescueIds : [];
 
-  const isSidRescue = reaction.requiredCard === "SID_RESCUE" || reaction.type === "NEAR_DEATH_RESCUE";
+  const isNearDeathRescue =
+    reaction.requiredCard === "SID_RESCUE" || reaction.type === "NEAR_DEATH_RESCUE";
+  const canBeerRescue = isNearDeathRescue && Boolean(reaction.canUseBeer);
+  const canSidRescue =
+    isNearDeathRescue &&
+    (reaction.canUseSidKetchum !== undefined
+      ? reaction.canUseSidKetchum
+      : heroes.some((h) => h.name === "Sid Ketchum"));
   const isDaltonsDiscard =
     reaction.requiredCard === "BLUE_EQUIP" || reaction.type === "EVENT_DALTONS_DISCARD";
   const isRussianRoulette = reaction.type === "EVENT_RUSSIAN_ROULETTE";
@@ -136,37 +139,53 @@ export const DefenseModal: React.FC<DefenseModalProps> = ({
       ? Math.abs(myHp) + 1
       : 1;
   const cardsNeeded = deficit * 2;
-  const sidHint = `Need at least ${cardsNeeded} cards to heal ${deficit} lethal damage`;
+  const rescueHint =
+    canBeerRescue && canSidRescue
+      ? t("modals.defense.nearDeathBothHint", { deficit })
+      : canBeerRescue
+      ? t("modals.defense.beerHint", { deficit })
+      : t("modals.defense.sidHint", { cardsNeeded, deficit });
 
   const ricochetTargetCard = isRicochet
     ? resolveRicochetTargetCard(reaction, myBlueCardsInPlay, myGreenCards)
     : undefined;
   const ricochetAreaLabel = reaction.ricochetTargetArea
-    ? AREA_LABELS[reaction.ricochetTargetArea] || reaction.ricochetTargetArea
-    : "In Play";
+    ? t(`modals.defense.area.${reaction.ricochetTargetArea}`, undefined, reaction.ricochetTargetArea)
+    : t("modals.defense.area.EQUIPMENT");
 
   const actionLabel =
-    isSidRescue
-      ? "Near-Death Sid Ketchum Rescue"
+    isNearDeathRescue
+      ? canBeerRescue && canSidRescue
+        ? t("modals.defense.nearDeathTitle")
+        : canBeerRescue
+        ? t("modals.defense.beerTitle")
+        : t("modals.defense.sidTitle")
       : isDaltonsDiscard
-      ? "The Daltons: Discard 1 Blue Card"
+      ? t("modals.defense.daltonsTitle")
       : isRussianRoulette
-      ? "Russian Roulette"
+      ? t("modals.defense.russianRouletteTitle")
       : isRicochet
-      ? "Ricochet Shot on In-Play Card"
+      ? t("modals.defense.ricochetTitle")
       : reaction.type === "DUEL_RESPONSE"
-      ? "Duel Challenge"
+      ? t("modals.defense.duelTitle")
       : reaction.type === "INDIANS_DEFENSE"
-      ? "Indians! Ambush"
+      ? t("modals.defense.indiansTitle")
       : reaction.type === "GATLING_DEFENSE"
       ? reaction.sourceCard?.name === "HOWITZER"
-        ? "Howitzer Volley"
-        : "Gatling Volley"
-      : "Incoming Attack";
+        ? t("modals.defense.howitzerTitle")
+        : t("modals.defense.gatlingTitle")
+      : t("modals.defense.title");
+
+  const sourceCardLoc = tCard(reaction.sourceCard);
+  const ricochetLoc = ricochetTargetCard ? tCard(ricochetTargetCard) : null;
+  const sourceSub =
+    locale === "vi" && sourceCardLoc.primary.subtitleVi
+      ? ` (${sourceCardLoc.primary.subtitleVi})`
+      : "";
 
   const remainingNeeded = Math.max(1, reaction.requiredCount - reaction.currentCount);
   const headerSubtitle =
-    isSidRescue || isDaltonsDiscard
+    isNearDeathRescue || isDaltonsDiscard
       ? undefined
       : `${remainingNeeded}x ${reaction.requiredCard} (${reaction.currentCount}/${reaction.requiredCount})`;
 
@@ -186,8 +205,18 @@ export const DefenseModal: React.FC<DefenseModalProps> = ({
   const handItems: DefenseCardItem[] = myHand.map((card) => ({
     id: card.id,
     card,
-    eligible: isSidRescue ? true : isCardEligible(card, reaction.requiredCard, heroes),
+    eligible: isNearDeathRescue
+      ? canSidRescue || (canBeerRescue && card.name === "BEER")
+      : isCardEligible(card, reaction.requiredCard, heroes),
   }));
+
+  const singleSelectedBeer = canBeerRescue
+    ? myHand.find(
+        (c) =>
+          c.id === (canSidRescue ? (rescueIds.length === 1 ? rescueIds[0] : null) : selectedCardId) &&
+          c.name === "BEER"
+      )
+    : undefined;
 
   const blueItems: DefenseCardItem[] = myBlueCardsInPlay.map((item) => ({
     id: item.id,
@@ -211,9 +240,16 @@ export const DefenseModal: React.FC<DefenseModalProps> = ({
           <div className="defense-modal__source">
             <CardView card={reaction.sourceCard} isMini={true} isPlayable={false} />
             <div className="defense-modal__source-meta">
-              <strong>{reaction.sourceCard.name}</strong> ({reaction.sourceCard.rank} {reaction.sourceCard.suit})
-              {reaction.sourceCard.desc && (
-                <div className="defense-modal__source-desc">{reaction.sourceCard.desc}</div>
+              <strong>
+                {sourceCardLoc.primary.name}
+                {sourceSub}
+              </strong>{" "}
+              ({reaction.sourceCard.rank}
+              {tSuitSymbol(reaction.sourceCard.suit)})
+              {(sourceCardLoc.primary.desc || reaction.sourceCard.desc) && (
+                <div className="defense-modal__source-desc">
+                  {sourceCardLoc.primary.desc || reaction.sourceCard.desc}
+                </div>
               )}
             </div>
           </div>
@@ -227,15 +263,17 @@ export const DefenseModal: React.FC<DefenseModalProps> = ({
               )}
               <div className="defense-modal__ricochet-meta">
                 <span className="defense-modal__ricochet-area">
-                  Target ({ricochetAreaLabel})
+                  {t("modals.defense.ricochetTarget", { area: ricochetAreaLabel })}
                 </span>
                 <strong>
                   {ricochetTargetCard
-                    ? `${ricochetTargetCard.name} (${ricochetTargetCard.rank} ${ricochetTargetCard.suit})`
-                    : reaction.ricochetTargetCardId || "In-Play Card"}
+                    ? `${ricochetLoc?.primary.name || ricochetTargetCard.name} (${
+                        ricochetTargetCard.rank
+                      }${tSuitSymbol(ricochetTargetCard.suit)})`
+                    : reaction.ricochetTargetCardId || t("modals.defense.area.EQUIPMENT")}
                 </strong>
                 <span className="defense-modal__source-desc">
-                  Play a Missed! card to protect this card, or allow it to be destroyed.
+                  {t("modals.defense.ricochetHint")}
                 </span>
               </div>
             </div>
@@ -257,30 +295,52 @@ export const DefenseModal: React.FC<DefenseModalProps> = ({
               }))
             }
           />
-        ) : isSidRescue ? (
-          <DefenseCardSection
-            hint={`${sidHint} (${rescueIds.length} selected)`}
-            items={handItems}
-            selectedIds={rescueIds}
-            disabled={disabled}
-            onSelect={(id) =>
-              setSelectionState((prev) => {
-                const base = prev.key === selectionKey ? prev.rescueIds : [];
-                const next = base.includes(id) ? base.filter((x) => x !== id) : [...base, id];
-                return {
+        ) : isNearDeathRescue ? (
+          canSidRescue ? (
+            <DefenseCardSection
+              hint={t("modals.defense.sidSelectedHint", {
+                hint: rescueHint,
+                count: rescueIds.length,
+              })}
+              items={handItems}
+              selectedIds={rescueIds}
+              disabled={disabled}
+              onSelect={(id) =>
+                setSelectionState((prev) => {
+                  const base = prev.key === selectionKey ? prev.rescueIds : [];
+                  const next = base.includes(id) ? base.filter((x) => x !== id) : [...base, id];
+                  return {
+                    key: selectionKey,
+                    cardId: null,
+                    greenId: null,
+                    blueCardId: null,
+                    rescueIds: next,
+                  };
+                })
+              }
+            />
+          ) : (
+            <DefenseCardSection
+              hint={rescueHint}
+              items={handItems}
+              emptyText={t("modals.defense.emptyHand")}
+              selectedIds={selectedCardId ? [selectedCardId] : []}
+              disabled={disabled}
+              onSelect={(id) =>
+                setSelectionState((prev) => ({
                   key: selectionKey,
-                  cardId: null,
+                  cardId: prev.key === selectionKey && prev.cardId === id ? null : id,
                   greenId: null,
                   blueCardId: null,
-                  rescueIds: next,
-                };
-              })
-            }
-          />
+                  rescueIds: [],
+                }))
+              }
+            />
+          )
         ) : (
           <DefenseCardSection
             items={handItems}
-            emptyText="No cards in hand."
+            emptyText={t("modals.defense.emptyHand")}
             selectedIds={selectedCardId ? [selectedCardId] : []}
             disabled={disabled}
             onSelect={(id) =>
@@ -297,7 +357,7 @@ export const DefenseModal: React.FC<DefenseModalProps> = ({
 
         {greenItems.length > 0 && (
           <DefenseCardSection
-            title="Ready Green Defense Cards"
+            title={t("modals.defense.readyGreenTitle")}
             items={greenItems}
             selectedIds={selectedGreenId ? [selectedGreenId] : []}
             disabled={disabled}
@@ -314,15 +374,15 @@ export const DefenseModal: React.FC<DefenseModalProps> = ({
         )}
       </Modal.Body>
 
-      <Modal.Footer hint={isSidRescue ? sidHint : undefined}>
+      <Modal.Footer hint={isNearDeathRescue ? rescueHint : undefined}>
         {showBarrelButton && (
           <Button variant="info" disabled={disabled} onClick={() => handleDrawCheck("BARREL")}>
-            Draw! (Barrel)
+            {t("modals.defense.checkBarrel")}
           </Button>
         )}
         {showJourdonnaisButton && (
           <Button variant="info" disabled={disabled} onClick={() => handleDrawCheck("JOURDONNAIS")}>
-            Draw! (Jourdonnais)
+            {t("modals.defense.checkJourdonnais")}
           </Button>
         )}
         {isDaltonsDiscard ? (
@@ -335,20 +395,39 @@ export const DefenseModal: React.FC<DefenseModalProps> = ({
               }
             }}
           >
-            Confirm Blue Discard
+            {t("modals.defense.confirmBlueRemove")}
           </Button>
-        ) : isSidRescue ? (
-          <Button
-            variant="primary"
-            disabled={disabled || rescueIds.length < 2 || rescueIds.length % 2 !== 0}
-            onClick={() => {
-              if (!disabled && onSidRescue) {
-                onSidRescue(rescueIds);
-              }
-            }}
-          >
-            Heal (+{Math.floor(rescueIds.length / 2)} HP)
-          </Button>
+        ) : isNearDeathRescue ? (
+          <>
+            {canBeerRescue && (
+              <Button
+                variant="primary"
+                disabled={disabled || !singleSelectedBeer}
+                onClick={() => {
+                  if (!disabled && singleSelectedBeer) {
+                    onPlayCard(singleSelectedBeer.id);
+                  }
+                }}
+              >
+                {t("modals.defense.useBeerButton")}
+              </Button>
+            )}
+            {canSidRescue && (
+              <Button
+                variant="primary"
+                disabled={disabled || rescueIds.length < 2 || rescueIds.length % 2 !== 0}
+                onClick={() => {
+                  if (!disabled && onSidRescue) {
+                    onSidRescue(rescueIds);
+                  }
+                }}
+              >
+                {t("modals.defense.sidHealButton", {
+                  hp: Math.floor(rescueIds.length / 2),
+                })}
+              </Button>
+            )}
+          </>
         ) : (
           <Button
             variant="primary"
@@ -362,7 +441,7 @@ export const DefenseModal: React.FC<DefenseModalProps> = ({
               }
             }}
           >
-            Play Defense
+            {t("modals.defense.playDefense")}
           </Button>
         )}
         {!isDaltonsDiscard && (
@@ -373,13 +452,13 @@ export const DefenseModal: React.FC<DefenseModalProps> = ({
               if (!disabled) onTakeDamage();
             }}
           >
-            {isSidRescue
-              ? "Accept Elimination"
+            {isNearDeathRescue
+              ? t("modals.defense.acceptElimination")
               : isRicochet
-              ? "Allow Destroy"
+              ? t("modals.defense.allowRemove")
               : isRussianRoulette
-              ? "Take 2 Damage"
-              : "Take Damage"}
+              ? t("modals.defense.takeDamageN", { damage: 2 })
+              : t("modals.defense.takeDamage")}
           </Button>
         )}
       </Modal.Footer>

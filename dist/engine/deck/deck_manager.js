@@ -67,6 +67,31 @@ class DeckManager {
     static discardCards(state, cards) {
         state.discardPile.push(...cards);
     }
+    // Discard card respecting Abandoned Mine
+    static discardCardRespectingMine(state, card, deckManager, isPhase3Excess = false) {
+        if (state.activeEvent?.effectCode === "EVENT_FOC_ABANDONED_MINE" &&
+            isPhase3Excess) {
+            if (deckManager) {
+                deckManager.placeOnTopOfDeck(card);
+            }
+            else {
+                this.placeOnTopOfDeck(state, card);
+            }
+            return;
+        }
+        if (deckManager) {
+            deckManager.discard(card);
+        }
+        else {
+            this.discardCard(state, card);
+        }
+    }
+    // Discard cards respecting Abandoned Mine
+    static discardCardsRespectingMine(state, cards, deckManager, isPhase3Excess = false) {
+        for (const card of cards) {
+            this.discardCardRespectingMine(state, card, deckManager, isPhase3Excess);
+        }
+    }
     // Pop top card from discard
     static drawTopDiscard(state) {
         return state.discardPile.pop();
@@ -78,26 +103,6 @@ class DeckManager {
     // Alias for placing card back
     static putBackOnTop(state, card) {
         this.placeOnTopOfDeck(state, card);
-    }
-    // Peek top cards without removing
-    static peekTop(state, count) {
-        if (count <= 0)
-            return { cards: [], reshuffled: false, events: [] };
-        let reshuffled = false;
-        const events = [];
-        if (state.drawDeck.length < count && state.discardPile.length > 0) {
-            const ev = this.reshuffleDiscardIntoDeck(state);
-            if (ev) {
-                events.push(ev);
-                reshuffled = true;
-            }
-        }
-        const available = Math.min(count, state.drawDeck.length);
-        const cards = [];
-        for (let i = 0; i < available; i++) {
-            cards.push(state.drawDeck[state.drawDeck.length - 1 - i]);
-        }
-        return { cards, reshuffled, events };
     }
     // Instance shuffle helper
     shuffle(cards) {

@@ -80,6 +80,7 @@ class AoePipeline {
         }
         const effectiveOrder = draftOrder.slice(0, drawnCards.length);
         const draftState = {
+            type: "GENERAL_STORE_DRAFT",
             originPlayerId: originPlayer.id,
             storePool: drawnCards,
             draftOrder: effectiveOrder,

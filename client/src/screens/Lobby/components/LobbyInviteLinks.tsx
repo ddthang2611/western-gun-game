@@ -1,4 +1,5 @@
 import React from "react";
+import { useI18n } from "../../../i18n";
 
 export interface LobbyInviteLinksProps {
   tunnelUrl: string | null;
@@ -13,11 +14,12 @@ export const LobbyInviteLinks: React.FC<LobbyInviteLinksProps> = ({
   copiedUrl,
   onCopyUrl,
 }) => {
+  const { t } = useI18n();
   return (
     <>
       {tunnelUrl && (
         <div className="lobby-screen__form-group">
-          <span className="lobby-screen__label">Invite via Global Cloudflare Link:</span>
+          <span className="lobby-screen__label">{t("lobby.inviteCloudflare")}</span>
           <div className="lobby-screen__lan-list">
             <div className="lobby-screen__lan-item">
               <code className="lobby-screen__lan-code">{tunnelUrl}</code>
@@ -26,7 +28,7 @@ export const LobbyInviteLinks: React.FC<LobbyInviteLinksProps> = ({
                 onClick={() => onCopyUrl(tunnelUrl)}
                 className="lobby-screen__copy-btn"
               >
-                {copiedUrl === tunnelUrl ? "Copied" : "Copy"}
+                {copiedUrl === tunnelUrl ? t("lobby.copied") : t("lobby.copy")}
               </button>
             </div>
           </div>
@@ -35,7 +37,7 @@ export const LobbyInviteLinks: React.FC<LobbyInviteLinksProps> = ({
 
       {lanUrls.length > 0 && (
         <div className="lobby-screen__form-group">
-          <span className="lobby-screen__label">Invite via LAN:</span>
+          <span className="lobby-screen__label">{t("lobby.inviteLan")}</span>
           <div className="lobby-screen__lan-list">
             {lanUrls.map((url) => (
               <div key={url} className="lobby-screen__lan-item">
@@ -45,7 +47,7 @@ export const LobbyInviteLinks: React.FC<LobbyInviteLinksProps> = ({
                   onClick={() => onCopyUrl(url)}
                   className="lobby-screen__copy-btn"
                 >
-                  {copiedUrl === url ? "Copied" : "Copy"}
+                  {copiedUrl === url ? t("lobby.copied") : t("lobby.copy")}
                 </button>
               </div>
             ))}

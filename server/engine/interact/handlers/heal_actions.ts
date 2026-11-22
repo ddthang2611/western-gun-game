@@ -7,6 +7,7 @@ import { EventEngine } from "../../events/event_engine";
 import { SkillHooks } from "../skill_hooks";
 import { AtomicEffects } from "../primitives/atomic_effects";
 import { AoeActions } from "./aoe_actions";
+import { ArenaChainManager } from "../../arena/arena_chain_manager";
 
 export class HealActions {
   // Remove specified card IDs from hand
@@ -55,6 +56,20 @@ export class HealActions {
 
     const events: DomainEvent[] = [];
     const living = SeatManager.getLivingContenders(state);
+
+    ArenaChainManager.appendBatch(state, [
+      {
+        kind: "PLAYED_CARD",
+        card,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        originZone: "HAND",
+        destinationZone: "DISCARD",
+        actionLabel: living.length <= 2 ? `${card.name} (No Effect)` : `${card.name} (+HP)`,
+        vfxType: living.length > 2 ? "heal" : undefined,
+        vfxTargetId: player.id,
+      },
+    ]);
 
     if (living.length <= 2) {
       events.push({
@@ -113,6 +128,29 @@ export class HealActions {
     const removed = this.removeHandCardsById(player, [card.id, extraCard.id]);
     AtomicEffects.discardCards(state, removed, deckManager);
 
+    ArenaChainManager.appendBatch(state, [
+      {
+        kind: "PLAYED_CARD",
+        card,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        originZone: "HAND",
+        destinationZone: "DISCARD",
+        actionLabel: `${card.name} (+2 HP)`,
+        vfxType: "heal",
+        vfxTargetId: player.id,
+      },
+      {
+        kind: "EXTRA_COST",
+        card: extraCard,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        originZone: "HAND",
+        destinationZone: "DISCARD",
+        actionLabel: `Discard Cost (${extraCard.name})`,
+      },
+    ]);
+
     const events: DomainEvent[] = [];
     AtomicEffects.applyHeal(state, player, 2, card, events, deckManager);
     SkillHooks.checkSuzyLafayette(state, player, events);
@@ -151,10 +189,36 @@ export class HealActions {
     AtomicEffects.discardCards(state, removed, deckManager);
 
     const events: DomainEvent[] = [];
-    if (
+    const isImmune =
       target.id !== player.id &&
-      SkillHooks.isImmuneToCard(target, card, player, state)
-    ) {
+      SkillHooks.isImmuneToCard(target, card, player, state);
+
+    ArenaChainManager.appendBatch(state, [
+      {
+        kind: "PLAYED_CARD",
+        card,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        targetPlayerId: target.id,
+        targetPlayerName: target.name,
+        originZone: "HAND",
+        destinationZone: "DISCARD",
+        actionLabel: `${card.name} -> ${target.name}`,
+        vfxType: isImmune ? undefined : "heal",
+        vfxTargetId: target.id,
+      },
+      {
+        kind: "EXTRA_COST",
+        card: extraCard,
+        actorPlayerId: player.id,
+        actorPlayerName: player.name,
+        originZone: "HAND",
+        destinationZone: "DISCARD",
+        actionLabel: `Discard Cost (${extraCard.name})`,
+      },
+    ]);
+
+    if (isImmune) {
       events.push({
         type: "APACHE_KID_IMMUNITY",
         payload: {

@@ -5,6 +5,7 @@ import type {
   PendingPhase1ChoiceInfo,
   Player,
 } from "../../../types/game";
+import { useI18n } from "../../../i18n";
 import { Modal } from "../../ui/Modal/Modal";
 import { Panel } from "../../ui/Panel/Panel";
 import { Button } from "../../ui/Button/Button";
@@ -35,12 +36,13 @@ export const Phase1Prompts: React.FC<Phase1PromptsProps> = ({
   onResolvePhase1,
   onOpenStealPicker,
 }) => {
+  const { t } = useI18n();
   const [pickedCardIds, setPickedCardIds] = useState<string[]>([]);
 
   if (phase1Choice.mode === "PEYOTE_GUESS") {
     return (
       <Modal isOpen={true} size="medium">
-        <Modal.Header title="Peyote" />
+        <Modal.Header title={t("modals.prompt.peyoteTitle")} />
         <Modal.Body>
           {phase1Choice.drawnSoFar && phase1Choice.drawnSoFar.length > 0 && (
             <Panel>
@@ -58,14 +60,14 @@ export const Phase1Prompts: React.FC<Phase1PromptsProps> = ({
             disabled={disabled}
             onClick={() => onResolvePhase1({ guess: "RED" })}
           >
-            Guess RED
+            {t("modals.prompt.guessRed")}
           </Button>
           <Button
             variant="secondary"
             disabled={disabled}
             onClick={() => onResolvePhase1({ guess: "BLACK" })}
           >
-            Guess BLACK
+            {t("modals.prompt.guessBlack")}
           </Button>
         </Modal.Footer>
       </Modal>
@@ -77,7 +79,7 @@ export const Phase1Prompts: React.FC<Phase1PromptsProps> = ({
     const needed = phase1Choice.neededCount ?? Math.max(1, preview.length - 1);
     return (
       <Modal isOpen={true} size="medium">
-        <Modal.Header title={`Kit Carlson (${needed})`} />
+        <Modal.Header title={t("modals.prompt.kitTitle", { count: needed })} />
         <Modal.Body>
           <div className="turn-prompt__cards-row">
             {preview.map((card) => {
@@ -110,7 +112,7 @@ export const Phase1Prompts: React.FC<Phase1PromptsProps> = ({
               setPickedCardIds([]);
             }}
           >
-            Confirm Pick ({pickedCardIds.length}/{needed})
+            {t("modals.prompt.confirmKit", { picked: pickedCardIds.length, needed })}
           </Button>
         </Modal.Footer>
       </Modal>
@@ -120,7 +122,7 @@ export const Phase1Prompts: React.FC<Phase1PromptsProps> = ({
   if (phase1Choice.mode === "RANCH_EXCHANGE") {
     return (
       <Modal isOpen={true} size="medium">
-        <Modal.Header title="Ranch" />
+        <Modal.Header title={t("modals.prompt.ranchTitle")} />
         <Modal.Body>
           <div className="turn-prompt__cards-row">
             {myHand.map((card) => {
@@ -154,7 +156,7 @@ export const Phase1Prompts: React.FC<Phase1PromptsProps> = ({
               setPickedCardIds([]);
             }}
           >
-            Skip
+            {t("modals.prompt.skipTransfer")}
           </Button>
           <Button
             variant="primary"
@@ -164,7 +166,7 @@ export const Phase1Prompts: React.FC<Phase1PromptsProps> = ({
               setPickedCardIds([]);
             }}
           >
-            Exchange ({pickedCardIds.length})
+            {t("modals.prompt.confirmRanch", { count: pickedCardIds.length })}
           </Button>
         </Modal.Footer>
       </Modal>
