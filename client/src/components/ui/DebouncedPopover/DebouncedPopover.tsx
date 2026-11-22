@@ -91,7 +91,22 @@ export const DebouncedPopover: React.FC<DebouncedPopoverProps> = ({
     if (!isVisible || !panel) return;
     panel.style.setProperty("--popover-x", `${coords.x}px`);
     panel.style.setProperty("--popover-y", `${coords.y}px`);
-  }, [isVisible, portalTarget, coords.x, coords.y]);
+    const rect = panel.getBoundingClientRect();
+    const margin = 12;
+    const halfW = rect.width / 2;
+    const clampedX = Math.min(
+      Math.max(coords.x, halfW + margin),
+      Math.max(halfW + margin, window.innerWidth - halfW - margin)
+    );
+    let clampedY = coords.y;
+    if (coords.placeAbove && rect.top < margin) {
+      clampedY = coords.y + (margin - rect.top);
+    } else if (!coords.placeAbove && rect.bottom > window.innerHeight - margin) {
+      clampedY = Math.max(margin, coords.y - (rect.bottom - (window.innerHeight - margin)));
+    }
+    panel.style.setProperty("--popover-x", `${clampedX}px`);
+    panel.style.setProperty("--popover-y", `${clampedY}px`);
+  }, [isVisible, portalTarget, coords.x, coords.y, coords.placeAbove]);
 
   useEffect(() => {
     if (!isVisible) return;

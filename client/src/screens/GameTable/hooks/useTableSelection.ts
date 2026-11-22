@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 import type { Card, Character, GreenCard } from "../../../types/game";
+import { useI18n } from "../../../i18n";
 import {
   DISCARD_COST_CARDS,
   GREEN_DEFENSE_NAMES,
@@ -37,6 +38,7 @@ export function useTableSelection({
   isSniperActive,
   showError,
 }: UseTableSelectionParams) {
+  const { t } = useI18n();
   const [selectedHandCardId, setSelectedHandCardId] = useState<string | null>(null);
   const [selectedGreenCardId, setSelectedGreenCardId] = useState<string | null>(null);
   const [discardCostIds, setDiscardCostIds] = useState<string[]>([]);
@@ -126,7 +128,7 @@ export function useTableSelection({
 
       if (skillMode === "JOSE_DELGADO_DRAW") {
         if (card.border !== "blue") {
-          showError("Select a blue card for Jose Delgado.");
+          showError(t("table.errors.selectBlueJose"));
           return;
         }
         setSkillDiscardIds((prev) => (prev.includes(card.id) ? [] : [card.id]));
@@ -183,6 +185,7 @@ export function useTableSelection({
       selectedHandCardId,
       showError,
       skillMode,
+      t,
     ]
   );
 
@@ -190,9 +193,7 @@ export function useTableSelection({
     (gCard: GreenCard) => {
       if (isTurnLocked) {
         showError(
-          isWsConnected
-            ? "Match is paused. Actions are locked."
-            : "Connection lost. Reconnecting..."
+          isWsConnected ? t("table.errors.paused") : t("table.errors.reconnecting")
         );
         return;
       }
@@ -200,17 +201,15 @@ export function useTableSelection({
         return;
       }
       if (isActionLocked) {
-        showError("Green cards can only be activated during Phase 2 of your turn.");
+        showError(t("table.errors.phase2GreenOnly"));
         return;
       }
       if (gCard.isDelay) {
-        showError(`${gCard.card.name} is still pending until your next turn.`);
+        showError(t("table.errors.greenPending", { card: gCard.card.name }));
         return;
       }
       if (GREEN_DEFENSE_NAMES.has(gCard.card.name)) {
-        showError(
-          `${gCard.card.name} is a defense card — activate it from the Defense prompt when attacked.`
-        );
+        showError(t("table.errors.greenPending", { card: gCard.card.name }));
         return;
       }
 
@@ -221,16 +220,14 @@ export function useTableSelection({
       setSelectedTargetId(null);
       setSelectedGreenCardId((prev) => (prev === gCard.id ? null : gCard.id));
     },
-    [isActionLocked, isArenaLocked, isTurnLocked, isWsConnected, showError]
+    [isActionLocked, isArenaLocked, isTurnLocked, isWsConnected, showError, t]
   );
 
   const handleTriggerSkill = useCallback(
     (heroId: string) => {
       if (isTurnLocked) {
         showError(
-          isWsConnected
-            ? "Match is paused. Actions are locked."
-            : "Connection lost. Reconnecting..."
+          isWsConnected ? t("table.errors.paused") : t("table.errors.reconnecting")
         );
         return;
       }
@@ -238,7 +235,7 @@ export function useTableSelection({
         return;
       }
       if (isActionLocked) {
-        showError("Active skills can only be used during Phase 2 of your turn.");
+        showError(t("table.errors.phase2SkillsOnly"));
         return;
       }
 
@@ -251,7 +248,7 @@ export function useTableSelection({
           return;
         }
         if (isMock && activeHp <= 1) {
-          showError("Cannot sacrifice your last HP.");
+          showError(t("table.errors.cannotSacrificeLastHp"));
           return;
         }
         clearSelectionsForSkill();
@@ -292,7 +289,7 @@ export function useTableSelection({
         return;
       }
 
-      showError(`${hero.name} active skill is not available yet.`);
+      showError(t("table.errors.skillUnavailable", { hero: hero.name }));
     },
     [
       activeHp,
@@ -307,6 +304,7 @@ export function useTableSelection({
       selectedCard,
       showError,
       skillMode,
+      t,
     ]
   );
 

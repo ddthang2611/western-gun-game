@@ -5,6 +5,7 @@ import type {
   PendingPhase1ChoiceInfo,
   Player,
 } from "../../../types/game";
+import { useI18n } from "../../../i18n";
 import { getAllEquipments } from "../../../utils/equipments";
 import { Modal } from "../../ui/Modal/Modal";
 import { Panel } from "../../ui/Panel/Panel";
@@ -24,42 +25,42 @@ export interface DrawOptionPromptProps {
   ) => void;
 }
 
-const OPTION_LABELS: Record<string, { title: string; desc: string }> = {
+const OPTION_KEYS: Record<string, { titleKey: string; descKey: string }> = {
   PEDRO_DISCARD_AND_DECK: {
-    title: "Pedro Ramirez: Take Top Discard + 1 Deck",
-    desc: "Take the visible top card of the discard pile instead of your 1st draw.",
+    titleKey: "modals.prompt.pedroDiscard",
+    descKey: "modals.prompt.pedroDiscardDesc",
   },
   JESSE_STEAL_AND_DECK: {
-    title: "Jesse Jones: Steal 1 Hand Card + 1 Deck",
-    desc: "Pick an opponent with cards in hand to steal your 1st card from.",
+    titleKey: "modals.prompt.jesseSteal",
+    descKey: "modals.prompt.jesseStealDesc",
   },
   PAT_BRENNAN_STEAL: {
-    title: "Pat Brennan: Steal 1 Card in Play",
-    desc: "Steal a blue, green, or judgement card in front of any player instead of drawing 2.",
+    titleKey: "modals.prompt.patSteal",
+    descKey: "modals.prompt.patStealDesc",
   },
   KIT_CARLSON: {
-    title: "Kit Carlson: Look at 3, Keep 2",
-    desc: "Preview top 3 deck cards, keep 2 and place 1 back on top.",
+    titleKey: "modals.prompt.kitOption",
+    descKey: "modals.prompt.kitOptionDesc",
   },
   BILL_NOFACE: {
-    title: "Bill Noface: Draw 1 + Wounds",
-    desc: "Draw 1 card plus 1 extra card per life point lost.",
+    titleKey: "modals.prompt.billOption",
+    descKey: "modals.prompt.billOptionDesc",
   },
   PIXIE_PETE: {
-    title: "Pixie Pete: Draw 3 Cards",
-    desc: "Draw 3 cards instead of 2 in Phase 1.",
+    titleKey: "modals.prompt.pixieOption",
+    descKey: "modals.prompt.pixieOptionDesc",
   },
   SKIP_DRAW_HEAL: {
-    title: "Hard Liquor: Skip Draw & Heal +1 HP",
-    desc: "Skip Phase 1 drawing to recover 1 life point.",
+    titleKey: "modals.prompt.hardLiquor",
+    descKey: "modals.prompt.hardLiquorDesc",
   },
   NORMAL_DECK: {
-    title: "Normal Draw (Deck)",
-    desc: "Draw normally from the top of the deck.",
+    titleKey: "modals.prompt.drawDeck",
+    descKey: "modals.prompt.drawDeckDesc",
   },
   NORMAL_DRAW: {
-    title: "Normal Draw (Deck)",
-    desc: "Draw normally from the top of the deck.",
+    titleKey: "modals.prompt.drawDeck",
+    descKey: "modals.prompt.drawDeckDesc",
   },
 };
 
@@ -72,6 +73,7 @@ export const DrawOptionPrompt: React.FC<DrawOptionPromptProps> = ({
   onResolvePhase1,
   onOpenStealPicker,
 }) => {
+  const { locale, t, tCard, tSuitSymbol } = useI18n();
   const [selectedTargetId, setSelectedTargetId] = useState<string | null>(null);
   const [selectedPlayItem, setSelectedPlayItem] = useState<{
     targetPlayerId: string;
@@ -140,16 +142,27 @@ export const DrawOptionPrompt: React.FC<DrawOptionPromptProps> = ({
     !onOpenStealPicker &&
     (pendingOption === "JESSE_STEAL_AND_DECK" || pendingOption === "PAT_BRENNAN_STEAL");
 
+  const topDiscardLoc = topDiscard ? tCard(topDiscard) : null;
+  const topDiscardSub =
+    topDiscardLoc && locale === "vi" && topDiscardLoc.primary.subtitleVi
+      ? ` (${topDiscardLoc.primary.subtitleVi})`
+      : "";
+
   return (
     <Modal isOpen={true} size="medium">
-      <Modal.Header title="Draw Phase" />
+      <Modal.Header title={t("modals.prompt.drawTitle")} />
       <Modal.Body>
-        {phase1Choice.options.includes("PEDRO_DISCARD_AND_DECK") && topDiscard && (
+        {phase1Choice.options.includes("PEDRO_DISCARD_AND_DECK") && topDiscard && topDiscardLoc && (
           <Panel>
             <div className="turn-prompt__cards-row">
               <CardView card={topDiscard} isMini={true} isPlayable={false} />
               <div className="turn-prompt__option-desc">
-                <strong>{topDiscard.name}</strong> ({topDiscard.rank} {topDiscard.suit})
+                <strong>
+                  {topDiscardLoc.primary.name}
+                  {topDiscardSub}
+                </strong>{" "}
+                ({topDiscard.rank}
+                {tSuitSymbol(topDiscard.suit)})
               </div>
             </div>
           </Panel>
@@ -157,7 +170,9 @@ export const DrawOptionPrompt: React.FC<DrawOptionPromptProps> = ({
 
         <div className="turn-prompt__list">
           {phase1Choice.options.map((opt) => {
-            const meta = OPTION_LABELS[opt] || { title: opt, desc: "" };
+            const keys = OPTION_KEYS[opt];
+            const title = keys ? t(keys.titleKey) : opt;
+            const desc = keys ? t(keys.descKey) : "";
             const isActive = pendingOption === opt;
             return (
               <button
@@ -167,7 +182,8 @@ export const DrawOptionPrompt: React.FC<DrawOptionPromptProps> = ({
                 onClick={() => handleOptionClick(opt)}
                 className={`turn-prompt__option ${isActive ? "turn-prompt__option--selected" : ""}`}
               >
-                <div className="turn-prompt__option-title">{meta.title}</div>
+                <div className="turn-prompt__option-title">{title}</div>
+                {desc && <div className="turn-prompt__option-desc">{desc}</div>}
               </button>
             );
           })}
@@ -230,13 +246,21 @@ export const DrawOptionPrompt: React.FC<DrawOptionPromptProps> = ({
                           className="turn-prompt__option"
                         >
                           <div className="turn-prompt__option-title">
-                            {opp.name} ({inPlayCount} card(s) in play)
+                            {t("modals.prompt.cardsInPlayCount", {
+                              name: opp.name,
+                              count: inPlayCount,
+                            })}
                           </div>
                         </button>
                       );
                     })
                 : tableCardsInPlay.map((item) => {
                     const isSelected = selectedPlayItem?.targetCardId === item.targetCardId;
+                    const areaLabel = t(
+                      `modals.defense.area.${item.targetArea}`,
+                      undefined,
+                      item.targetArea
+                    );
                     return (
                       <button
                         key={`${item.targetPlayerId}_${item.targetCardId}`}
@@ -254,7 +278,7 @@ export const DrawOptionPrompt: React.FC<DrawOptionPromptProps> = ({
                         }`}
                       >
                         <div className="turn-prompt__option-title">
-                          {item.cardName} ({item.targetPlayerName} - {item.targetArea})
+                          {item.cardName} ({item.targetPlayerName} - {areaLabel})
                         </div>
                       </button>
                     );
@@ -290,7 +314,7 @@ export const DrawOptionPrompt: React.FC<DrawOptionPromptProps> = ({
               }
             }}
           >
-            Confirm Selection
+            {t("modals.prompt.confirmSelection")}
           </Button>
         </Modal.Footer>
       )}

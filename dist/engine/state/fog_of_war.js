@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.FogOfWarFilter = void 0;
 const arena_chain_manager_1 = require("../arena/arena_chain_manager");
+const skill_hooks_1 = require("../interact/skill_hooks");
 class FogOfWarFilter {
     // Project Fog of War snapshot
     static projectStateForPlayer(state, targetPlayerId) {
@@ -11,6 +12,7 @@ class FogOfWarFilter {
             const isMe = pId === targetPlayerId;
             const shouldRevealRole = player.isSheriff ||
                 player.isDead ||
+                Boolean(player.isGhost) ||
                 isMe ||
                 state.is3PlayerVariant ||
                 state.matchPhase === "FINISHED" ||
@@ -60,8 +62,9 @@ class FogOfWarFilter {
             const target = state.players.get(r.targetPlayerId);
             return Boolean(target && !target.isDead);
         });
+        const headChain = state.activeChain[0];
         const headReaction = activeReactions[0] || null;
-        const myPendingReaction = headReaction && headReaction.targetPlayerId === targetPlayerId
+        const myPendingReaction = !headChain && headReaction && headReaction.targetPlayerId === targetPlayerId
             ? headReaction
             : null;
         const pendingReactionTargets = activeReactions.map((r) => ({
@@ -74,14 +77,38 @@ class FogOfWarFilter {
             requiredCount: r.requiredCount,
             currentCount: r.currentCount,
         }));
-        const storeChain = state.activeChain[0];
-        const generalStore = storeChain && Array.isArray(storeChain.storePool)
+        const generalStore = headChain && "storePool" in headChain && Array.isArray(headChain.storePool)
             ? {
-                originPlayerId: storeChain.originPlayerId,
-                pool: [...storeChain.storePool],
-                draftOrder: [...storeChain.draftOrder],
-                currentPickerIndex: storeChain.currentPickerIndex,
-                currentPickerId: storeChain.draftOrder[storeChain.currentPickerIndex] || null,
+                originPlayerId: headChain.originPlayerId,
+                pool: [...headChain.storePool],
+                draftOrder: [...headChain.draftOrder],
+                currentPickerIndex: headChain.currentPickerIndex,
+                currentPickerId: headChain.draftOrder[headChain.currentPickerIndex] || null,
+            }
+            : null;
+        const pendingBrawlPick = headChain && headChain.type === "BRAWL_CARD_PICK"
+            ? {
+                actorPlayerId: headChain.actorPlayerId,
+                currentTargetId: headChain.currentTargetId,
+                remainingCount: headChain.remainingTargetIds.length,
+                sourceCard: { ...headChain.sourceCard },
+            }
+            : null;
+        const pendingLuckyDukePick = headChain && headChain.type === "LUCKY_DUKE_PICK"
+            ? {
+                playerId: headChain.playerId,
+                reason: headChain.reason,
+                drawnCards: headChain.drawnCards.map((c) => ({
+                    ...c,
+                    matches: skill_hooks_1.SkillHooks.isDrawCheckSuccess(headChain.reason, c, state),
+                })),
+            }
+            : null;
+        const pendingElGringoPick = headChain && headChain.type === "EL_GRINGO_PICK"
+            ? {
+                victimId: headChain.victimId,
+                attackerId: headChain.attackerId,
+                remainingSteals: headChain.remainingSteals,
             }
             : null;
         let pendingCharacterSelect = null;
@@ -146,7 +173,7 @@ class FogOfWarFilter {
         const sanitizedActiveChain = (state.activeChain || []).map((entry) => {
             if (!entry || typeof entry !== "object")
                 return entry;
-            if (Array.isArray(entry.storePool)) {
+            if ("storePool" in entry && Array.isArray(entry.storePool)) {
                 return {
                     type: "GENERAL_STORE_DRAFT",
                     originPlayerId: entry.originPlayerId,
@@ -156,15 +183,31 @@ class FogOfWarFilter {
                     currentPickerId: entry.draftOrder?.[entry.currentPickerIndex] || null,
                 };
             }
-            const clean = { ...entry };
-            delete clean.card;
-            delete clean.cards;
-            delete clean.storePool;
-            delete clean.handCards;
-            delete clean.drawnCards;
-            delete clean.previewCards;
-            delete clean.drawnSoFar;
-            return clean;
+            if (entry.type === "BRAWL_CARD_PICK") {
+                return {
+                    type: entry.type,
+                    actorPlayerId: entry.actorPlayerId,
+                    currentTargetId: entry.currentTargetId,
+                    remainingCount: entry.remainingTargetIds.length,
+                };
+            }
+            if (entry.type === "LUCKY_DUKE_PICK") {
+                return {
+                    type: entry.type,
+                    playerId: entry.playerId,
+                    reason: entry.reason,
+                    drawnCards: entry.drawnCards.map((c) => ({ ...c })),
+                };
+            }
+            if (entry.type === "EL_GRINGO_PICK") {
+                return {
+                    type: entry.type,
+                    victimId: entry.victimId,
+                    attackerId: entry.attackerId,
+                    remainingSteals: entry.remainingSteals,
+                };
+            }
+            return entry;
         });
         return {
             roomId: state.roomId,
@@ -207,6 +250,9 @@ class FogOfWarFilter {
                 };
             })(),
             generalStore,
+            pendingBrawlPick,
+            pendingLuckyDukePick,
+            pendingElGringoPick,
             gameOver: state.gameOver,
         };
     }

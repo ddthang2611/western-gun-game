@@ -3,6 +3,7 @@ import { EngineCard } from "../types/cards";
 import { DistanceCalculator } from "../board/distance_calculator";
 import { SkillHooks } from "../interact/skill_hooks";
 import { getAllEquippedCards } from "../utils/inventory";
+import { CardRegistry } from "../cards/card_registry";
 
 export type TargetArea = "HAND" | "EQUIPMENT" | "GREEN" | "JUDGEMENT";
 
@@ -20,15 +21,6 @@ export interface TargetValidationResult {
   reason?: string;
   target?: EnginePlayer;
 }
-
-const AREA_CARDS = new Set([
-  "CAT BALOU",
-  "PANIC!",
-  "RAG TIME",
-  "CAN CAN",
-  "CONESTOGA",
-  "RICOCHET",
-]);
 
 export class TargetValidator {
   // Validate target card presence in area
@@ -49,7 +41,10 @@ export class TargetValidator {
       if (equipped.length === 0) {
         return { valid: false, reason: "Target player has no equipment in play." };
       }
-      if (targetCardId && !equipped.some((c) => c.id === targetCardId)) {
+      if (!targetCardId) {
+        return { valid: false, reason: "Target equipment card ID is required." };
+      }
+      if (!equipped.some((c) => c.id === targetCardId)) {
         return { valid: false, reason: "Target equipment card not found." };
       }
       return { valid: true, target: targetPlayer };
@@ -60,10 +55,10 @@ export class TargetValidator {
       if (greens.length === 0) {
         return { valid: false, reason: "Target player has no green cards in play." };
       }
-      if (
-        targetCardId &&
-        !greens.some((g) => g.id === targetCardId || g.card.id === targetCardId)
-      ) {
+      if (!targetCardId) {
+        return { valid: false, reason: "Target green card ID is required." };
+      }
+      if (!greens.some((g) => g.id === targetCardId || g.card.id === targetCardId)) {
         return { valid: false, reason: "Target green card not found." };
       }
       return { valid: true, target: targetPlayer };
@@ -74,10 +69,10 @@ export class TargetValidator {
       if (judgements.length === 0) {
         return { valid: false, reason: "Target player has no judgement cards in play." };
       }
-      if (
-        targetCardId &&
-        !judgements.some((j) => j.id === targetCardId || j.card.id === targetCardId)
-      ) {
+      if (!targetCardId) {
+        return { valid: false, reason: "Target judgement card ID is required." };
+      }
+      if (!judgements.some((j) => j.id === targetCardId || j.card.id === targetCardId)) {
         return { valid: false, reason: "Target judgement card not found." };
       }
       return { valid: true, target: targetPlayer };
@@ -136,17 +131,16 @@ export class TargetValidator {
       return { valid: false, reason: "Target is dead" };
     }
 
+    const def = CardRegistry.get(card);
+    const isCalamityBang =
+      card.name === "MISSED!" && SkillHooks.hasSkill(fromPlayer, "Calamity Janet", state);
     const isRicochetShot =
       card.name === "RICOCHET" ||
-      (card.name === "BANG!" && Boolean(options?.targetArea && options.targetArea !== "HAND"));
+      (state?.activeEvent?.effectCode === "EVENT_FOC_RICOCHET" &&
+        (card.name === "BANG!" || isCalamityBang) &&
+        Boolean(options?.targetArea && options.targetArea !== "HAND"));
 
-    const selfAllowedByCard =
-      card.name === "TEQUILA" ||
-      card.name === "BEER" ||
-      card.name === "WHISKY" ||
-      card.name === "SALOON" ||
-      card.name === "CANTEEN";
-    const allowSelf = options?.allowSelf ?? selfAllowedByCard;
+    const allowSelf = options?.allowSelf ?? CardRegistry.allowsSelfTarget(card);
 
     if (!allowSelf && targetPlayer.id === fromPlayer.id) {
       return { valid: false, reason: `Cannot target yourself with ${card.name}.` };
@@ -167,17 +161,11 @@ export class TargetValidator {
     let exactDistance = options?.exactDistance;
 
     if (exactDistance === undefined && requiresRange === undefined) {
-      if (
-        card.name === "DERRINGER" ||
-        card.name === "KNIFE" ||
-        card.name === "PUNCH" ||
-        card.name === "PANIC!"
-      ) {
+      if (def?.targeting.distance === "EXACT_1") {
         exactDistance = 1;
       } else if (
-        card.name === "PEPPERBOX" ||
-        (card.name === "BANG!" && !isRicochetShot) ||
-        (card.name === "MISSED!" && SkillHooks.hasSkill(fromPlayer, "Calamity Janet", state))
+        (def?.targeting.distance === "WEAPON_RANGE" || isCalamityBang) &&
+        !isRicochetShot
       ) {
         requiresRange = true;
       } else {
@@ -210,8 +198,9 @@ export class TargetValidator {
       }
     }
 
-    if (options?.targetArea && (AREA_CARDS.has(card.name) || isRicochetShot)) {
-      return this.validateTargetArea(targetPlayer, options.targetArea, options.targetCardId);
+    if (CardRegistry.isAreaCard(card) || isRicochetShot) {
+      const area = options?.targetArea || "HAND";
+      return this.validateTargetArea(targetPlayer, area, options?.targetCardId);
     }
 
     return { valid: true, target: targetPlayer };

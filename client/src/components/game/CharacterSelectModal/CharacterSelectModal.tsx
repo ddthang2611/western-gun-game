@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import type { Character } from "../../../types/game";
+import { useI18n } from "../../../i18n";
 import { BulletMeter } from "../BulletMeter/BulletMeter";
 import { Modal } from "../../ui/Modal/Modal";
 import { Panel } from "../../ui/Panel/Panel";
@@ -27,6 +28,7 @@ export const CharacterSelectModal: React.FC<CharacterSelectModalProps> = ({
   onConfirm,
   onCancel,
 }) => {
+  const { t } = useI18n();
   const targetCount = dualMode ? 2 : 1;
   const candidatesKey = candidates.map((c) => c.id).join(",");
   const modalKey = `${candidatesKey}:${targetCount}`;
@@ -136,7 +138,10 @@ export const CharacterSelectModal: React.FC<CharacterSelectModalProps> = ({
   return (
     <Modal isOpen={true} size="large" onClose={onCancel}>
       <Modal.Header
-        title={`SELECT CHARACTER (${selectedIds.length}/${targetCount})`}
+        title={t("modals.charSelect.title", {
+          selected: selectedIds.length,
+          target: targetCount,
+        })}
         extra={
           <div
             className={`char-select__timer ${
@@ -164,7 +169,11 @@ export const CharacterSelectModal: React.FC<CharacterSelectModalProps> = ({
           headerExtra={
             <div className="char-select__preview-hp">
               <span className="char-select__preview-hp-label">
-                Max HP ({isSheriff ? "+1 Sheriff" : "Base"}):
+                {t("modals.charSelect.maxHp", {
+                  bonus: isSheriff
+                    ? t("modals.charSelect.sheriffBonus")
+                    : t("modals.charSelect.baseBonus"),
+                })}
               </span>
               <BulletMeter
                 currentHp={calculatedHp}
@@ -185,7 +194,7 @@ export const CharacterSelectModal: React.FC<CharacterSelectModalProps> = ({
       <Modal.Footer>
         {onCancel && (
           <Button variant="secondary" onClick={onCancel}>
-            Close
+            {t("common.close")}
           </Button>
         )}
         <Button
@@ -194,7 +203,10 @@ export const CharacterSelectModal: React.FC<CharacterSelectModalProps> = ({
           disabled={!isComplete}
           onClick={handleConfirm}
         >
-          Confirm ({selectedIds.length}/{targetCount})
+          {t("modals.charSelect.lockIn", {
+            selected: selectedIds.length,
+            target: targetCount,
+          })}
         </Button>
       </Modal.Footer>
     </Modal>

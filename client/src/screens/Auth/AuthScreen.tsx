@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from "react";
+import { LanguageSwitcher, useI18n } from "../../i18n";
 import { wsClient } from "../../services/wsClient";
 import "./AuthScreen.scss";
 
@@ -8,6 +9,7 @@ export interface AuthScreenProps {
 }
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated, noticeMessage }) => {
+  const { t, tError } = useI18n();
   const [name, setName] = useState("");
   const [pin, setPin] = useState("");
   const [showPin, setShowPin] = useState(false);
@@ -113,12 +115,18 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated, noticeM
       const data = await res.json();
       if (res.ok && data.success) {
         setIsDbLocked(false);
-        setUnlockMessage("Database unlocked successfully.");
+        setUnlockMessage(t("auth.dbUnlocked"));
       } else {
-        setUnlockMessage(data.message || "Invalid security key.");
+        setUnlockMessage(
+          tError({
+            code: data.code,
+            message: data.message,
+            params: data.params,
+          })
+        );
       }
     } catch {
-      setUnlockMessage("Unable to connect to server.");
+      setUnlockMessage(t("auth.authErrorFallback"));
     } finally {
       setUnlockLoading(false);
     }
@@ -130,11 +138,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated, noticeM
     const cleanPin = pin.trim();
 
     if (!cleanName) {
-      setErrorMessage("Please enter player name (max 20 characters).");
+      setErrorMessage(tError("PLAYER_NAME_LENGTH"));
       return;
     }
     if (!cleanPin || cleanPin.length !== 4) {
-      setErrorMessage("PIN must contain exactly 4 digits.");
+      setErrorMessage(tError("PIN_LENGTH"));
       return;
     }
 
@@ -152,10 +160,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated, noticeM
       if (res.ok && data.success) {
         onAuthenticated(data.user);
       } else {
-        setErrorMessage(data.message || "Authentication failed.");
+        setErrorMessage(
+          tError({
+            code: data.code,
+            message: data.message || t("auth.authErrorFallback"),
+            params: data.params,
+          })
+        );
       }
     } catch {
-      setErrorMessage("Unable to connect to server.");
+      setErrorMessage(t("auth.authErrorFallback"));
     } finally {
       setLoading(false);
     }
@@ -165,6 +179,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated, noticeM
     <div className="auth-screen">
       <div className="auth-screen__card">
         <div className="auth-screen__header">
+          <div style={{ display: "flex", justifyContent: "flex-end", width: "100%", marginBottom: "6px" }}>
+            <LanguageSwitcher compact showBilingualToggle={false} />
+          </div>
           <img
             src="/app_icon.png"
             alt="Western Gun Emblem"
@@ -173,9 +190,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated, noticeM
             height={72}
           />
           <h1 className="auth-screen__title">WESTERN GUN</h1>
-          <div className="auth-screen__subtitle">
-            Version 1.2.0 - Wild West Card Game
-          </div>
+          <div className="auth-screen__subtitle">{t("auth.subtitle")}</div>
           {lanIps.length > 0 && (
             <div className="auth-screen__lan-badge">
               LAN IP: {lanIps.join(", ")}
@@ -191,14 +206,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated, noticeM
 
         {isDbLocked ? (
           <div className="auth-screen__lock-banner">
-            <div className="auth-screen__lock-title">DATABASE LOCKED</div>
-            <div className="auth-screen__lock-desc">
-              System requires a security key to initialize game assets and catalog.
-            </div>
+            <div className="auth-screen__lock-title">{t("auth.dbUnlockTitle")}</div>
+            <div className="auth-screen__lock-desc">{t("auth.dbUnlockDesc")}</div>
             <form onSubmit={handleUnlockDatabase} className="auth-screen__form">
               <div className="auth-screen__form-group">
                 <label htmlFor="db-security-key" className="auth-screen__label auth-screen__label--lock">
-                  Database Security Key:
+                  {t("auth.dbKeyLabel")}
                 </label>
                 <div className="auth-screen__input-wrap">
                   <input
@@ -207,7 +220,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated, noticeM
                     autoComplete="off"
                     value={dbSecretKey}
                     onChange={(e) => setDbSecretKey(e.target.value)}
-                    placeholder="Enter database security key"
+                    placeholder={t("auth.dbKeyPlaceholder")}
                     className="auth-screen__input auth-screen__input--lock"
                   />
                   <button
@@ -216,7 +229,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated, noticeM
                     onClick={() => setShowDbKey((prev) => !prev)}
                     className="auth-screen__toggle-btn"
                   >
-                    {showDbKey ? "Hide" : "Show"}
+                    {showDbKey ? t("auth.hideKey") : t("auth.showKey")}
                   </button>
                 </div>
               </div>
@@ -228,7 +241,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated, noticeM
                 disabled={unlockLoading}
                 className="auth-screen__submit-btn auth-screen__submit-btn--unlock"
               >
-                {unlockLoading ? "Unlocking..." : "Unlock Database"}
+                {unlockLoading ? t("auth.unlocking") : t("auth.unlockBtn")}
               </button>
             </form>
           </div>
@@ -236,7 +249,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated, noticeM
           <form onSubmit={handleJoinLobby} className="auth-screen__form">
             <div className="auth-screen__form-group">
               <label htmlFor="auth-player-name" className="auth-screen__label">
-                Player Name (Max 20 chars):
+                {t("auth.playerNameLabel")}
               </label>
               <input
                 id="auth-player-name"
@@ -245,14 +258,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated, noticeM
                 maxLength={20}
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Billy The Kid"
+                placeholder={t("auth.playerNamePlaceholder")}
                 className="auth-screen__input"
               />
             </div>
 
             <div className="auth-screen__form-group">
               <label htmlFor="auth-player-pin" className="auth-screen__label">
-                4-Digit PIN:
+                {t("auth.pinLabel")}
               </label>
               <div className="auth-screen__input-wrap">
                 <input
@@ -263,7 +276,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated, noticeM
                   inputMode="numeric"
                   value={pin}
                   onChange={(e) => setPin(e.target.value.replace(/\D/g, ""))}
-                  placeholder="4 digits"
+                  placeholder={t("auth.pinPlaceholder")}
                   className="auth-screen__input auth-screen__input--pin"
                 />
                 <button
@@ -272,7 +285,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated, noticeM
                   onClick={() => setShowPin((prev) => !prev)}
                   className="auth-screen__toggle-btn"
                 >
-                  {showPin ? "Hide" : "Show"}
+                  {showPin ? t("auth.hideKey") : t("auth.showKey")}
                 </button>
               </div>
             </div>
@@ -286,14 +299,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onAuthenticated, noticeM
               disabled={loading}
               className="auth-screen__submit-btn"
             >
-              {loading ? "Authenticating..." : "Join Lobby"}
+              {loading ? t("auth.signingIn") : t("auth.enterSaloon")}
             </button>
           </form>
         )}
 
         <div className="auth-screen__footer">
           <a href="/dev-test" className="auth-screen__dev-link">
-            UI Sandbox &amp; Characters Preview (/dev-test)
+            {t("auth.devLink")}
           </a>
         </div>
       </div>

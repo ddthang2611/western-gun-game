@@ -1,5 +1,6 @@
 import React from "react";
 import type { Card, Suit } from "../../../types/game";
+import { CardTooltipContent, useI18n } from "../../../i18n";
 import { DebouncedPopover } from "../../ui/DebouncedPopover/DebouncedPopover";
 import "./CardView.scss";
 
@@ -15,11 +16,11 @@ export interface CardViewProps {
   className?: string;
 }
 
-const suitMeta: Record<Suit, { code: string; label: string; isRed: boolean }> = {
-  spades: { code: "S", label: "Spades", isRed: false },
-  clubs: { code: "C", label: "Clubs", isRed: false },
-  hearts: { code: "H", label: "Hearts", isRed: true },
-  diamonds: { code: "D", label: "Diamonds", isRed: true },
+const suitMeta: Record<Suit, { code: string; isRed: boolean }> = {
+  spades: { code: "♠", isRed: false },
+  clubs: { code: "♣", isRed: false },
+  hearts: { code: "♥", isRed: true },
+  diamonds: { code: "♦", isRed: true },
 };
 
 export const CardView: React.FC<CardViewProps> = ({
@@ -33,7 +34,9 @@ export const CardView: React.FC<CardViewProps> = ({
   onClick,
   className = "",
 }) => {
-  const suitInfo = suitMeta[card.suit] || { code: "", label: "", isRed: false };
+  const { locale, t, tCard, tSuitName } = useI18n();
+  const suitInfo = suitMeta[card.suit] || { code: "", isRed: false };
+  const suitLabel = tSuitName(card.suit);
   const hasArtwork = isFaceDown || Boolean(card.image);
 
   const cardClasses = [
@@ -92,7 +95,7 @@ export const CardView: React.FC<CardViewProps> = ({
             </span>
             <span
               className={suitInfo.isRed ? "game-card__suit--red" : "game-card__suit--black"}
-              title={suitInfo.label}
+              title={suitLabel}
             >
               {suitInfo.code}
             </span>
@@ -102,26 +105,38 @@ export const CardView: React.FC<CardViewProps> = ({
     </div>
   );
 
-  if (isFaceDown) {
+  if (isFaceDown || card.id === "SECRET") {
     return cardElement;
   }
 
-  const cardDescription =
-    card.desc ||
-    (card.name === "BANG!"
-      ? "Shoot another player within weapon range. Target must discard a Missed! or lose 1 life point."
-      : card.name === "MISSED!"
-      ? "Play immediately out of turn to cancel a BANG! aimed at you."
-      : card.name === "BEER"
-      ? "Regain 1 life point immediately. Cannot be played if only 2 players remain."
-      : card.name === "SALOON"
-      ? "All players in play recover 1 life point immediately."
-      : `${card.name}: Western action card.`);
+  const { primary, secondary } = tCard(card);
+  const subtitle =
+    locale === "vi" && primary.subtitleVi ? ` (${primary.subtitleVi})` : "";
+  const titleText = `${primary.name}${subtitle}${
+    card.rank && suitInfo.code ? ` (${card.rank}${suitInfo.code})` : ""
+  }`;
+  const borderKey =
+    card.border === "blue"
+      ? "popover.type.blue"
+      : card.border === "green"
+      ? "popover.type.green"
+      : "popover.type.brown";
 
   return (
     <DebouncedPopover
-      title={`${card.name} (${card.rank}${suitInfo.code})`}
-      content={cardDescription}
+      title={titleText}
+      content={
+        <CardTooltipContent
+          typeLabel={t(borderKey)}
+          primaryDesc={primary.desc || card.desc}
+          actionSummary={primary.actionSummary}
+          secondaryTitle={secondary?.name}
+          secondaryDesc={secondary?.desc}
+          range={card.range}
+          suit={card.suit}
+          rank={card.rank}
+        />
+      }
       delayMs={300}
     >
       {cardElement}

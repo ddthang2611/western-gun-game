@@ -44,7 +44,9 @@ class GameEngine {
             is3PlayerVariant: false,
             expansions: options?.expansions
                 ? [...options.expansions]
-                : (0, expansion_config_1.filterActiveExpansions)(["base", "dodge_city", "high_noon", "fistful_of_cards"]),
+                : eventCards.length > 0
+                    ? ["base", "dodge_city", "high_noon", "fistful_of_cards"]
+                    : (0, expansion_config_1.filterActiveExpansions)(["base", "dodge_city", "high_noon", "fistful_of_cards"]),
             players: new Map(),
             drawDeck: deck_manager_1.DeckManager.shuffleCards(this.allRawCards),
             discardPile: [],
@@ -355,7 +357,7 @@ class GameEngine {
                     message: "Can only activate green cards during your Action Phase (Phase 2).",
                 };
             }
-            const res = interact_manager_1.InteractManager.resolveActivateGreenCard(this.state, command, events);
+            const res = interact_manager_1.InteractManager.resolveActivateGreenCard(this.state, command);
             this.mergeResultEvents(events, res.events);
             if (!res.success) {
                 return { success: false, message: res.message, events };

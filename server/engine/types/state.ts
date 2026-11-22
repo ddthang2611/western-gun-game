@@ -1,4 +1,5 @@
 import { EngineCard, EngineEventCard, ActiveJudgement, ActiveGreenCard } from "./cards";
+import type { PendingInteraction } from "../interact/interact_types";
 
 export type RoleType = "sheriff" | "deputy" | "outlaw" | "renegade";
 export type TurnPhase = 0 | 1 | 2 | 3;
@@ -182,12 +183,14 @@ export interface SimulationState {
   pendingCharacterSelect: Map<string, PendingCharacterChoice>;
   pendingTurnStartChoice: PendingTurnStartChoice | null;
   pendingPhase1Choice: PendingPhase1Choice | null;
-  activeChain: any[];
+  activeChain: PendingInteraction[];
   pendingReactions: any[];
   arenaChain: ArenaChainState;
   arenaChainCounter?: number;
   gameOver?: {
     winner: string | null;
     message: string;
+    outcomeCode?: string;
+    outcomeParams?: Record<string, string | number | null>;
   };
 }

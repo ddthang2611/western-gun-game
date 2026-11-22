@@ -77,6 +77,44 @@ export class DeckManager {
     state.discardPile.push(...cards);
   }
 
+  // Discard card respecting Abandoned Mine
+  public static discardCardRespectingMine(
+    state: SimulationState,
+    card: EngineCard,
+    deckManager?: DeckManager,
+    isPhase3Excess: boolean = false
+  ): void {
+    if (
+      state.activeEvent?.effectCode === "EVENT_FOC_ABANDONED_MINE" &&
+      isPhase3Excess
+    ) {
+      if (deckManager) {
+        deckManager.placeOnTopOfDeck(card);
+      } else {
+        this.placeOnTopOfDeck(state, card);
+      }
+      return;
+    }
+
+    if (deckManager) {
+      deckManager.discard(card);
+    } else {
+      this.discardCard(state, card);
+    }
+  }
+
+  // Discard cards respecting Abandoned Mine
+  public static discardCardsRespectingMine(
+    state: SimulationState,
+    cards: EngineCard[],
+    deckManager?: DeckManager,
+    isPhase3Excess: boolean = false
+  ): void {
+    for (const card of cards) {
+      this.discardCardRespectingMine(state, card, deckManager, isPhase3Excess);
+    }
+  }
+
   // Pop top card from discard
   public static drawTopDiscard(state: SimulationState): EngineCard | undefined {
     return state.discardPile.pop();
@@ -90,32 +128,6 @@ export class DeckManager {
   // Alias for placing card back
   public static putBackOnTop(state: SimulationState, card: EngineCard): void {
     this.placeOnTopOfDeck(state, card);
-  }
-
-  // Peek top cards without removing
-  public static peekTop(
-    state: SimulationState,
-    count: number
-  ): { cards: EngineCard[]; reshuffled: boolean; events: DomainEvent[] } {
-    if (count <= 0) return { cards: [], reshuffled: false, events: [] };
-
-    let reshuffled = false;
-    const events: DomainEvent[] = [];
-    if (state.drawDeck.length < count && state.discardPile.length > 0) {
-      const ev = this.reshuffleDiscardIntoDeck(state);
-      if (ev) {
-        events.push(ev);
-        reshuffled = true;
-      }
-    }
-
-    const available = Math.min(count, state.drawDeck.length);
-    const cards: EngineCard[] = [];
-    for (let i = 0; i < available; i++) {
-      cards.push(state.drawDeck[state.drawDeck.length - 1 - i]);
-    }
-
-    return { cards, reshuffled, events };
   }
 
   // Instance shuffle helper

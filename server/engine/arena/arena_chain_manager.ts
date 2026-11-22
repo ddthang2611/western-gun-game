@@ -13,6 +13,7 @@ import {
 import { EngineCard } from "../types/cards";
 import { PlayerCommand } from "../types/actions";
 import { getAllEquippedCards, normalizeEquipName } from "../utils/inventory";
+import { CardRegistry } from "../cards/card_registry";
 
 export const ARENA_FLIGHT_MS = 420;
 export const ARENA_BATCH_STAGGER_MS = 340;
@@ -59,17 +60,13 @@ export class ArenaChainManager {
     return state.arenaChain;
   }
 
-  // Map a blue equipment card to its fixed 6-slot key
+  // Map blue card to fixed slot
   public static resolveEquipmentSlotKey(card: EngineCard): EquipmentSlotKey {
-    const upper = normalizeEquipName(String(card.name || "").toUpperCase());
+    const slotKey = CardRegistry.getSlotKey(card);
+    if (slotKey) return slotKey;
     if (card.category === "weapon" || Boolean(card.weaponRange)) {
       return "weapon";
     }
-    if (upper === "BARREL") return "barrel";
-    if (upper === "MUSTANG") return "horseDef";
-    if (upper === "SCOPE") return "horseOff";
-    if (upper === "HIDEOUT") return "hideout";
-    if (upper === "BINOCULAR") return "binocular";
     return "hideout";
   }
 
@@ -93,7 +90,7 @@ export class ArenaChainManager {
       category: "equipment",
       rank: "Q",
       suit: "spades",
-      desc: "Draw! to dodge BANG! on Hearts.",
+      desc: "Check the top card to cancel BANG! on Hearts.",
       image: "/assets/images/cards/card_barrel.png",
     };
   }
@@ -116,7 +113,7 @@ export class ArenaChainManager {
       category: "skill",
       rank: "Q",
       suit: "hearts",
-      desc: hero?.desc || "Innate Barrel: Draw! when targeted by BANG!.",
+      desc: hero?.desc || "Innate Barrel: check the top card when targeted by BANG!.",
       image: hero?.image || "/assets/images/cards/card_barrel.png",
     };
   }
@@ -203,8 +200,8 @@ export class ArenaChainManager {
     const addedCount = Math.max(0, chain.entries.length - entriesBeforeCount);
     const flightMs = this.calcBatchFlightMs(addedCount);
 
-    // Stay in ACTIVE_CHAIN while any reaction remains pending (including AoE Option B & Duel)
-    if (state.pendingReactions.length > 0 && !state.gameOver) {
+    // Keep chain active for pending reactions or activeChain
+    if ((state.pendingReactions.length > 0 || state.activeChain.length > 0) && !state.gameOver) {
       chain.status = "ACTIVE_CHAIN";
       chain.settleUntil = 0;
       chain.stepLockUntil =
@@ -280,10 +277,13 @@ export class ArenaChainManager {
     }
 
     if (chain.status === "ACTIVE_CHAIN") {
-      if (state.pendingReactions.length === 0) {
+      if (state.pendingReactions.length === 0 && state.activeChain.length === 0) {
         this.completeSettling(state);
         state.arenaChain = this.createIdleChain();
         return { allowed: true, autoCleared: true };
+      }
+      if (state.activeChain.length > 0 && command.type === "SELECT_STOLEN_CARD") {
+        return { allowed: true };
       }
       if (command.type === "RESOLVE_REACTION") {
         if (enablePacing && chain.stepLockUntil > 0 && now < chain.stepLockUntil) {

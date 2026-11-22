@@ -154,6 +154,9 @@ class CardManipulation {
                 : []),
         ]);
         const events = [];
+        if (!fromGreenEntryId) {
+            skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, events);
+        }
         // Check Apache Kid card immunity
         if (skill_hooks_1.SkillHooks.isImmuneToCard(targetPlayer, card, player, state)) {
             events.push({
@@ -178,9 +181,6 @@ class CardManipulation {
                     timestamp: Date.now(),
                 });
             }
-            else {
-                skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, events);
-            }
             return { success: true, events };
         }
         const transferred = isSteal
@@ -202,9 +202,6 @@ class CardManipulation {
                 },
                 timestamp: Date.now(),
             });
-        }
-        else {
-            skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, events);
         }
         return { success: true, events };
     }

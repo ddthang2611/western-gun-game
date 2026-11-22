@@ -1,27 +1,9 @@
 import { EnginePlayer, SimulationState } from "../types/state";
-import { EngineCard } from "../types/cards";
 import { SeatManager } from "./seat_manager";
 import { SkillHooks } from "../interact/skill_hooks";
+import { getAllEquippedCards, normalizeEquipName } from "../utils/inventory";
 
 export class DistanceCalculator {
-  // Collect unique extra equipment cards
-  private static getUniqueExtras(player: EnginePlayer): EngineCard[] {
-    const seen = new Set<string>();
-    const result: EngineCard[] = [];
-
-    const addIfNew = (card?: EngineCard) => {
-      if (!card || seen.has(card.id)) return;
-      seen.add(card.id);
-      result.push(card);
-    };
-
-    addIfNew(player.equipments.extra);
-    for (const card of player.equipments.extras || []) {
-      addIfNew(card);
-    }
-    return result;
-  }
-
   // Resolve distance between two players
   public static calculateDistance(
     state: SimulationState,
@@ -64,7 +46,7 @@ export class DistanceCalculator {
     // Defender equipment distance bonuses
     if (SkillHooks.isEquipmentEffective(defender, turnPlayer, state)) {
       if (defender.equipments.horseDef) defModifiers += 1;
-      for (const card of this.getUniqueExtras(defender)) {
+      for (const card of getAllEquippedCards(defender)) {
         if (card.name === "HIDEOUT") defModifiers += 1;
         if (card.name === "MUSTANG" && !defender.equipments.horseDef) defModifiers += 1;
       }
@@ -80,8 +62,8 @@ export class DistanceCalculator {
     // Attacker equipment distance reductions
     if (SkillHooks.isEquipmentEffective(attacker, turnPlayer, state)) {
       if (attacker.equipments.horseOff) offModifiers += 1;
-      for (const card of this.getUniqueExtras(attacker)) {
-        if (card.name === "BINOCULAR" || card.name === "BINOCULARS") offModifiers += 1;
+      for (const card of getAllEquippedCards(attacker)) {
+        if (normalizeEquipName(card.name) === "BINOCULAR") offModifiers += 1;
         if (card.name === "SCOPE" && !attacker.equipments.horseOff) offModifiers += 1;
       }
     }

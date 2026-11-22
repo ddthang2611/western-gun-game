@@ -7,6 +7,7 @@ export interface DbMetaRow {
 export interface SymbolLexiconRow {
   symbol_code: string;
   meaning_en: string;
+  meaning_vi?: string;
 }
 
 export interface UiComponentRow {
@@ -45,6 +46,9 @@ export interface CardTemplateRow {
   symbol_formula: string;
   symbol_desc_en: string;
   desc_en: string;
+  name_vi?: string;
+  symbol_desc_vi?: string;
+  desc_vi?: string;
   effect_icon_path: string | null;
   clean_template_path: string;
   image_width: number;
@@ -85,6 +89,9 @@ export interface CardRow {
   symbol_formula: string;
   symbol_desc_en: string;
   desc_en: string;
+  name_vi?: string;
+  symbol_desc_vi?: string;
+  desc_vi?: string;
   effect_icon_path: string | null;
   image_path: string;
   image_width: number;
@@ -101,6 +108,8 @@ export interface CharacterRow {
   bullet_symbol_formula: string;
   symbol_desc_en: string;
   desc_en: string;
+  symbol_desc_vi?: string;
+  desc_vi?: string;
   image_path: string;
   image_width: number;
   image_height: number;
@@ -112,6 +121,8 @@ export interface RoleRow {
   hp_bonus: number;
   win_condition_code: string;
   desc_en: string;
+  name_vi?: string;
+  desc_vi?: string;
   image_path: string;
   image_width: number;
   image_height: number;
@@ -124,6 +135,8 @@ export interface EventRow {
   is_final_card: number;
   effect_code: string;
   desc_en: string;
+  name_vi?: string;
+  desc_vi?: string;
   image_path: string;
   image_width: number;
   image_height: number;

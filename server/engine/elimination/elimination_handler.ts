@@ -16,11 +16,7 @@ export class EliminationHandler {
     deckManager?: DeckManager
   ): void {
     if (cards.length === 0) return;
-    if (deckManager) {
-      deckManager.discardMultiple(cards);
-    } else {
-      DeckManager.discardCards(state, cards);
-    }
+    DeckManager.discardCardsRespectingMine(state, cards, deckManager);
   }
 
   // Draw cards via manager or state
@@ -96,7 +92,11 @@ export class EliminationHandler {
     // Vulture Sam scavenges victim cards
     const aliveOrder = SeatManager.getClockwisePlayers(state, deadPlayer.id, false);
     const vultureSam = aliveOrder.find(
-      (p) => !p.isDead && p.id !== deadPlayer.id && SkillHooks.hasSkill(p, "Vulture Sam", state)
+      (p) =>
+        !p.isDead &&
+        !p.isGhost &&
+        p.id !== deadPlayer.id &&
+        SkillHooks.hasSkill(p, "Vulture Sam", state)
     );
 
     if (vultureSam) {
@@ -155,19 +155,21 @@ export class EliminationHandler {
         }
       }
 
-      if (SkillHooks.hasSkill(player, "Herb Hunter", state)) {
+      if (!player.isGhost && SkillHooks.hasSkill(player, "Herb Hunter", state)) {
         const { cards, events: drawEvents } = this.drawCards(state, 2, deckManager);
         player.handCards.push(...cards);
         events.push(...drawEvents);
-        events.push({
-          type: "HERB_HUNTER_DRAW",
-          payload: {
-            playerId: player.id,
-            playerName: player.name,
-            drawnCount: cards.length,
-          },
-          timestamp: Date.now(),
-        });
+        if (cards.length > 0) {
+          events.push({
+            type: "HERB_HUNTER_DRAW",
+            payload: {
+              playerId: player.id,
+              playerName: player.name,
+              drawnCount: cards.length,
+            },
+            timestamp: Date.now(),
+          });
+        }
       }
     }
 
@@ -182,16 +184,19 @@ export class EliminationHandler {
       killerPlayer.handCards = [];
       killerPlayer.equipments = { extras: [] };
       killerPlayer.greenCards = [];
+      killerPlayer.forcedPlayCardId = null;
       this.discardCards(state, sheriffLoss, deckManager);
 
       events.push({
         type: "SHERIFF_PENALTY_DISCARD",
         payload: {
           sheriffId: killerPlayer.id,
+          sheriffName: killerPlayer.name,
           cardsLostCount: sheriffLoss.length,
         },
         timestamp: Date.now(),
       });
+      SkillHooks.checkSuzyLafayette(state, killerPlayer, events);
     }
 
     // Evaluate win condition
@@ -203,12 +208,16 @@ export class EliminationHandler {
       state.gameOver = {
         winner: winCheck.winner,
         message: winCheck.message || "",
+        outcomeCode: winCheck.outcomeCode,
+        outcomeParams: winCheck.outcomeParams,
       };
       events.push({
         type: "GAME_OVER",
         payload: {
           winner: winCheck.winner,
           message: winCheck.message,
+          outcomeCode: winCheck.outcomeCode,
+          outcomeParams: winCheck.outcomeParams,
         },
         timestamp: Date.now(),
       });

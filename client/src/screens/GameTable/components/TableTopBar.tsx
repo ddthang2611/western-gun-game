@@ -1,11 +1,13 @@
 import React from "react";
 import type { ActiveEventInfo } from "../../../types/game";
+import { CardTooltipContent, LanguageSwitcher, useI18n } from "../../../i18n";
 import { DebouncedPopover } from "../../../components/ui";
 import "./TableTopBar.scss";
 
 export interface TableTopBarProps {
   roomId: string;
   hostInfo: string;
+  hostName?: string;
   currentPhase: number;
   isMock?: boolean;
   isHost?: boolean;
@@ -18,16 +20,10 @@ export interface TableTopBarProps {
   onBackToLobby?: () => void;
 }
 
-const PHASE_LABELS: Record<number, string> = {
-  0: "Judgement",
-  1: "Draw Cards",
-  2: "Play Cards",
-  3: "Discard Excess",
-};
-
 export const TableTopBar: React.FC<TableTopBarProps> = ({
   roomId,
   hostInfo,
+  hostName,
   currentPhase,
   isMock = true,
   isHost = false,
@@ -39,7 +35,18 @@ export const TableTopBar: React.FC<TableTopBarProps> = ({
   onDeleteMatch,
   onBackToLobby,
 }) => {
-  const phaseLabel = PHASE_LABELS[currentPhase] || String(currentPhase);
+  const { locale, t, tEvent } = useI18n();
+  const phaseLabel = t(`phases.${currentPhase}`, undefined, String(currentPhase));
+  const hostDisplay = hostName || hostInfo.replace(/^Host:\s*/i, "");
+  const eventLoc = activeEvent ? tEvent(activeEvent) : null;
+  const eventPackName =
+    activeEvent?.pack === "fistful" || activeEvent?.pack === "fistful_of_cards"
+      ? "A Fistful of Cards"
+      : "High Noon";
+  const eventDisplayName =
+    eventLoc && locale === "vi" && eventLoc.primary.subtitleVi
+      ? `${eventLoc.primary.name} (${eventLoc.primary.subtitleVi})`
+      : eventLoc?.primary.name || activeEvent?.name || "";
 
   return (
     <header className="game-table__header">
@@ -47,35 +54,38 @@ export const TableTopBar: React.FC<TableTopBarProps> = ({
         <img src="/favicon.svg" alt="Sheriff Star" className="game-table__brand-icon" width={22} height={22} />
         <span className="game-table__brand">WESTERN-GUN</span>
         <span className="game-table__meta-tag">
-          Room: <strong>{roomId}</strong>
+          {t("table.roomLabel")} <strong>{roomId}</strong>
         </span>
         <span className="game-table__meta-tag">
-          Host: <strong>{hostInfo}</strong>
+          {t("table.hostLabel")} <strong>{hostDisplay}</strong>
         </span>
         <span className="game-table__meta-tag">
-          Round: <strong>{roundNumber}</strong>
+          {t("table.roundLabel")} <strong>{roundNumber}</strong>
         </span>
         <span className="game-table__meta-tag">
-          Stage: <strong>{phaseLabel}</strong>
+          {t("table.stageLabel")} <strong>{phaseLabel}</strong>
         </span>
-        {activeEvent && (
+        {activeEvent && eventLoc && (
           <DebouncedPopover
-            title={`${
-              activeEvent.pack === "fistful" || activeEvent.pack === "fistful_of_cards"
-                ? "A Fistful of Cards"
-                : "High Noon"
-            }: ${activeEvent.name}`}
-            content={activeEvent.desc}
+            title={`${eventPackName}: ${eventDisplayName}`}
+            content={
+              <CardTooltipContent
+                typeLabel={t("popover.type.event")}
+                primaryDesc={eventLoc.primary.desc}
+                secondaryTitle={eventLoc.secondary?.name}
+                secondaryDesc={eventLoc.secondary?.desc}
+              />
+            }
             delayMs={200}
           >
             <span className="game-table__meta-tag game-table__meta-tag--event">
-              Event: <strong>{activeEvent.name}</strong>
+              {t("table.eventLabel")} <strong>{eventDisplayName}</strong>
             </span>
           </DebouncedPopover>
         )}
         {!isMock && (
           <span className="game-table__meta-tag">
-            Turn:{" "}
+            {t("table.turnLabel")}{" "}
             <strong
               className={
                 isMyTurn
@@ -83,20 +93,21 @@ export const TableTopBar: React.FC<TableTopBarProps> = ({
                   : "game-table__turn-label--other"
               }
             >
-              {isMyTurn ? "YOUR TURN" : activePlayerName || "..."}
+              {isMyTurn ? t("table.yourTurn") : activePlayerName || "..."}
             </strong>
           </span>
         )}
       </div>
 
       <div className="game-table__header-actions">
+        <LanguageSwitcher compact />
         {isMock && (
           <button
             type="button"
             onClick={onOpenCharSelect}
             className="game-table__btn game-table__btn--primary"
           >
-            Reset Mock Data
+            {t("table.resetMock")}
           </button>
         )}
         {!isMock && isHost && onDeleteMatch && (
@@ -105,7 +116,7 @@ export const TableTopBar: React.FC<TableTopBarProps> = ({
             onClick={onDeleteMatch}
             className="game-table__btn game-table__btn--danger"
           >
-            Delete Match
+            {t("table.deleteMatch")}
           </button>
         )}
         <button
@@ -113,7 +124,7 @@ export const TableTopBar: React.FC<TableTopBarProps> = ({
           onClick={onBackToLobby}
           className="game-table__btn game-table__btn--secondary"
         >
-          {isMock ? "Back" : "Lobby"}
+          {isMock ? t("common.back") : t("table.lobby")}
         </button>
       </div>
     </header>

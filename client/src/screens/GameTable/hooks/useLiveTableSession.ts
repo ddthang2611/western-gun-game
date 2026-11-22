@@ -9,6 +9,7 @@ import type {
   TableState,
 } from "../../../types/game";
 import { useGameSocket } from "../../../hooks/useGameSocket";
+import { useI18n } from "../../../i18n";
 import type { GameEventMessage } from "../utils/gameEventChoreography";
 import { EMPTY_LIVE_TABLE } from "../utils/tableSelectors";
 
@@ -43,6 +44,7 @@ export function useLiveTableSession({
   onKicked,
   showError,
 }: UseLiveTableSessionParams) {
+  const { t, tError } = useI18n();
   const { isConnected, sendMessage, subscribe } = useGameSocket();
 
   const [state, setState] = useState<TableState>(EMPTY_LIVE_TABLE);
@@ -73,6 +75,8 @@ export function useLiveTableSession({
   const onBackToLobbyRef = useRef(onBackToLobby);
   const onKickedRef = useRef(onKicked);
   const showErrorRef = useRef(showError);
+  const tRef = useRef(t);
+  const tErrorRef = useRef(tError);
 
   useEffect(() => {
     onHandReconcileRef.current = onHandReconcile;
@@ -82,7 +86,9 @@ export function useLiveTableSession({
     onBackToLobbyRef.current = onBackToLobby;
     onKickedRef.current = onKicked;
     showErrorRef.current = showError;
-  }, [onHandReconcile, onNewHandCards, onGameEvent, onMatchReset, onBackToLobby, onKicked, showError]);
+    tRef.current = t;
+    tErrorRef.current = tError;
+  }, [onHandReconcile, onNewHandCards, onGameEvent, onMatchReset, onBackToLobby, onKicked, showError, t, tError]);
 
   useEffect(() => {
     myPlayerIdRef.current = state.myPlayerId;
@@ -170,8 +176,8 @@ export function useLiveTableSession({
         case "AUTH_REQUIRED": {
           const reason =
             typeof p?.reason === "string"
-              ? p.reason
-              : "Session expired. Please sign in again.";
+              ? tErrorRef.current({ message: p.reason })
+              : tRef.current("table.errors.sessionExpired");
           if (onKickedRef.current) {
             onKickedRef.current(reason);
           } else {
@@ -204,7 +210,14 @@ export function useLiveTableSession({
         case "COMBAT_LOG_UPDATE": {
           if (Array.isArray(p?.combatLog)) {
             const nextLogs = p.combatLog as string[];
-            setState((prev) => ({ ...prev, combatLog: nextLogs }));
+            const nextStructured = Array.isArray(p?.structuredCombatLog)
+              ? (p.structuredCombatLog as TableState["structuredCombatLog"])
+              : undefined;
+            setState((prev) => ({
+              ...prev,
+              combatLog: nextLogs,
+              ...(nextStructured ? { structuredCombatLog: nextStructured } : {}),
+            }));
           }
           return;
         }
@@ -233,8 +246,8 @@ export function useLiveTableSession({
         case "PLAYER_KICKED": {
           const reason =
             typeof p?.reason === "string"
-              ? p.reason
-              : "You were removed from the room by the Host.";
+              ? tErrorRef.current({ message: p.reason })
+              : tRef.current("table.errors.kickedFallback");
           fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
           if (onKickedRef.current) {
             onKickedRef.current(reason);
@@ -245,9 +258,12 @@ export function useLiveTableSession({
         }
 
         case "ERROR": {
-          const message =
-            typeof p?.message === "string" ? p.message : "Action failed.";
-          showErrorRef.current(message);
+          const msgText = tErrorRef.current({
+            code: typeof p?.code === "string" ? p.code : undefined,
+            message: typeof p?.message === "string" ? p.message : undefined,
+            params: (p?.params as Record<string, string | number>) || undefined,
+          });
+          showErrorRef.current(msgText);
           return;
         }
 
@@ -269,7 +285,7 @@ export function useLiveTableSession({
   const sendLiveCommand = useCallback(
     (type: string, payload: Record<string, unknown> = {}): boolean => {
       if (!isConnected) {
-        showErrorRef.current("WebSocket connection is not ready.");
+        showErrorRef.current(tRef.current("table.errors.wsNotReady"));
         return false;
       }
       cmdSeqRef.current += 1;

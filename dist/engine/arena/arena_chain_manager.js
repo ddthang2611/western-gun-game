@@ -2,6 +2,7 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ArenaChainManager = exports.ARENA_PLACEMENT_RETURN_MS = exports.ARENA_HOLD_NO_NEW_CARD_MS = exports.ARENA_HOLD_CHAIN_MS = exports.ARENA_HOLD_SIMPLE_MS = exports.ARENA_STEP_BUFFER_MS = exports.ARENA_BATCH_STAGGER_MS = exports.ARENA_FLIGHT_MS = void 0;
 const inventory_1 = require("../utils/inventory");
+const card_registry_1 = require("../cards/card_registry");
 exports.ARENA_FLIGHT_MS = 420;
 exports.ARENA_BATCH_STAGGER_MS = 340;
 exports.ARENA_STEP_BUFFER_MS = 100;
@@ -25,22 +26,14 @@ class ArenaChainManager {
         }
         return state.arenaChain;
     }
-    // Map a blue equipment card to its fixed 6-slot key
+    // Map blue card to fixed slot
     static resolveEquipmentSlotKey(card) {
-        const upper = (0, inventory_1.normalizeEquipName)(String(card.name || "").toUpperCase());
+        const slotKey = card_registry_1.CardRegistry.getSlotKey(card);
+        if (slotKey)
+            return slotKey;
         if (card.category === "weapon" || Boolean(card.weaponRange)) {
             return "weapon";
         }
-        if (upper === "BARREL")
-            return "barrel";
-        if (upper === "MUSTANG")
-            return "horseDef";
-        if (upper === "SCOPE")
-            return "horseOff";
-        if (upper === "HIDEOUT")
-            return "hideout";
-        if (upper === "BINOCULAR")
-            return "binocular";
         return "hideout";
     }
     // Find actual equipped Barrel card (with real artwork/suit/rank)
@@ -60,7 +53,7 @@ class ArenaChainManager {
             category: "equipment",
             rank: "Q",
             suit: "spades",
-            desc: "Draw! to dodge BANG! on Hearts.",
+            desc: "Check the top card to cancel BANG! on Hearts.",
             image: "/assets/images/cards/card_barrel.png",
         };
     }
@@ -81,7 +74,7 @@ class ArenaChainManager {
             category: "skill",
             rank: "Q",
             suit: "hearts",
-            desc: hero?.desc || "Innate Barrel: Draw! when targeted by BANG!.",
+            desc: hero?.desc || "Innate Barrel: check the top card when targeted by BANG!.",
             image: hero?.image || "/assets/images/cards/card_barrel.png",
         };
     }
@@ -151,8 +144,8 @@ class ArenaChainManager {
         }
         const addedCount = Math.max(0, chain.entries.length - entriesBeforeCount);
         const flightMs = this.calcBatchFlightMs(addedCount);
-        // Stay in ACTIVE_CHAIN while any reaction remains pending (including AoE Option B & Duel)
-        if (state.pendingReactions.length > 0 && !state.gameOver) {
+        // Keep chain active for pending reactions or activeChain
+        if ((state.pendingReactions.length > 0 || state.activeChain.length > 0) && !state.gameOver) {
             chain.status = "ACTIVE_CHAIN";
             chain.settleUntil = 0;
             chain.stepLockUntil =
@@ -209,10 +202,13 @@ class ArenaChainManager {
             return { allowed: true, autoCleared: true };
         }
         if (chain.status === "ACTIVE_CHAIN") {
-            if (state.pendingReactions.length === 0) {
+            if (state.pendingReactions.length === 0 && state.activeChain.length === 0) {
                 this.completeSettling(state);
                 state.arenaChain = this.createIdleChain();
                 return { allowed: true, autoCleared: true };
+            }
+            if (state.activeChain.length > 0 && command.type === "SELECT_STOLEN_CARD") {
+                return { allowed: true };
             }
             if (command.type === "RESOLVE_REACTION") {
                 if (enablePacing && chain.stepLockUntil > 0 && now < chain.stepLockUntil) {

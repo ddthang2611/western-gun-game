@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import { useI18n } from "../../i18n";
 import type {
   Card,
   Character,
@@ -67,6 +68,7 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
   mockScenarioGeneralStore,
   mockScenarioGameOver,
 }) => {
+  const { t } = useI18n();
   const ui = useTableUi();
   const reconcileHandRef = useRef<(hand: Card[]) => void>(() => undefined);
   const newHandCardsRef = useRef<(cardIds: string[]) => void>(() => undefined);
@@ -123,11 +125,9 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
         triggerVfx: animations.triggerVfx,
         enqueueFlight: animations.enqueueFlight,
         scheduleTimeout: animations.scheduleTimeout,
-        onHoldHandCard: animations.holdHandCard,
-        onOpenElGringoPicker: ui.openElGringoPicker,
       });
     };
-  }, [animations, liveSession, ui.openElGringoPicker]);
+  }, [animations, liveSession]);
 
   const baseCtx = useMemo(
     () =>
@@ -206,6 +206,7 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
         isArenaBlockingActions: animations.isArenaBlockingActions,
         isStepAnimating: animations.isStepAnimating,
         concealedInPlayCardIds: animations.concealedInPlayCardIds,
+        t,
       }),
     [
       animations.concealedInPlayCardIds,
@@ -217,6 +218,7 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
       selection,
       session,
       state,
+      t,
     ]
   );
 
@@ -248,6 +250,24 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
     !isMock &&
     state.matchPhase === "CHARACTER_SELECT" &&
     Boolean(myCharSelect?.selectedCharacterIds?.length || !(myCharSelect?.candidates?.length ?? 0));
+  const otherBrawlPick =
+    !isMock &&
+    state.pendingBrawlPick &&
+    state.pendingBrawlPick.actorPlayerId !== state.myPlayerId
+      ? state.pendingBrawlPick
+      : null;
+  const otherLuckyDukePick =
+    !isMock &&
+    state.pendingLuckyDukePick &&
+    state.pendingLuckyDukePick.playerId !== state.myPlayerId
+      ? state.pendingLuckyDukePick
+      : null;
+  const otherElGringoPick =
+    !isMock &&
+    state.pendingElGringoPick &&
+    state.pendingElGringoPick.victimId !== state.myPlayerId
+      ? state.pendingElGringoPick
+      : null;
 
   return (
     <div className="game-table">
@@ -257,15 +277,59 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
         </div>
       )}
 
-      {!isMock && (!isWsConnected || state.matchPaused || isWaitingOtherCharSelect) && (
-        <div className="game-table__status-banner" role="status">
-          {!isWsConnected
-            ? "Connection lost. Reconnecting to match server..."
-            : state.matchPaused
-            ? "Match paused: Waiting for disconnected players..."
-            : `Waiting for other players to choose characters (${myCharSelect?.submittedPlayerIds?.length ?? 0}/${myCharSelect?.totalPlayers ?? state.players.length})...`}
-        </div>
-      )}
+      {!isMock &&
+        (!isWsConnected ||
+          state.matchPaused ||
+          isWaitingOtherCharSelect ||
+          Boolean(otherBrawlPick) ||
+          Boolean(otherLuckyDukePick) ||
+          Boolean(otherElGringoPick)) && (
+          <div className="game-table__status-banner" role="status">
+            {!isWsConnected
+              ? t("table.reconnectingBanner")
+              : state.matchPaused
+              ? t("table.pausedBanner")
+              : isWaitingOtherCharSelect
+              ? t("table.waitingCharsBanner", {
+                  submitted: myCharSelect?.submittedPlayerIds?.length ?? 0,
+                  total: myCharSelect?.totalPlayers ?? state.players.length,
+                })
+              : otherLuckyDukePick
+              ? t("table.waitingLuckyDukeBanner", {
+                  actor:
+                    otherLuckyDukePick.playerName ||
+                    state.players.find((p) => p.id === otherLuckyDukePick.playerId)?.name ||
+                    t("common.unknown"),
+                  reason: t(
+                    `modals.luckyDuke.reason.${otherLuckyDukePick.reason}`,
+                    undefined,
+                    otherLuckyDukePick.reason
+                  ),
+                })
+              : otherElGringoPick
+              ? t("table.waitingElGringoBanner", {
+                  victim:
+                    otherElGringoPick.victimName ||
+                    state.players.find((p) => p.id === otherElGringoPick.victimId)?.name ||
+                    t("common.unknown"),
+                  attacker:
+                    otherElGringoPick.attackerName ||
+                    state.players.find((p) => p.id === otherElGringoPick.attackerId)?.name ||
+                    t("common.unknown"),
+                })
+              : t("table.waitingBrawlBanner", {
+                  actor:
+                    otherBrawlPick?.actorPlayerName ||
+                    state.players.find((p) => p.id === otherBrawlPick?.actorPlayerId)?.name ||
+                    t("common.unknown"),
+                  target:
+                    otherBrawlPick?.currentTargetName ||
+                    state.players.find((p) => p.id === otherBrawlPick?.currentTargetId)?.name ||
+                    t("common.unknown"),
+                  remaining: otherBrawlPick?.remainingCount ?? 1,
+                })}
+          </div>
+        )}
 
       <VfxLayer beams={animations.vfxBeams} />
       <TargetingArrow
@@ -278,6 +342,7 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
       <TableTopBar
         roomId={state.roomId}
         hostInfo={state.hostInfo}
+        hostName={state.hostName}
         currentPhase={state.currentPhase}
         isMock={isMock}
         isHost={Boolean(state.isHost)}
@@ -317,6 +382,7 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
           myRole={state.myRole}
           roleCounts={state.roleCounts}
           combatLog={state.combatLog}
+          structuredCombatLog={state.structuredCombatLog}
           deckCount={state.deckCount}
           discardCount={state.discardCount}
           topDiscard={state.topDiscard || (isMock ? initialMockState.topDiscard : undefined)}
@@ -399,8 +465,6 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
         onSendLobbyReset={liveSession.sendLobbyReset}
         onCancelSelection={selection.handleCancelSelection}
         onShowError={ui.showError}
-        onReleaseHeldHandCard={animations.releaseHandCard}
-        onEnqueueFlight={animations.enqueueFlight}
         mockHandlers={mockSession}
       />
     </div>

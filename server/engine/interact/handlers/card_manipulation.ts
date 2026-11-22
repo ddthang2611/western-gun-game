@@ -190,6 +190,9 @@ export class CardManipulation {
     ]);
 
     const events: DomainEvent[] = [];
+    if (!fromGreenEntryId) {
+      SkillHooks.checkSuzyLafayette(state, player, events);
+    }
 
     // Check Apache Kid card immunity
     if (SkillHooks.isImmuneToCard(targetPlayer, card, player, state)) {
@@ -215,8 +218,6 @@ export class CardManipulation {
           },
           timestamp: Date.now(),
         });
-      } else {
-        SkillHooks.checkSuzyLafayette(state, player, events);
       }
       return { success: true, events };
     }
@@ -258,8 +259,6 @@ export class CardManipulation {
         },
         timestamp: Date.now(),
       });
-    } else {
-      SkillHooks.checkSuzyLafayette(state, player, events);
     }
 
     return { success: true, events };

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import type { ExpansionOptionInfo, LobbyState } from "../../types/game";
+import { LanguageSwitcher, useI18n } from "../../i18n";
 import { useGameSocket } from "../../hooks/useGameSocket";
 import { Button, Modal } from "../../components/ui";
 import { LobbyPlayerList } from "./components/LobbyPlayerList";
@@ -27,6 +28,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   onLogout,
   onKicked,
 }) => {
+  const { t, tError } = useI18n();
   const { isConnected, sendMessage, subscribe, disconnectSocket } = useGameSocket();
 
   const [roomNameInput, setRoomNameInput] = useState("Saloon Table #1");
@@ -48,13 +50,15 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   const onKickedRef = useRef(onKicked);
   const initialPlayerIdRef = useRef(currentUser?.playerId || "");
   const myPlayerIdRef = useRef(currentUser?.playerId || "");
+  const tErrorRef = useRef(tError);
 
   useEffect(() => {
     autoJoinInGameRef.current = autoJoinInGame;
     onStartGameRef.current = onStartGame;
     onLogoutRef.current = onLogout;
     onKickedRef.current = onKicked;
-  }, [autoJoinInGame, onStartGame, onLogout, onKicked]);
+    tErrorRef.current = tError;
+  }, [autoJoinInGame, onStartGame, onLogout, onKicked, tError]);
 
   // Redirect unauthenticated entry back to AuthScreen
   useEffect(() => {
@@ -204,10 +208,11 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
         }
 
         case "ERROR": {
-          const message =
-            typeof msg.payload?.message === "string"
-              ? msg.payload.message
-              : "An unexpected error occurred.";
+          const message = tErrorRef.current({
+            code: typeof msg.payload?.code === "string" ? msg.payload.code : undefined,
+            message: typeof msg.payload?.message === "string" ? msg.payload.message : undefined,
+            params: (msg.payload?.params as Record<string, string | number>) || undefined,
+          });
           setErrorMessage(message);
           break;
         }
@@ -330,10 +335,10 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
         <div className="lobby-screen__container">
           <div className="lobby-screen__auth-card lobby-screen__room-entry">
             <h2 className="lobby-screen__card-header">
-              {isSessionLocked ? "Session Locked" : "Authentication Required"}
+              {isSessionLocked ? t("lobby.sessionLocked") : t("lobby.authRequired")}
             </h2>
             <p className="lobby-screen__subtitle">
-              {errorMessage || "Sign in to access the Saloon Lobby."}
+              {errorMessage || t("lobby.signInHint")}
             </p>
             {onLogout && (
               <button
@@ -341,7 +346,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                 onClick={() => void handleLogoutClick()}
                 className="lobby-screen__btn lobby-screen__btn--ready lobby-screen__btn--full"
               >
-                Return to Sign In
+                {t("lobby.returnSignIn")}
               </button>
             )}
           </div>
@@ -362,7 +367,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               width={28}
               height={28}
             />
-            <h1 className="lobby-screen__title">WESTERN GUN - LOBBY</h1>
+            <h1 className="lobby-screen__title">{t("lobby.title")}</h1>
             <div className="lobby-screen__connection-badge">
               <span
                 className={`lobby-screen__status-dot ${
@@ -371,27 +376,28 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                     : "lobby-screen__status-dot--offline"
                 }`}
               />
-              <span>{isConnected ? "Server: Connected" : "Server: Reconnecting..."}</span>
+              <span>{isConnected ? t("lobby.connected") : t("lobby.reconnecting")}</span>
             </div>
           </div>
 
           <div className="lobby-screen__header-actions">
+            <LanguageSwitcher compact showBilingualToggle={false} />
             <a href="/dev-test" className="lobby-screen__dev-link">
-              Dev UI Sandbox
+              {t("lobby.devSandbox")}
             </a>
             <button
               type="button"
               onClick={() => void handleLogoutClick()}
               className="lobby-screen__logout-btn"
             >
-              Leave Lobby
+              {t("lobby.logout")}
             </button>
           </div>
         </header>
 
         {isDbLocked && (
           <div role="status" className="lobby-screen__lock-notice">
-            Catalog database is locked. Waiting for database unlock before starting a match.
+            {t("lobby.dbLockedNotice")}
           </div>
         )}
 
@@ -403,56 +409,60 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
 
         {!lobbyState ? (
           <div className="lobby-screen__auth-card lobby-screen__room-entry">
-            <h2 className="lobby-screen__card-header">Connecting to Saloon</h2>
-            <p className="lobby-screen__subtitle">
-              Synchronizing room state from server...
-            </p>
+            <h2 className="lobby-screen__card-header">{t("lobby.connecting")}</h2>
+            <p className="lobby-screen__subtitle">{t("lobby.syncing")}</p>
             <button
               type="button"
               onClick={() => sendMessage("SYNC_LOBBY")}
               className="lobby-screen__btn lobby-screen__btn--ready lobby-screen__btn--full"
             >
-              Retry Sync
+              {t("lobby.retrySync")}
             </button>
           </div>
         ) : !lobbyState.roomExists ? (
           <div className="lobby-screen__auth-card lobby-screen__room-entry">
-            <h2 className="lobby-screen__card-header">Create Saloon Table</h2>
-            <p className="lobby-screen__subtitle">
-              No table is open right now. Create a room to become Host and configure match rules.
-            </p>
+            <h2 className="lobby-screen__card-header">{t("lobby.createTitle")}</h2>
+            <p className="lobby-screen__subtitle">{t("lobby.createDesc")}</p>
             <form onSubmit={handleCreateRoom} className="lobby-screen__form">
               <div className="lobby-screen__form-group">
                 <label htmlFor="lobby-room-name" className="lobby-screen__label">
-                  Room Name:
+                  {t("lobby.roomNameLabel")}
                 </label>
                 <input
                   id="lobby-room-name"
                   type="text"
                   value={roomNameInput}
                   onChange={(e) => setRoomNameInput(e.target.value)}
-                  placeholder="Saloon Table #1"
+                  placeholder={t("lobby.roomNamePlaceholder")}
                   className="lobby-screen__input"
                   maxLength={32}
                 />
               </div>
               <button type="submit" className="lobby-screen__btn lobby-screen__btn--start">
-                Create Room
+                {t("lobby.createBtn")}
               </button>
             </form>
           </div>
         ) : !me ? (
           <div className="lobby-screen__auth-card lobby-screen__room-entry">
             <h2 className="lobby-screen__card-header">
-              {lobbyState.roomName || "Saloon Table #1"}
+              {lobbyState.roomName || t("lobby.roomNamePlaceholder")}
             </h2>
             <p className="lobby-screen__subtitle">
-              Host:{" "}
-              <strong>
-                {lobbyState.players.find((p) => p.id === lobbyState.hostId)?.name || "Unknown"}
-              </strong>{" "}
-              | Players: {activeCount} / {lobbyState.maxPlayers || 8} | Status:{" "}
-              {lobbyState.status === "in_game" ? "Match in Progress" : "Waiting"}
+              {t("common.host", {
+                name:
+                  lobbyState.players.find((p) => p.id === lobbyState.hostId)?.name ||
+                  t("common.unknown"),
+              })}{" "}
+              |{" "}
+              {t("lobby.roomMeta", {
+                count: activeCount,
+                max: lobbyState.maxPlayers || 8,
+                status:
+                  lobbyState.status === "in_game"
+                    ? t("lobby.matchInProgressStatus")
+                    : t("lobby.statusWaiting"),
+              })}
             </p>
             <button
               type="button"
@@ -462,7 +472,9 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
               onClick={handleJoinRoom}
               className="lobby-screen__btn lobby-screen__btn--ready lobby-screen__btn--full"
             >
-              {lobbyState.status === "in_game" ? "Match Already in Progress" : "Join Room"}
+              {lobbyState.status === "in_game"
+                ? t("lobby.matchInProgressBtn")
+                : t("lobby.joinRoom")}
             </button>
           </div>
         ) : (
@@ -498,7 +510,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                     onClick={onStartGame}
                     className="lobby-screen__btn lobby-screen__btn--start"
                   >
-                    Join Game Table
+                    {t("lobby.joinTable")}
                   </button>
                   {isHost && (
                     <>
@@ -508,7 +520,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                         onClick={() => setConfirmAction("delete_match")}
                         className="lobby-screen__btn lobby-screen__btn--danger"
                       >
-                        Delete Match
+                        {t("lobby.deleteMatch")}
                       </button>
                       <button
                         type="button"
@@ -516,7 +528,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                         onClick={() => setConfirmAction("delete_room")}
                         className="lobby-screen__btn lobby-screen__btn--danger-outline"
                       >
-                        Delete Room
+                        {t("lobby.deleteRoom")}
                       </button>
                     </>
                   )}
@@ -532,7 +544,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                         me.isReady ? "lobby-screen__btn--unready" : "lobby-screen__btn--ready"
                       }`}
                     >
-                      {me.isReady ? "Cancel Ready" : "I am Ready!"}
+                      {me.isReady ? t("lobby.cancelReady") : t("lobby.toggleReady")}
                     </button>
                   )}
 
@@ -540,7 +552,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                     <div className="lobby-screen__start-group">
                       {unreadyNames.length > 0 && (
                         <span className="lobby-screen__start-hint">
-                          Waiting for Ready: {unreadyNames.join(", ")}
+                          {t("lobby.waitingForReady", { names: unreadyNames.join(", ") })}
                         </span>
                       )}
                       <button
@@ -550,8 +562,8 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                         className="lobby-screen__btn lobby-screen__btn--start"
                       >
                         {activeCount >= minPlayers
-                          ? `Start Match (${activeCount} Ready)`
-                          : `Start Match (${activeCount}/${minPlayers})`}
+                          ? t("lobby.startMatchReady", { count: activeCount })
+                          : t("lobby.startMatchNeed", { count: activeCount, min: minPlayers })}
                       </button>
                     </div>
                   )}
@@ -563,7 +575,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                       onClick={handleLeaveRoom}
                       className="lobby-screen__btn lobby-screen__btn--leave"
                     >
-                      Leave Room
+                      {t("lobby.leaveRoom")}
                     </button>
                   )}
 
@@ -574,7 +586,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                       onClick={() => setConfirmAction("delete_room")}
                       className="lobby-screen__btn lobby-screen__btn--danger-outline"
                     >
-                      Delete Room
+                      {t("lobby.deleteRoom")}
                     </button>
                   )}
                 </>
@@ -587,22 +599,28 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
       {confirmAction !== null && (
         <Modal isOpen={true} size="medium" onClose={() => setConfirmAction(null)}>
           <Modal.Header
-            title={confirmAction === "delete_match" ? "Delete Active Match?" : "Delete Saloon Room?"}
-            subtitle="Host Room Management"
+            title={
+              confirmAction === "delete_match"
+                ? t("lobby.deleteMatchTitle")
+                : t("lobby.deleteRoomTitle")
+            }
+            subtitle={t("lobby.hostManagement")}
           />
           <Modal.Body>
             <p>
               {confirmAction === "delete_match"
-                ? "This will immediately abort the active match, wipe all saved match state and combat logs, and return all players to the waiting room."
-                : "This will permanently close the room, remove all players from the table, and clear any active match data so a new room can be created."}
+                ? t("lobby.deleteMatchDesc")
+                : t("lobby.deleteRoomDesc")}
             </p>
           </Modal.Body>
           <Modal.Footer>
             <Button variant="secondary" onClick={() => setConfirmAction(null)}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button variant="danger" onClick={handleConfirmHostAction}>
-              {confirmAction === "delete_match" ? "Delete Match" : "Delete Room"}
+              {confirmAction === "delete_match"
+                ? t("lobby.deleteMatch")
+                : t("lobby.deleteRoom")}
             </Button>
           </Modal.Footer>
         </Modal>

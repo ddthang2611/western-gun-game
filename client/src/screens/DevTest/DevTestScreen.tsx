@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import type { Character } from "../../types/game";
+import { LanguageSwitcher } from "../../i18n";
 import { BulletMeter } from "../../components/game";
 import { allMockCharacters } from "@data/mock/mockCharacters";
 import { initialMyHeroes } from "@data/mock/mockGameTable";
@@ -146,6 +147,7 @@ export const DevTestScreen: React.FC = () => {
             </>
           )}
 
+          <LanguageSwitcher compact />
           <a href="/" className="dev-test__home-link">
             Normal Auth (/)
           </a>

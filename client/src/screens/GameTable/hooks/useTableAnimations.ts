@@ -137,7 +137,6 @@ export function useTableAnimations(
 ) {
   const [flyingCards, setFlyingCards] = useState<FlyingCardItem[]>([]);
   const [concealedHandCardIds, setConcealedHandCardIds] = useState<string[]>([]);
-  const [heldHandCardIds, setHeldHandCardIds] = useState<string[]>([]);
   const [returningInPlayCardIds, setReturningInPlayCardIds] = useState<string[]>([]);
   const [vfxBeams, setVfxBeams] = useState<VfxBeam[]>([]);
   const [landedEntryIds, setLandedEntryIds] = useState<string[]>(() =>
@@ -185,7 +184,6 @@ export function useTableAnimations(
     timersRef.current = [];
     setFlyingCards([]);
     setConcealedHandCardIds([]);
-    setHeldHandCardIds([]);
     setReturningInPlayCardIds([]);
     setVfxBeams([]);
     setLandedEntryIds([]);
@@ -514,27 +512,6 @@ export function useTableAnimations(
     };
   }, [arenaChain, enqueueFlight, scheduleTimeout, triggerVfx]);
 
-  const holdHandCard = useCallback((cardId: string) => {
-    if (!cardId || cardId === "SECRET") return;
-    setHeldHandCardIds((prev) => (prev.includes(cardId) ? prev : [...prev, cardId]));
-  }, []);
-
-  const releaseHandCard = useCallback(
-    (cardId: string, delayMs = 0) => {
-      if (!cardId) return;
-      const clear = () => {
-        setHeldHandCardIds((prev) => prev.filter((id) => id !== cardId));
-      };
-      if (delayMs <= 0) {
-        clear();
-      } else {
-        scheduleTimeout(clear, delayMs);
-      }
-    },
-    [scheduleTimeout]
-  );
-
-  // Cards currently placed onto board via Card Arena remain concealed in target slot until placement flight lands
   const concealedInPlayCardIds = useMemo(() => {
     const ids = new Set<string>(returningInPlayCardIds);
     for (const entry of arenaChain?.entries || []) {
@@ -562,9 +539,9 @@ export function useTableAnimations(
   const combinedHiddenHandIds = useMemo(
     () =>
       Array.from(
-        new Set([...concealedHandCardIds, ...heldHandCardIds, ...activeRevealHandIds])
+        new Set([...concealedHandCardIds, ...activeRevealHandIds])
       ),
-    [concealedHandCardIds, heldHandCardIds, activeRevealHandIds]
+    [concealedHandCardIds, activeRevealHandIds]
   );
 
   const landedSet = useMemo(() => new Set(landedEntryIds), [landedEntryIds]);
@@ -605,8 +582,6 @@ export function useTableAnimations(
     scheduleTimeout,
     enqueueFlight,
     concealHandCards,
-    holdHandCard,
-    releaseHandCard,
     triggerVfx,
     resetAnimations,
   };

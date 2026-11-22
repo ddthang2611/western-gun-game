@@ -7,13 +7,14 @@ import {
   TargetSelectionEntry,
 } from "../../types/actions";
 import { DeckManager } from "../../deck/deck_manager";
-import { TargetArea } from "../../combat/target_validator";
 import { EventEngine } from "../../events/event_engine";
 import { SkillHooks } from "../skill_hooks";
 import { AoePipeline } from "../pipeline/aoe_pipeline";
 import { AtomicEffects } from "../primitives/atomic_effects";
 import { ClockwiseTraversal } from "../primitives/clockwise_traversal";
 import { ArenaChainManager } from "../../arena/arena_chain_manager";
+import { BrawlCardPickState } from "../interact_types";
+import { countPlayerTotalCards, hasTargetCardInArea } from "../../utils/inventory";
 
 export class AoeActions {
   // Consume hand card safely
@@ -258,6 +259,19 @@ export class AoeActions {
       "ALL_PLAYERS",
       (target) => {
         const stepEvents: DomainEvent[] = [];
+        if (SkillHooks.isImmuneToCard(target, card, player, state)) {
+          stepEvents.push({
+            type: "APACHE_KID_IMMUNITY",
+            payload: {
+              sourcePlayerId: player.id,
+              targetPlayerId: target.id,
+              playerId: target.id,
+              card,
+            },
+            timestamp: Date.now(),
+          });
+          return stepEvents;
+        }
         AtomicEffects.applyHeal(state, target, 1, card, stepEvents, deckManager);
         return stepEvents;
       }
@@ -278,44 +292,106 @@ export class AoeActions {
     };
   }
 
-  // Handle GENERAL STORE draft pool
-  public static handleGeneralStore(
+  // Resolve BRAWL targets sequentially
+  public static resolveBrawlTargets(
     state: SimulationState,
     player: EnginePlayer,
     card: EngineCard,
-    cardIndex: number,
+    command?: PlayerCommand,
     deckManager?: DeckManager
   ): CommandResult {
-    const blockReason = EventEngine.shouldBlockPlayCard(state, player, card);
-    if (blockReason) {
-      return { success: false, message: blockReason };
+    const selectionMap = new Map<string, TargetSelectionEntry>();
+    for (const sel of command?.targetSelections || []) {
+      selectionMap.set(sel.targetPlayerId, sel);
     }
 
-    if (!this.consumeHandCard(state, player, card, cardIndex, deckManager)) {
-      return { success: false, message: "Card not in hand." };
+    const events: DomainEvent[] = [];
+    const targets = ClockwiseTraversal.getTraversalList(
+      state,
+      player.id,
+      "ALL_OTHERS"
+    );
+    const remainingTargetIds: string[] = [];
+    let affectedCount = 0;
+
+    for (const target of targets) {
+      if (SkillHooks.isImmuneToCard(target, card, player, state)) {
+        events.push({
+          type: "APACHE_KID_IMMUNITY",
+          payload: {
+            sourcePlayerId: player.id,
+            targetPlayerId: target.id,
+            card,
+          },
+          timestamp: Date.now(),
+        });
+        continue;
+      }
+
+      if (countPlayerTotalCards(target) === 0) {
+        continue;
+      }
+
+      const sel = selectionMap.get(target.id);
+      if (
+        sel?.targetArea &&
+        hasTargetCardInArea(target, sel.targetArea, sel.targetCardId)
+      ) {
+        const destroyed = AtomicEffects.destroyCard(
+          state,
+          player,
+          target,
+          sel.targetArea,
+          sel.targetCardId,
+          events,
+          deckManager
+        );
+        if (destroyed) {
+          affectedCount += 1;
+          continue;
+        }
+      }
+
+      remainingTargetIds.push(target.id);
     }
 
-    ArenaChainManager.appendBatch(state, [
-      {
-        kind: "PLAYED_CARD",
-        card,
-        actorPlayerId: player.id,
-        actorPlayerName: player.name,
-        originZone: "HAND",
-        destinationZone: "DISCARD",
-        actionLabel: card.name,
-      },
-    ]);
+    if (remainingTargetIds.length === 0) {
+      events.push({
+        type: "BRAWL_RESOLVED",
+        payload: {
+          sourcePlayerId: player.id,
+          sourcePlayerName: player.name,
+          card,
+          affectedCount,
+        },
+        timestamp: Date.now(),
+      });
+      return { success: true, events };
+    }
 
-    const suzyEvents: DomainEvent[] = [];
-    SkillHooks.checkSuzyLafayette(state, player, suzyEvents);
-
-    const res = AoePipeline.executeDraftStoreAoe(state, player, card, deckManager);
-    return {
-      success: res.success,
-      message: res.message,
-      events: [...suzyEvents, ...(res.events || [])],
+    const brawlState: BrawlCardPickState = {
+      type: "BRAWL_CARD_PICK",
+      actorPlayerId: player.id,
+      sourceCard: card,
+      remainingTargetIds,
+      currentTargetId: remainingTargetIds[0],
+      affectedCount,
     };
+    state.activeChain.push(brawlState);
+
+    events.push({
+      type: "BRAWL_PICK_STARTED",
+      payload: {
+        sourcePlayerId: player.id,
+        sourcePlayerName: player.name,
+        currentTargetId: remainingTargetIds[0],
+        remainingCount: remainingTargetIds.length,
+        card,
+      },
+      timestamp: Date.now(),
+    });
+
+    return { success: true, events };
   }
 
   // Handle BRAWL multi-target destruction
@@ -384,86 +460,14 @@ export class AoeActions {
         : []),
     ]);
 
-    const selectionMap = new Map<string, TargetSelectionEntry>();
-    for (const sel of command?.targetSelections || []) {
-      selectionMap.set(sel.targetPlayerId, sel);
-    }
+    const suzyEvents: DomainEvent[] = [];
+    SkillHooks.checkSuzyLafayette(state, player, suzyEvents);
 
-    const events: DomainEvent[] = [];
-    const targets = ClockwiseTraversal.getTraversalList(
-      state,
-      player.id,
-      "ALL_OTHERS"
-    );
-    const fallbackAreas: TargetArea[] = [
-      "HAND",
-      "EQUIPMENT",
-      "GREEN",
-      "JUDGEMENT",
-    ];
-    let affectedCount = 0;
-
-    for (const target of targets) {
-      if (SkillHooks.isImmuneToCard(target, card, player, state)) {
-        events.push({
-          type: "APACHE_KID_IMMUNITY",
-          payload: {
-            sourcePlayerId: player.id,
-            targetPlayerId: target.id,
-            card,
-          },
-          timestamp: Date.now(),
-        });
-        continue;
-      }
-
-      const sel = selectionMap.get(target.id);
-      let destroyed: EngineCard | null = null;
-
-      if (sel?.targetArea) {
-        destroyed = AtomicEffects.destroyCard(
-          state,
-          player,
-          target,
-          sel.targetArea,
-          sel.targetCardId,
-          events,
-          deckManager
-        );
-      }
-
-      if (!destroyed) {
-        for (const area of fallbackAreas) {
-          destroyed = AtomicEffects.destroyCard(
-            state,
-            player,
-            target,
-            area,
-            undefined,
-            events,
-            deckManager
-          );
-          if (destroyed) break;
-        }
-      }
-
-      if (destroyed) {
-        affectedCount += 1;
-      }
-    }
-
-    events.push({
-      type: "BRAWL_RESOLVED",
-      payload: {
-        sourcePlayerId: player.id,
-        sourcePlayerName: player.name,
-        card,
-        affectedCount,
-      },
-      timestamp: Date.now(),
-    });
-
-    SkillHooks.checkSuzyLafayette(state, player, events);
-    return { success: true, events };
+    const res = this.resolveBrawlTargets(state, player, card, command, deckManager);
+    return {
+      success: res.success,
+      message: res.message,
+      events: [...suzyEvents, ...(res.events || [])],
+    };
   }
 }

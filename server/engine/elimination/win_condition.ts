@@ -7,6 +7,8 @@ export interface WinEvaluationResult {
   gameOver: boolean;
   winner: WinningFaction;
   message?: string;
+  outcomeCode?: string;
+  outcomeParams?: Record<string, string | number | null>;
 }
 
 export class WinConditionEvaluator {
@@ -31,11 +33,13 @@ export class WinConditionEvaluator {
   ): WinEvaluationResult {
     const state = stateOrPlayers instanceof Map ? undefined : stateOrPlayers;
 
-    if (state?.gameOver?.winner) {
+    if (state?.gameOver) {
       return {
         gameOver: true,
         winner: state.gameOver.winner as WinningFaction,
         message: state.gameOver.message,
+        outcomeCode: state.gameOver.outcomeCode,
+        outcomeParams: state.gameOver.outcomeParams,
       };
     }
 
@@ -54,6 +58,12 @@ export class WinConditionEvaluator {
           return {
             gameOver: true,
             winner: killer.role,
+            outcomeCode: "OUTCOME_3P_TARGET_KILL",
+            outcomeParams: {
+              killerName: killer.name,
+              killerRole: killer.role,
+              victimRole: lastKill.victimRole,
+            },
             message: `Game over! ${killer.name} (${killer.role}) eliminated their target (${lastKill.victimRole}) and wins!`,
           };
         }
@@ -64,6 +74,11 @@ export class WinConditionEvaluator {
         return {
           gameOver: true,
           winner: survivor.role,
+          outcomeCode: "OUTCOME_3P_LAST_SURVIVOR",
+          outcomeParams: {
+            survivorName: survivor.name,
+            survivorRole: survivor.role,
+          },
           message: `Game over! ${survivor.name} (${survivor.role}) is the last survivor and wins!`,
         };
       }
@@ -72,6 +87,7 @@ export class WinConditionEvaluator {
         return {
           gameOver: true,
           winner: null,
+          outcomeCode: "OUTCOME_NO_SURVIVORS",
           message: "Game over! No survivors remain.",
         };
       }
@@ -89,6 +105,7 @@ export class WinConditionEvaluator {
         return {
           gameOver: true,
           winner: "RENEGADE",
+          outcomeCode: "OUTCOME_RENEGADE_WIN",
           message: "The lone Renegade eliminated the Sheriff in a final standoff and wins!",
         };
       }
@@ -96,6 +113,7 @@ export class WinConditionEvaluator {
       return {
         gameOver: true,
         winner: "OUTLAWS",
+        outcomeCode: "OUTCOME_OUTLAWS_WIN",
         message: "The Sheriff has been killed. The Outlaws win!",
       };
     }
@@ -104,6 +122,7 @@ export class WinConditionEvaluator {
       return {
         gameOver: true,
         winner: "SHERIFF_AND_DEPUTIES",
+        outcomeCode: "OUTCOME_SHERIFF_AND_DEPUTIES_WIN",
         message: "All Outlaws and Renegades have been eliminated. Law and Order prevails!",
       };
     }

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Card, Player } from "../../../types/game";
 import type { CardPickerConfig } from "../utils/tableSelectors";
 
 // Manage toast notice and modal UI state
@@ -34,24 +33,6 @@ export function useTableUi() {
     }, 4000);
   }, []);
 
-  const openElGringoPicker = useCallback(
-    (attacker: Player, attackerId: string, stolenCard?: Card) => {
-      setCardPickerConfig({
-        isOpen: true,
-        targetPlayer: {
-          ...attacker,
-          handCount: Math.max(1, attacker.handCount),
-        },
-        action: "steal",
-        cardName: "EL GRINGO",
-        allowHand: true,
-        allowInPlay: false,
-        stealContext: { mode: "EL_GRINGO", attackerId, stolenCard },
-      });
-    },
-    []
-  );
-
   const resetUi = useCallback(() => {
     setShowCharSelectModal(false);
     setIsCombatLogModalOpen(false);
@@ -70,7 +51,6 @@ export function useTableUi() {
     setIsDeleteMatchConfirmOpen,
     cardPickerConfig,
     setCardPickerConfig,
-    openElGringoPicker,
     resetUi,
   };
 }

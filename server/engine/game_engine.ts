@@ -71,6 +71,8 @@ export class GameEngine {
       is3PlayerVariant: false,
       expansions: options?.expansions
         ? [...options.expansions]
+        : eventCards.length > 0
+        ? ["base", "dodge_city", "high_noon", "fistful_of_cards"]
         : filterActiveExpansions(["base", "dodge_city", "high_noon", "fistful_of_cards"]),
       players: new Map<string, EnginePlayer>(),
       drawDeck: DeckManager.shuffleCards(this.allRawCards),
@@ -469,7 +471,7 @@ export class GameEngine {
         };
       }
 
-      const res = InteractManager.resolveActivateGreenCard(this.state, command, events);
+      const res = InteractManager.resolveActivateGreenCard(this.state, command);
       this.mergeResultEvents(events, res.events);
       if (!res.success) {
         return { success: false, message: res.message, events };

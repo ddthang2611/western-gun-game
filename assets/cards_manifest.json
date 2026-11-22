@@ -1,6 +1,5 @@
 {
   "ranks": {
-    "A": "assets/components/ranks/rank_A.png",
     "2": "assets/components/ranks/rank_2.png",
     "3": "assets/components/ranks/rank_3.png",
     "4": "assets/components/ranks/rank_4.png",
@@ -10,6 +9,7 @@
     "8": "assets/components/ranks/rank_8.png",
     "9": "assets/components/ranks/rank_9.png",
     "10": "assets/components/ranks/rank_10.png",
+    "A": "assets/components/ranks/rank_A.png",
     "J": "assets/components/ranks/rank_J.png",
     "Q": "assets/components/ranks/rank_Q.png",
     "K": "assets/components/ranks/rank_K.png"
@@ -92,7 +92,7 @@
       "category": "reaction",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Cancel 1 BANG! shot at you.",
+      "desc_en": "Cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_base_missed.png",
       "clean_template_image": "assets/components/clean_templates/base_missed.png",
       "count": 12
@@ -106,7 +106,7 @@
       "category": "heal",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Regain 1 life point (no effect with only 2 players left).",
+      "desc_en": "Regain 1 life point, or play when reduced to 0 HP to survive (no effect with only 2 players left).",
       "effect_icon": "assets/components/effect_icons/icon_base_beer.png",
       "clean_template_image": "assets/components/clean_templates/base_beer.png",
       "count": 6
@@ -120,7 +120,7 @@
       "category": "control",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Force any player to discard 1 card (from hand or in play).",
+      "desc_en": "Force any player to remove 1 card (from hand or in play).",
       "effect_icon": "assets/components/effect_icons/icon_base_cat_balou.png",
       "clean_template_image": "assets/components/clean_templates/base_cat_balou.png",
       "count": 4
@@ -134,7 +134,7 @@
       "category": "control",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Draw 1 card from a player at distance 1.",
+      "desc_en": "Steal 1 card from a player at distance 1.",
       "effect_icon": "assets/components/effect_icons/icon_base_panic.png",
       "clean_template_image": "assets/components/clean_templates/base_panic.png",
       "count": 4
@@ -148,7 +148,7 @@
       "category": "action",
       "range": null,
       "desc_type": "text",
-      "desc_en": "A target player discards a BANG!, then you, etc. First player failing to discard a BANG! loses 1 life point.",
+      "desc_en": "Challenge any 1 player: starting with target, alternate playing BANG!; first unable loses 1 life point.",
       "effect_icon": null,
       "clean_template_image": "assets/components/clean_templates/base_duel.png",
       "count": 3
@@ -190,7 +190,7 @@
       "category": "global",
       "range": null,
       "desc_type": "text",
-      "desc_en": "Reveal as many cards as players. Each player draws one.",
+      "desc_en": "Reveal as many cards as living players; in turn order, each player chooses 1 card to take.",
       "effect_icon": null,
       "clean_template_image": "assets/components/clean_templates/base_general_store.png",
       "count": 2
@@ -204,7 +204,7 @@
       "category": "aoe",
       "range": null,
       "desc_type": "text",
-      "desc_en": "All other players discard a BANG! or lose 1 life point.",
+      "desc_en": "All other players must respond with a BANG! card or lose 1 life point.",
       "effect_icon": null,
       "clean_template_image": "assets/components/clean_templates/base_indians.png",
       "count": 2
@@ -218,7 +218,7 @@
       "category": "aoe",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Shoot a BANG! to all other players regardless of distance.",
+      "desc_en": "Shoot a BANG! at all other players regardless of distance (does not count toward BANG! limit).",
       "effect_icon": "assets/components/effect_icons/icon_base_gatling.png",
       "clean_template_image": "assets/components/clean_templates/base_gatling.png",
       "count": 1
@@ -232,7 +232,7 @@
       "category": "heal",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "All players in play regain 1 life point.",
+      "desc_en": "Every living player (including you) regains 1 life point.",
       "effect_icon": "assets/components/effect_icons/icon_base_saloon.png",
       "clean_template_image": "assets/components/clean_templates/base_saloon.png",
       "count": 1
@@ -246,7 +246,7 @@
       "category": "equipment",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "When targeted by BANG!, Draw!: on Hearts, you are Missed!",
+      "desc_en": "When targeted by BANG!, check the top card: on Hearts, the shot is canceled.",
       "effect_icon": "assets/components/effect_icons/icon_base_barrel.png",
       "clean_template_image": "assets/components/clean_templates/base_barrel.png",
       "count": 2
@@ -260,7 +260,7 @@
       "category": "equipment",
       "range": null,
       "desc_type": "hybrid_left_icon",
-      "desc_en": "Draw! on 2-9 of Spades: Lose 3 life points. Else pass the Dynamite on your left.",
+      "desc_en": "At turn start, check the top card: on 2-9 Spades, lose 3 life points; else pass clockwise.",
       "effect_icon": "assets/components/effect_icons/icon_base_dynamite.png",
       "clean_template_image": "assets/components/clean_templates/base_dynamite.png",
       "count": 1
@@ -274,7 +274,7 @@
       "category": "equipment",
       "range": null,
       "desc_type": "hybrid_left_icon",
-      "desc_en": "Draw! on Hearts: Discard the Jail, play normally. Else discard the Jail and skip your turn.",
+      "desc_en": "Play on any non-Sheriff player. At their turn start, check the top card: on Hearts, remove Jail and play; else remove Jail and skip turn.",
       "effect_icon": "assets/components/effect_icons/icon_base_jail.png",
       "clean_template_image": "assets/components/clean_templates/base_jail.png",
       "count": 3
@@ -302,7 +302,7 @@
       "category": "equipment",
       "range": null,
       "desc_type": "text",
-      "desc_en": "You view others at distance -1.",
+      "desc_en": "You view others at distance -1 (minimum 1).",
       "effect_icon": null,
       "clean_template_image": "assets/components/clean_templates/base_scope.png",
       "count": 1
@@ -316,7 +316,7 @@
       "category": "weapon",
       "range": 1,
       "desc_type": "hybrid_volcanic",
-      "desc_en": "You can play any number of BANG! (Range 1)",
+      "desc_en": "Weapon with Range 1; you can play any number of BANG! cards on your turn.",
       "effect_icon": "assets/components/effect_icons/icon_base_volcanic.png",
       "clean_template_image": "assets/components/clean_templates/base_volcanic.png",
       "count": 2
@@ -330,7 +330,7 @@
       "category": "weapon",
       "range": 2,
       "desc_type": "icon",
-      "desc_en": "Weapon with Range 2.",
+      "desc_en": "Weapon with Range 2 (replaces any equipped gun).",
       "effect_icon": "assets/components/effect_icons/icon_base_schofield.png",
       "clean_template_image": "assets/components/clean_templates/base_schofield.png",
       "count": 3
@@ -344,7 +344,7 @@
       "category": "weapon",
       "range": 3,
       "desc_type": "icon",
-      "desc_en": "Weapon with Range 3.",
+      "desc_en": "Weapon with Range 3 (replaces any equipped gun).",
       "effect_icon": "assets/components/effect_icons/icon_base_remington.png",
       "clean_template_image": "assets/components/clean_templates/base_remington.png",
       "count": 1
@@ -358,7 +358,7 @@
       "category": "weapon",
       "range": 4,
       "desc_type": "icon",
-      "desc_en": "Weapon with Range 4.",
+      "desc_en": "Weapon with Range 4 (replaces any equipped gun).",
       "effect_icon": "assets/components/effect_icons/icon_base_carabine.png",
       "clean_template_image": "assets/components/clean_templates/base_carabine.png",
       "count": 1
@@ -372,7 +372,7 @@
       "category": "weapon",
       "range": 5,
       "desc_type": "icon",
-      "desc_en": "Weapon with Range 5.",
+      "desc_en": "Weapon with Range 5 (replaces any equipped gun).",
       "effect_icon": "assets/components/effect_icons/icon_base_winchester.png",
       "clean_template_image": "assets/components/clean_templates/base_winchester.png",
       "count": 1
@@ -400,7 +400,7 @@
       "category": "reaction",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Cancel 1 BANG! shot at you.",
+      "desc_en": "Cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_dc_missed.png",
       "clean_template_image": "assets/components/clean_templates/dc_missed.png",
       "count": 1
@@ -414,7 +414,7 @@
       "category": "heal",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Regain 1 life point.",
+      "desc_en": "Regain 1 life point, or play when reduced to 0 HP to survive (no effect with only 2 players left).",
       "effect_icon": "assets/components/effect_icons/icon_dc_beer.png",
       "clean_template_image": "assets/components/clean_templates/dc_beer.png",
       "count": 2
@@ -428,7 +428,7 @@
       "category": "control",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Force any player to discard 1 card.",
+      "desc_en": "Force any player to remove 1 card (from hand or in play).",
       "effect_icon": "assets/components/effect_icons/icon_dc_cat_balou.png",
       "clean_template_image": "assets/components/clean_templates/dc_cat_balou.png",
       "count": 1
@@ -442,7 +442,7 @@
       "category": "control",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Draw 1 card from a player at distance 1.",
+      "desc_en": "Steal 1 card from a player at distance 1.",
       "effect_icon": "assets/components/effect_icons/icon_dc_panic.png",
       "clean_template_image": "assets/components/clean_templates/dc_panic.png",
       "count": 1
@@ -456,7 +456,7 @@
       "category": "global",
       "range": null,
       "desc_type": "text",
-      "desc_en": "Reveal as many cards as players. Each player draws one.",
+      "desc_en": "Reveal as many cards as living players; in turn order, each player chooses 1 card to take.",
       "effect_icon": null,
       "clean_template_image": "assets/components/clean_templates/dc_general_store.png",
       "count": 1
@@ -470,7 +470,7 @@
       "category": "aoe",
       "range": null,
       "desc_type": "text",
-      "desc_en": "All other players discard a BANG! or lose 1 life point.",
+      "desc_en": "All other players must respond with a BANG! card or lose 1 life point.",
       "effect_icon": null,
       "clean_template_image": "assets/components/clean_templates/dc_indians.png",
       "count": 1
@@ -484,7 +484,7 @@
       "category": "reaction",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Cancel 1 BANG! and draw 1 card from the deck.",
+      "desc_en": "Cancel 1 BANG! targeting you and draw 1 card from the deck.",
       "effect_icon": "assets/components/effect_icons/icon_dc_dodge.png",
       "clean_template_image": "assets/components/clean_templates/dc_dodge.png",
       "count": 2
@@ -498,7 +498,7 @@
       "category": "action",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Shoot 1 target at distance 1.",
+      "desc_en": "Attack a player at distance 1 for 1 BANG! damage (does not count toward BANG! limit).",
       "effect_icon": "assets/components/effect_icons/icon_dc_punch.png",
       "clean_template_image": "assets/components/clean_templates/dc_punch.png",
       "count": 1
@@ -512,7 +512,7 @@
       "category": "aoe",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Discard 1 additional card: all other players discard 1 card.",
+      "desc_en": "Pay 1 extra card from hand: force every other player to remove 1 card.",
       "effect_icon": "assets/components/effect_icons/icon_dc_brawl.png",
       "clean_template_image": "assets/components/clean_templates/dc_brawl.png",
       "count": 1
@@ -526,7 +526,7 @@
       "category": "control",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Discard 1 additional card: draw 1 card from any player regardless of distance.",
+      "desc_en": "Pay 1 extra card from hand: steal 1 card from any player regardless of distance.",
       "effect_icon": "assets/components/effect_icons/icon_dc_rag_time.png",
       "clean_template_image": "assets/components/clean_templates/dc_rag_time.png",
       "count": 1
@@ -540,7 +540,7 @@
       "category": "action",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Discard 1 additional card: shoot a BANG! at any player regardless of distance.",
+      "desc_en": "Pay 1 extra card from hand: shoot a BANG! at any player regardless of distance.",
       "effect_icon": "assets/components/effect_icons/icon_dc_springfield.png",
       "clean_template_image": "assets/components/clean_templates/dc_springfield.png",
       "count": 1
@@ -554,7 +554,7 @@
       "category": "heal",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Discard 1 additional card: any player regains 1 life point.",
+      "desc_en": "Pay 1 extra card from hand: any player regains 1 life point.",
       "effect_icon": "assets/components/effect_icons/icon_dc_tequila.png",
       "clean_template_image": "assets/components/clean_templates/dc_tequila.png",
       "count": 1
@@ -568,7 +568,7 @@
       "category": "heal",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Discard 1 additional card: regain 2 life points.",
+      "desc_en": "Pay 1 extra card from hand: regain up to 2 life points.",
       "effect_icon": "assets/components/effect_icons/icon_dc_whisky.png",
       "clean_template_image": "assets/components/clean_templates/dc_whisky.png",
       "count": 1
@@ -582,7 +582,7 @@
       "category": "equipment",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "When targeted by BANG!, Draw!: on Hearts, you are Missed!",
+      "desc_en": "When targeted by BANG!, check the top card: on Hearts, the shot is canceled.",
       "effect_icon": "assets/components/effect_icons/icon_dc_barrel.png",
       "clean_template_image": "assets/components/clean_templates/dc_barrel.png",
       "count": 1
@@ -596,7 +596,7 @@
       "category": "equipment",
       "range": null,
       "desc_type": "text",
-      "desc_en": "You view others at distance -1.",
+      "desc_en": "You view others at distance -1 (minimum 1; stacks with Scope).",
       "effect_icon": null,
       "clean_template_image": "assets/components/clean_templates/dc_binocular.png",
       "count": 1
@@ -610,7 +610,7 @@
       "category": "equipment",
       "range": null,
       "desc_type": "hybrid_left_icon",
-      "desc_en": "Draw! on 2-9 of Spades: Lose 3 life points. Else pass the Dynamite on your left.",
+      "desc_en": "At turn start, check the top card: on 2-9 Spades, lose 3 life points; else pass clockwise.",
       "effect_icon": "assets/components/effect_icons/icon_dc_dynamite.png",
       "clean_template_image": "assets/components/clean_templates/dc_dynamite.png",
       "count": 1
@@ -624,7 +624,7 @@
       "category": "equipment",
       "range": null,
       "desc_type": "text",
-      "desc_en": "Others view you at distance +1.",
+      "desc_en": "Others view you at distance +1 (stacks with Mustang).",
       "effect_icon": null,
       "clean_template_image": "assets/components/clean_templates/dc_hideout.png",
       "count": 1
@@ -652,7 +652,7 @@
       "category": "weapon",
       "range": 3,
       "desc_type": "icon",
-      "desc_en": "Weapon with Range 3.",
+      "desc_en": "Weapon with Range 3 (replaces any equipped gun).",
       "effect_icon": "assets/components/effect_icons/icon_dc_remington.png",
       "clean_template_image": "assets/components/clean_templates/dc_remington.png",
       "count": 1
@@ -666,7 +666,7 @@
       "category": "weapon",
       "range": 4,
       "desc_type": "icon",
-      "desc_en": "Weapon with Range 4.",
+      "desc_en": "Weapon with Range 4 (replaces any equipped gun).",
       "effect_icon": "assets/components/effect_icons/icon_dc_carabine.png",
       "clean_template_image": "assets/components/clean_templates/dc_carabine.png",
       "count": 1
@@ -680,7 +680,7 @@
       "category": "green_delayed",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Discard from play to cancel 1 BANG! and draw 1 card.",
+      "desc_en": "Activate on a later turn to cancel 1 BANG! targeting you and draw 1 card.",
       "effect_icon": "assets/components/effect_icons/icon_dc_bible.png",
       "clean_template_image": "assets/components/clean_templates/dc_bible.png",
       "count": 1
@@ -694,7 +694,7 @@
       "category": "green_delayed",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Discard from play to shoot a BANG! at any player regardless of distance.",
+      "desc_en": "Activate on a later turn to shoot a BANG! at any player regardless of distance.",
       "effect_icon": "assets/components/effect_icons/icon_dc_buffalo_rifle.png",
       "clean_template_image": "assets/components/clean_templates/dc_buffalo_rifle.png",
       "count": 1
@@ -708,7 +708,7 @@
       "category": "green_delayed",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Discard from play to force any player to discard 1 card.",
+      "desc_en": "Activate on a later turn to force any player to remove 1 card (from hand or in play).",
       "effect_icon": "assets/components/effect_icons/icon_dc_can_can.png",
       "clean_template_image": "assets/components/clean_templates/dc_can_can.png",
       "count": 1
@@ -722,7 +722,7 @@
       "category": "green_delayed",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Discard from play to regain 1 life point.",
+      "desc_en": "Activate on a later turn to regain 1 life point.",
       "effect_icon": "assets/components/effect_icons/icon_dc_canteen.png",
       "clean_template_image": "assets/components/clean_templates/dc_canteen.png",
       "count": 1
@@ -736,7 +736,7 @@
       "category": "green_delayed",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Discard from play to draw 1 card from any player regardless of distance.",
+      "desc_en": "Activate on a later turn to steal 1 card from any player regardless of distance.",
       "effect_icon": "assets/components/effect_icons/icon_dc_conestoga.png",
       "clean_template_image": "assets/components/clean_templates/dc_conestoga.png",
       "count": 1
@@ -750,7 +750,7 @@
       "category": "green_delayed",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Discard from play to shoot 1 BANG! at distance 1 and draw 1 card.",
+      "desc_en": "Activate on a later turn to shoot 1 BANG! at distance 1 and draw 1 card.",
       "effect_icon": "assets/components/effect_icons/icon_dc_derringer.png",
       "clean_template_image": "assets/components/clean_templates/dc_derringer.png",
       "count": 1
@@ -764,7 +764,7 @@
       "category": "green_delayed",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Discard from play to shoot a BANG! to all other players.",
+      "desc_en": "Activate on a later turn to shoot 1 BANG! at all other players.",
       "effect_icon": "assets/components/effect_icons/icon_dc_howitzer.png",
       "clean_template_image": "assets/components/clean_templates/dc_howitzer.png",
       "count": 1
@@ -778,7 +778,7 @@
       "category": "green_delayed",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Discard from play to cancel 1 BANG!",
+      "desc_en": "Activate on a later turn to cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_dc_iron_plate.png",
       "clean_template_image": "assets/components/clean_templates/dc_iron_plate.png",
       "count": 2
@@ -792,7 +792,7 @@
       "category": "green_delayed",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Discard from play to shoot 1 BANG! at distance 1.",
+      "desc_en": "Activate on a later turn to shoot 1 BANG! at distance 1.",
       "effect_icon": "assets/components/effect_icons/icon_dc_knife.png",
       "clean_template_image": "assets/components/clean_templates/dc_knife.png",
       "count": 1
@@ -806,7 +806,7 @@
       "category": "green_delayed",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Discard from play to shoot 1 BANG! at a player within reachable distance.",
+      "desc_en": "Activate on a later turn to shoot 1 BANG! at a player within reachable distance.",
       "effect_icon": "assets/components/effect_icons/icon_dc_pepperbox.png",
       "clean_template_image": "assets/components/clean_templates/dc_pepperbox.png",
       "count": 1
@@ -820,7 +820,7 @@
       "category": "green_delayed",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Discard from play to draw 3 cards.",
+      "desc_en": "Activate on a later turn to draw 3 cards from the deck.",
       "effect_icon": "assets/components/effect_icons/icon_dc_pony_express.png",
       "clean_template_image": "assets/components/clean_templates/dc_pony_express.png",
       "count": 1
@@ -834,7 +834,7 @@
       "category": "green_delayed",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Discard from play to cancel 1 BANG!",
+      "desc_en": "Activate on a later turn to cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_dc_sombrero.png",
       "clean_template_image": "assets/components/clean_templates/dc_sombrero.png",
       "count": 1
@@ -848,7 +848,7 @@
       "category": "green_delayed",
       "range": null,
       "desc_type": "icon",
-      "desc_en": "Discard from play to cancel 1 BANG!",
+      "desc_en": "Activate on a later turn to cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_dc_ten_gallon_hat.png",
       "clean_template_image": "assets/components/clean_templates/dc_ten_gallon_hat.png",
       "count": 1
@@ -1293,7 +1293,7 @@
       "rank": "2",
       "suit": "spades",
       "desc_type": "icon",
-      "desc_en": "Cancel 1 BANG! shot at you.",
+      "desc_en": "Cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_base_missed.png",
       "image": "assets/images/cards/026_base_missed_2_spades.png"
     },
@@ -1310,7 +1310,7 @@
       "rank": "3",
       "suit": "spades",
       "desc_type": "icon",
-      "desc_en": "Cancel 1 BANG! shot at you.",
+      "desc_en": "Cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_base_missed.png",
       "image": "assets/images/cards/027_base_missed_3_spades.png"
     },
@@ -1327,7 +1327,7 @@
       "rank": "4",
       "suit": "spades",
       "desc_type": "icon",
-      "desc_en": "Cancel 1 BANG! shot at you.",
+      "desc_en": "Cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_base_missed.png",
       "image": "assets/images/cards/028_base_missed_4_spades.png"
     },
@@ -1344,7 +1344,7 @@
       "rank": "5",
       "suit": "spades",
       "desc_type": "icon",
-      "desc_en": "Cancel 1 BANG! shot at you.",
+      "desc_en": "Cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_base_missed.png",
       "image": "assets/images/cards/029_base_missed_5_spades.png"
     },
@@ -1361,7 +1361,7 @@
       "rank": "6",
       "suit": "spades",
       "desc_type": "icon",
-      "desc_en": "Cancel 1 BANG! shot at you.",
+      "desc_en": "Cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_base_missed.png",
       "image": "assets/images/cards/030_base_missed_6_spades.png"
     },
@@ -1378,7 +1378,7 @@
       "rank": "7",
       "suit": "spades",
       "desc_type": "icon",
-      "desc_en": "Cancel 1 BANG! shot at you.",
+      "desc_en": "Cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_base_missed.png",
       "image": "assets/images/cards/031_base_missed_7_spades.png"
     },
@@ -1395,7 +1395,7 @@
       "rank": "8",
       "suit": "spades",
       "desc_type": "icon",
-      "desc_en": "Cancel 1 BANG! shot at you.",
+      "desc_en": "Cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_base_missed.png",
       "image": "assets/images/cards/032_base_missed_8_spades.png"
     },
@@ -1412,7 +1412,7 @@
       "rank": "10",
       "suit": "clubs",
       "desc_type": "icon",
-      "desc_en": "Cancel 1 BANG! shot at you.",
+      "desc_en": "Cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_base_missed.png",
       "image": "assets/images/cards/033_base_missed_10_clubs.png"
     },
@@ -1429,7 +1429,7 @@
       "rank": "J",
       "suit": "clubs",
       "desc_type": "icon",
-      "desc_en": "Cancel 1 BANG! shot at you.",
+      "desc_en": "Cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_base_missed.png",
       "image": "assets/images/cards/034_base_missed_J_clubs.png"
     },
@@ -1446,7 +1446,7 @@
       "rank": "Q",
       "suit": "clubs",
       "desc_type": "icon",
-      "desc_en": "Cancel 1 BANG! shot at you.",
+      "desc_en": "Cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_base_missed.png",
       "image": "assets/images/cards/035_base_missed_Q_clubs.png"
     },
@@ -1463,7 +1463,7 @@
       "rank": "K",
       "suit": "clubs",
       "desc_type": "icon",
-      "desc_en": "Cancel 1 BANG! shot at you.",
+      "desc_en": "Cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_base_missed.png",
       "image": "assets/images/cards/036_base_missed_K_clubs.png"
     },
@@ -1480,7 +1480,7 @@
       "rank": "A",
       "suit": "clubs",
       "desc_type": "icon",
-      "desc_en": "Cancel 1 BANG! shot at you.",
+      "desc_en": "Cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_base_missed.png",
       "image": "assets/images/cards/037_base_missed_A_clubs.png"
     },
@@ -1497,7 +1497,7 @@
       "rank": "6",
       "suit": "hearts",
       "desc_type": "icon",
-      "desc_en": "Regain 1 life point (no effect with only 2 players left).",
+      "desc_en": "Regain 1 life point, or play when reduced to 0 HP to survive (no effect with only 2 players left).",
       "effect_icon": "assets/components/effect_icons/icon_base_beer.png",
       "image": "assets/images/cards/038_base_beer_6_hearts.png"
     },
@@ -1514,7 +1514,7 @@
       "rank": "7",
       "suit": "hearts",
       "desc_type": "icon",
-      "desc_en": "Regain 1 life point (no effect with only 2 players left).",
+      "desc_en": "Regain 1 life point, or play when reduced to 0 HP to survive (no effect with only 2 players left).",
       "effect_icon": "assets/components/effect_icons/icon_base_beer.png",
       "image": "assets/images/cards/039_base_beer_7_hearts.png"
     },
@@ -1531,7 +1531,7 @@
       "rank": "8",
       "suit": "hearts",
       "desc_type": "icon",
-      "desc_en": "Regain 1 life point (no effect with only 2 players left).",
+      "desc_en": "Regain 1 life point, or play when reduced to 0 HP to survive (no effect with only 2 players left).",
       "effect_icon": "assets/components/effect_icons/icon_base_beer.png",
       "image": "assets/images/cards/040_base_beer_8_hearts.png"
     },
@@ -1548,7 +1548,7 @@
       "rank": "9",
       "suit": "hearts",
       "desc_type": "icon",
-      "desc_en": "Regain 1 life point (no effect with only 2 players left).",
+      "desc_en": "Regain 1 life point, or play when reduced to 0 HP to survive (no effect with only 2 players left).",
       "effect_icon": "assets/components/effect_icons/icon_base_beer.png",
       "image": "assets/images/cards/041_base_beer_9_hearts.png"
     },
@@ -1565,7 +1565,7 @@
       "rank": "10",
       "suit": "hearts",
       "desc_type": "icon",
-      "desc_en": "Regain 1 life point (no effect with only 2 players left).",
+      "desc_en": "Regain 1 life point, or play when reduced to 0 HP to survive (no effect with only 2 players left).",
       "effect_icon": "assets/components/effect_icons/icon_base_beer.png",
       "image": "assets/images/cards/042_base_beer_10_hearts.png"
     },
@@ -1582,7 +1582,7 @@
       "rank": "J",
       "suit": "hearts",
       "desc_type": "icon",
-      "desc_en": "Regain 1 life point (no effect with only 2 players left).",
+      "desc_en": "Regain 1 life point, or play when reduced to 0 HP to survive (no effect with only 2 players left).",
       "effect_icon": "assets/components/effect_icons/icon_base_beer.png",
       "image": "assets/images/cards/043_base_beer_J_hearts.png"
     },
@@ -1599,7 +1599,7 @@
       "rank": "K",
       "suit": "hearts",
       "desc_type": "icon",
-      "desc_en": "Force any player to discard 1 card (from hand or in play).",
+      "desc_en": "Force any player to remove 1 card (from hand or in play).",
       "effect_icon": "assets/components/effect_icons/icon_base_cat_balou.png",
       "image": "assets/images/cards/044_base_cat_balou_K_hearts.png"
     },
@@ -1616,7 +1616,7 @@
       "rank": "9",
       "suit": "diamonds",
       "desc_type": "icon",
-      "desc_en": "Force any player to discard 1 card (from hand or in play).",
+      "desc_en": "Force any player to remove 1 card (from hand or in play).",
       "effect_icon": "assets/components/effect_icons/icon_base_cat_balou.png",
       "image": "assets/images/cards/045_base_cat_balou_9_diamonds.png"
     },
@@ -1633,7 +1633,7 @@
       "rank": "10",
       "suit": "diamonds",
       "desc_type": "icon",
-      "desc_en": "Force any player to discard 1 card (from hand or in play).",
+      "desc_en": "Force any player to remove 1 card (from hand or in play).",
       "effect_icon": "assets/components/effect_icons/icon_base_cat_balou.png",
       "image": "assets/images/cards/046_base_cat_balou_10_diamonds.png"
     },
@@ -1650,7 +1650,7 @@
       "rank": "J",
       "suit": "diamonds",
       "desc_type": "icon",
-      "desc_en": "Force any player to discard 1 card (from hand or in play).",
+      "desc_en": "Force any player to remove 1 card (from hand or in play).",
       "effect_icon": "assets/components/effect_icons/icon_base_cat_balou.png",
       "image": "assets/images/cards/047_base_cat_balou_J_diamonds.png"
     },
@@ -1667,7 +1667,7 @@
       "rank": "J",
       "suit": "hearts",
       "desc_type": "icon",
-      "desc_en": "Draw 1 card from a player at distance 1.",
+      "desc_en": "Steal 1 card from a player at distance 1.",
       "effect_icon": "assets/components/effect_icons/icon_base_panic.png",
       "image": "assets/images/cards/048_base_panic_J_hearts.png"
     },
@@ -1684,7 +1684,7 @@
       "rank": "Q",
       "suit": "hearts",
       "desc_type": "icon",
-      "desc_en": "Draw 1 card from a player at distance 1.",
+      "desc_en": "Steal 1 card from a player at distance 1.",
       "effect_icon": "assets/components/effect_icons/icon_base_panic.png",
       "image": "assets/images/cards/049_base_panic_Q_hearts.png"
     },
@@ -1701,7 +1701,7 @@
       "rank": "A",
       "suit": "hearts",
       "desc_type": "icon",
-      "desc_en": "Draw 1 card from a player at distance 1.",
+      "desc_en": "Steal 1 card from a player at distance 1.",
       "effect_icon": "assets/components/effect_icons/icon_base_panic.png",
       "image": "assets/images/cards/050_base_panic_A_hearts.png"
     },
@@ -1718,7 +1718,7 @@
       "rank": "8",
       "suit": "diamonds",
       "desc_type": "icon",
-      "desc_en": "Draw 1 card from a player at distance 1.",
+      "desc_en": "Steal 1 card from a player at distance 1.",
       "effect_icon": "assets/components/effect_icons/icon_base_panic.png",
       "image": "assets/images/cards/051_base_panic_8_diamonds.png"
     },
@@ -1735,7 +1735,7 @@
       "rank": "Q",
       "suit": "diamonds",
       "desc_type": "text",
-      "desc_en": "A target player discards a BANG!, then you, etc. First player failing to discard a BANG! loses 1 life point.",
+      "desc_en": "Challenge any 1 player: starting with target, alternate playing BANG!; first unable loses 1 life point.",
       "effect_icon": null,
       "image": "assets/images/cards/052_base_duel_Q_diamonds.png"
     },
@@ -1752,7 +1752,7 @@
       "rank": "J",
       "suit": "spades",
       "desc_type": "text",
-      "desc_en": "A target player discards a BANG!, then you, etc. First player failing to discard a BANG! loses 1 life point.",
+      "desc_en": "Challenge any 1 player: starting with target, alternate playing BANG!; first unable loses 1 life point.",
       "effect_icon": null,
       "image": "assets/images/cards/053_base_duel_J_spades.png"
     },
@@ -1769,7 +1769,7 @@
       "rank": "8",
       "suit": "clubs",
       "desc_type": "text",
-      "desc_en": "A target player discards a BANG!, then you, etc. First player failing to discard a BANG! loses 1 life point.",
+      "desc_en": "Challenge any 1 player: starting with target, alternate playing BANG!; first unable loses 1 life point.",
       "effect_icon": null,
       "image": "assets/images/cards/054_base_duel_8_clubs.png"
     },
@@ -1837,7 +1837,7 @@
       "rank": "9",
       "suit": "clubs",
       "desc_type": "text",
-      "desc_en": "Reveal as many cards as players. Each player draws one.",
+      "desc_en": "Reveal as many cards as living players; in turn order, each player chooses 1 card to take.",
       "effect_icon": null,
       "image": "assets/images/cards/058_base_general_store_9_clubs.png"
     },
@@ -1854,7 +1854,7 @@
       "rank": "Q",
       "suit": "spades",
       "desc_type": "text",
-      "desc_en": "Reveal as many cards as players. Each player draws one.",
+      "desc_en": "Reveal as many cards as living players; in turn order, each player chooses 1 card to take.",
       "effect_icon": null,
       "image": "assets/images/cards/059_base_general_store_Q_spades.png"
     },
@@ -1871,7 +1871,7 @@
       "rank": "K",
       "suit": "diamonds",
       "desc_type": "text",
-      "desc_en": "All other players discard a BANG! or lose 1 life point.",
+      "desc_en": "All other players must respond with a BANG! card or lose 1 life point.",
       "effect_icon": null,
       "image": "assets/images/cards/060_base_indians_K_diamonds.png"
     },
@@ -1888,7 +1888,7 @@
       "rank": "A",
       "suit": "diamonds",
       "desc_type": "text",
-      "desc_en": "All other players discard a BANG! or lose 1 life point.",
+      "desc_en": "All other players must respond with a BANG! card or lose 1 life point.",
       "effect_icon": null,
       "image": "assets/images/cards/061_base_indians_A_diamonds.png"
     },
@@ -1905,7 +1905,7 @@
       "rank": "10",
       "suit": "hearts",
       "desc_type": "icon",
-      "desc_en": "Shoot a BANG! to all other players regardless of distance.",
+      "desc_en": "Shoot a BANG! at all other players regardless of distance (does not count toward BANG! limit).",
       "effect_icon": "assets/components/effect_icons/icon_base_gatling.png",
       "image": "assets/images/cards/062_base_gatling_10_hearts.png"
     },
@@ -1922,7 +1922,7 @@
       "rank": "5",
       "suit": "hearts",
       "desc_type": "icon",
-      "desc_en": "All players in play regain 1 life point.",
+      "desc_en": "Every living player (including you) regains 1 life point.",
       "effect_icon": "assets/components/effect_icons/icon_base_saloon.png",
       "image": "assets/images/cards/063_base_saloon_5_hearts.png"
     },
@@ -1939,7 +1939,7 @@
       "rank": "Q",
       "suit": "spades",
       "desc_type": "icon",
-      "desc_en": "When targeted by BANG!, Draw!: on Hearts, you are Missed!",
+      "desc_en": "When targeted by BANG!, check the top card: on Hearts, the shot is canceled.",
       "effect_icon": "assets/components/effect_icons/icon_base_barrel.png",
       "image": "assets/images/cards/064_base_barrel_Q_spades.png"
     },
@@ -1956,7 +1956,7 @@
       "rank": "K",
       "suit": "spades",
       "desc_type": "icon",
-      "desc_en": "When targeted by BANG!, Draw!: on Hearts, you are Missed!",
+      "desc_en": "When targeted by BANG!, check the top card: on Hearts, the shot is canceled.",
       "effect_icon": "assets/components/effect_icons/icon_base_barrel.png",
       "image": "assets/images/cards/065_base_barrel_K_spades.png"
     },
@@ -1973,7 +1973,7 @@
       "rank": "2",
       "suit": "hearts",
       "desc_type": "hybrid_left_icon",
-      "desc_en": "Draw! on 2-9 of Spades: Lose 3 life points. Else pass the Dynamite on your left.",
+      "desc_en": "At turn start, check the top card: on 2-9 Spades, lose 3 life points; else pass clockwise.",
       "effect_icon": "assets/components/effect_icons/icon_base_dynamite.png",
       "image": "assets/images/cards/066_base_dynamite_2_hearts.png"
     },
@@ -1990,7 +1990,7 @@
       "rank": "J",
       "suit": "spades",
       "desc_type": "hybrid_left_icon",
-      "desc_en": "Draw! on Hearts: Discard the Jail, play normally. Else discard the Jail and skip your turn.",
+      "desc_en": "Play on any non-Sheriff player. At their turn start, check the top card: on Hearts, remove Jail and play; else remove Jail and skip turn.",
       "effect_icon": "assets/components/effect_icons/icon_base_jail.png",
       "image": "assets/images/cards/067_base_jail_J_spades.png"
     },
@@ -2007,7 +2007,7 @@
       "rank": "10",
       "suit": "spades",
       "desc_type": "hybrid_left_icon",
-      "desc_en": "Draw! on Hearts: Discard the Jail, play normally. Else discard the Jail and skip your turn.",
+      "desc_en": "Play on any non-Sheriff player. At their turn start, check the top card: on Hearts, remove Jail and play; else remove Jail and skip turn.",
       "effect_icon": "assets/components/effect_icons/icon_base_jail.png",
       "image": "assets/images/cards/068_base_jail_10_spades.png"
     },
@@ -2024,7 +2024,7 @@
       "rank": "4",
       "suit": "hearts",
       "desc_type": "hybrid_left_icon",
-      "desc_en": "Draw! on Hearts: Discard the Jail, play normally. Else discard the Jail and skip your turn.",
+      "desc_en": "Play on any non-Sheriff player. At their turn start, check the top card: on Hearts, remove Jail and play; else remove Jail and skip turn.",
       "effect_icon": "assets/components/effect_icons/icon_base_jail.png",
       "image": "assets/images/cards/069_base_jail_4_hearts.png"
     },
@@ -2075,7 +2075,7 @@
       "rank": "A",
       "suit": "spades",
       "desc_type": "text",
-      "desc_en": "You view others at distance -1.",
+      "desc_en": "You view others at distance -1 (minimum 1).",
       "effect_icon": null,
       "image": "assets/images/cards/072_base_scope_A_spades.png"
     },
@@ -2092,7 +2092,7 @@
       "rank": "10",
       "suit": "spades",
       "desc_type": "hybrid_volcanic",
-      "desc_en": "You can play any number of BANG! (Range 1)",
+      "desc_en": "Weapon with Range 1; you can play any number of BANG! cards on your turn.",
       "effect_icon": "assets/components/effect_icons/icon_base_volcanic.png",
       "image": "assets/images/cards/073_base_volcanic_10_spades.png"
     },
@@ -2109,7 +2109,7 @@
       "rank": "10",
       "suit": "clubs",
       "desc_type": "hybrid_volcanic",
-      "desc_en": "You can play any number of BANG! (Range 1)",
+      "desc_en": "Weapon with Range 1; you can play any number of BANG! cards on your turn.",
       "effect_icon": "assets/components/effect_icons/icon_base_volcanic.png",
       "image": "assets/images/cards/074_base_volcanic_10_clubs.png"
     },
@@ -2126,7 +2126,7 @@
       "rank": "J",
       "suit": "clubs",
       "desc_type": "icon",
-      "desc_en": "Weapon with Range 2.",
+      "desc_en": "Weapon with Range 2 (replaces any equipped gun).",
       "effect_icon": "assets/components/effect_icons/icon_base_schofield.png",
       "image": "assets/images/cards/075_base_schofield_J_clubs.png"
     },
@@ -2143,7 +2143,7 @@
       "rank": "Q",
       "suit": "clubs",
       "desc_type": "icon",
-      "desc_en": "Weapon with Range 2.",
+      "desc_en": "Weapon with Range 2 (replaces any equipped gun).",
       "effect_icon": "assets/components/effect_icons/icon_base_schofield.png",
       "image": "assets/images/cards/076_base_schofield_Q_clubs.png"
     },
@@ -2160,7 +2160,7 @@
       "rank": "K",
       "suit": "spades",
       "desc_type": "icon",
-      "desc_en": "Weapon with Range 2.",
+      "desc_en": "Weapon with Range 2 (replaces any equipped gun).",
       "effect_icon": "assets/components/effect_icons/icon_base_schofield.png",
       "image": "assets/images/cards/077_base_schofield_K_spades.png"
     },
@@ -2177,7 +2177,7 @@
       "rank": "K",
       "suit": "clubs",
       "desc_type": "icon",
-      "desc_en": "Weapon with Range 3.",
+      "desc_en": "Weapon with Range 3 (replaces any equipped gun).",
       "effect_icon": "assets/components/effect_icons/icon_base_remington.png",
       "image": "assets/images/cards/078_base_remington_K_clubs.png"
     },
@@ -2194,7 +2194,7 @@
       "rank": "A",
       "suit": "clubs",
       "desc_type": "icon",
-      "desc_en": "Weapon with Range 4.",
+      "desc_en": "Weapon with Range 4 (replaces any equipped gun).",
       "effect_icon": "assets/components/effect_icons/icon_base_carabine.png",
       "image": "assets/images/cards/079_base_carabine_A_clubs.png"
     },
@@ -2211,7 +2211,7 @@
       "rank": "8",
       "suit": "spades",
       "desc_type": "icon",
-      "desc_en": "Weapon with Range 5.",
+      "desc_en": "Weapon with Range 5 (replaces any equipped gun).",
       "effect_icon": "assets/components/effect_icons/icon_base_winchester.png",
       "image": "assets/images/cards/080_base_winchester_8_spades.png"
     },
@@ -2296,7 +2296,7 @@
       "rank": "8",
       "suit": "diamonds",
       "desc_type": "icon",
-      "desc_en": "Cancel 1 BANG! shot at you.",
+      "desc_en": "Cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_dc_missed.png",
       "image": "assets/images/cards/085_dc_missed_8_diamonds.png"
     },
@@ -2313,7 +2313,7 @@
       "rank": "6",
       "suit": "hearts",
       "desc_type": "icon",
-      "desc_en": "Regain 1 life point.",
+      "desc_en": "Regain 1 life point, or play when reduced to 0 HP to survive (no effect with only 2 players left).",
       "effect_icon": "assets/components/effect_icons/icon_dc_beer.png",
       "image": "assets/images/cards/086_dc_beer_6_hearts.png"
     },
@@ -2330,7 +2330,7 @@
       "rank": "6",
       "suit": "spades",
       "desc_type": "icon",
-      "desc_en": "Regain 1 life point.",
+      "desc_en": "Regain 1 life point, or play when reduced to 0 HP to survive (no effect with only 2 players left).",
       "effect_icon": "assets/components/effect_icons/icon_dc_beer.png",
       "image": "assets/images/cards/087_dc_beer_6_spades.png"
     },
@@ -2347,7 +2347,7 @@
       "rank": "8",
       "suit": "clubs",
       "desc_type": "icon",
-      "desc_en": "Force any player to discard 1 card.",
+      "desc_en": "Force any player to remove 1 card (from hand or in play).",
       "effect_icon": "assets/components/effect_icons/icon_dc_cat_balou.png",
       "image": "assets/images/cards/088_dc_cat_balou_8_clubs.png"
     },
@@ -2364,7 +2364,7 @@
       "rank": "J",
       "suit": "hearts",
       "desc_type": "icon",
-      "desc_en": "Draw 1 card from a player at distance 1.",
+      "desc_en": "Steal 1 card from a player at distance 1.",
       "effect_icon": "assets/components/effect_icons/icon_dc_panic.png",
       "image": "assets/images/cards/089_dc_panic_J_hearts.png"
     },
@@ -2381,7 +2381,7 @@
       "rank": "A",
       "suit": "spades",
       "desc_type": "text",
-      "desc_en": "Reveal as many cards as players. Each player draws one.",
+      "desc_en": "Reveal as many cards as living players; in turn order, each player chooses 1 card to take.",
       "effect_icon": null,
       "image": "assets/images/cards/090_dc_general_store_A_spades.png"
     },
@@ -2398,7 +2398,7 @@
       "rank": "5",
       "suit": "diamonds",
       "desc_type": "text",
-      "desc_en": "All other players discard a BANG! or lose 1 life point.",
+      "desc_en": "All other players must respond with a BANG! card or lose 1 life point.",
       "effect_icon": null,
       "image": "assets/images/cards/091_dc_indians_5_diamonds.png"
     },
@@ -2415,7 +2415,7 @@
       "rank": "7",
       "suit": "diamonds",
       "desc_type": "icon",
-      "desc_en": "Cancel 1 BANG! and draw 1 card from the deck.",
+      "desc_en": "Cancel 1 BANG! targeting you and draw 1 card from the deck.",
       "effect_icon": "assets/components/effect_icons/icon_dc_dodge.png",
       "image": "assets/images/cards/092_dc_dodge_7_diamonds.png"
     },
@@ -2432,7 +2432,7 @@
       "rank": "K",
       "suit": "hearts",
       "desc_type": "icon",
-      "desc_en": "Cancel 1 BANG! and draw 1 card from the deck.",
+      "desc_en": "Cancel 1 BANG! targeting you and draw 1 card from the deck.",
       "effect_icon": "assets/components/effect_icons/icon_dc_dodge.png",
       "image": "assets/images/cards/093_dc_dodge_K_hearts.png"
     },
@@ -2449,7 +2449,7 @@
       "rank": "10",
       "suit": "spades",
       "desc_type": "icon",
-      "desc_en": "Shoot 1 target at distance 1.",
+      "desc_en": "Attack a player at distance 1 for 1 BANG! damage (does not count toward BANG! limit).",
       "effect_icon": "assets/components/effect_icons/icon_dc_punch.png",
       "image": "assets/images/cards/094_dc_punch_10_spades.png"
     },
@@ -2466,7 +2466,7 @@
       "rank": "J",
       "suit": "spades",
       "desc_type": "icon",
-      "desc_en": "Discard 1 additional card: all other players discard 1 card.",
+      "desc_en": "Pay 1 extra card from hand: force every other player to remove 1 card.",
       "effect_icon": "assets/components/effect_icons/icon_dc_brawl.png",
       "image": "assets/images/cards/095_dc_brawl_J_spades.png"
     },
@@ -2483,7 +2483,7 @@
       "rank": "9",
       "suit": "hearts",
       "desc_type": "icon",
-      "desc_en": "Discard 1 additional card: draw 1 card from any player regardless of distance.",
+      "desc_en": "Pay 1 extra card from hand: steal 1 card from any player regardless of distance.",
       "effect_icon": "assets/components/effect_icons/icon_dc_rag_time.png",
       "image": "assets/images/cards/096_dc_rag_time_9_hearts.png"
     },
@@ -2500,7 +2500,7 @@
       "rank": "K",
       "suit": "spades",
       "desc_type": "icon",
-      "desc_en": "Discard 1 additional card: shoot a BANG! at any player regardless of distance.",
+      "desc_en": "Pay 1 extra card from hand: shoot a BANG! at any player regardless of distance.",
       "effect_icon": "assets/components/effect_icons/icon_dc_springfield.png",
       "image": "assets/images/cards/097_dc_springfield_K_spades.png"
     },
@@ -2517,7 +2517,7 @@
       "rank": "9",
       "suit": "clubs",
       "desc_type": "icon",
-      "desc_en": "Discard 1 additional card: any player regains 1 life point.",
+      "desc_en": "Pay 1 extra card from hand: any player regains 1 life point.",
       "effect_icon": "assets/components/effect_icons/icon_dc_tequila.png",
       "image": "assets/images/cards/098_dc_tequila_9_clubs.png"
     },
@@ -2534,7 +2534,7 @@
       "rank": "Q",
       "suit": "diamonds",
       "desc_type": "icon",
-      "desc_en": "Discard 1 additional card: regain 2 life points.",
+      "desc_en": "Pay 1 extra card from hand: regain up to 2 life points.",
       "effect_icon": "assets/components/effect_icons/icon_dc_whisky.png",
       "image": "assets/images/cards/099_dc_whisky_Q_diamonds.png"
     },
@@ -2551,7 +2551,7 @@
       "rank": "A",
       "suit": "clubs",
       "desc_type": "icon",
-      "desc_en": "When targeted by BANG!, Draw!: on Hearts, you are Missed!",
+      "desc_en": "When targeted by BANG!, check the top card: on Hearts, the shot is canceled.",
       "effect_icon": "assets/components/effect_icons/icon_dc_barrel.png",
       "image": "assets/images/cards/100_dc_barrel_A_clubs.png"
     },
@@ -2568,7 +2568,7 @@
       "rank": "10",
       "suit": "diamonds",
       "desc_type": "text",
-      "desc_en": "You view others at distance -1.",
+      "desc_en": "You view others at distance -1 (minimum 1; stacks with Scope).",
       "effect_icon": null,
       "image": "assets/images/cards/101_dc_binocular_10_diamonds.png"
     },
@@ -2585,7 +2585,7 @@
       "rank": "10",
       "suit": "clubs",
       "desc_type": "hybrid_left_icon",
-      "desc_en": "Draw! on 2-9 of Spades: Lose 3 life points. Else pass the Dynamite on your left.",
+      "desc_en": "At turn start, check the top card: on 2-9 Spades, lose 3 life points; else pass clockwise.",
       "effect_icon": "assets/components/effect_icons/icon_dc_dynamite.png",
       "image": "assets/images/cards/102_dc_dynamite_10_clubs.png"
     },
@@ -2602,7 +2602,7 @@
       "rank": "K",
       "suit": "diamonds",
       "desc_type": "text",
-      "desc_en": "Others view you at distance +1.",
+      "desc_en": "Others view you at distance +1 (stacks with Mustang).",
       "effect_icon": null,
       "image": "assets/images/cards/103_dc_hideout_K_diamonds.png"
     },
@@ -2636,7 +2636,7 @@
       "rank": "6",
       "suit": "diamonds",
       "desc_type": "icon",
-      "desc_en": "Weapon with Range 3.",
+      "desc_en": "Weapon with Range 3 (replaces any equipped gun).",
       "effect_icon": "assets/components/effect_icons/icon_dc_remington.png",
       "image": "assets/images/cards/105_dc_remington_6_diamonds.png"
     },
@@ -2653,7 +2653,7 @@
       "rank": "5",
       "suit": "spades",
       "desc_type": "icon",
-      "desc_en": "Weapon with Range 4.",
+      "desc_en": "Weapon with Range 4 (replaces any equipped gun).",
       "effect_icon": "assets/components/effect_icons/icon_dc_carabine.png",
       "image": "assets/images/cards/106_dc_carabine_5_spades.png"
     },
@@ -2670,7 +2670,7 @@
       "rank": "10",
       "suit": "hearts",
       "desc_type": "icon",
-      "desc_en": "Discard from play to cancel 1 BANG! and draw 1 card.",
+      "desc_en": "Activate on a later turn to cancel 1 BANG! targeting you and draw 1 card.",
       "effect_icon": "assets/components/effect_icons/icon_dc_bible.png",
       "image": "assets/images/cards/107_dc_bible_10_hearts.png"
     },
@@ -2687,7 +2687,7 @@
       "rank": "Q",
       "suit": "clubs",
       "desc_type": "icon",
-      "desc_en": "Discard from play to shoot a BANG! at any player regardless of distance.",
+      "desc_en": "Activate on a later turn to shoot a BANG! at any player regardless of distance.",
       "effect_icon": "assets/components/effect_icons/icon_dc_buffalo_rifle.png",
       "image": "assets/images/cards/108_dc_buffalo_rifle_Q_clubs.png"
     },
@@ -2704,7 +2704,7 @@
       "rank": "J",
       "suit": "clubs",
       "desc_type": "icon",
-      "desc_en": "Discard from play to force any player to discard 1 card.",
+      "desc_en": "Activate on a later turn to force any player to remove 1 card (from hand or in play).",
       "effect_icon": "assets/components/effect_icons/icon_dc_can_can.png",
       "image": "assets/images/cards/109_dc_can_can_J_clubs.png"
     },
@@ -2721,7 +2721,7 @@
       "rank": "7",
       "suit": "hearts",
       "desc_type": "icon",
-      "desc_en": "Discard from play to regain 1 life point.",
+      "desc_en": "Activate on a later turn to regain 1 life point.",
       "effect_icon": "assets/components/effect_icons/icon_dc_canteen.png",
       "image": "assets/images/cards/110_dc_canteen_7_hearts.png"
     },
@@ -2738,7 +2738,7 @@
       "rank": "9",
       "suit": "diamonds",
       "desc_type": "icon",
-      "desc_en": "Discard from play to draw 1 card from any player regardless of distance.",
+      "desc_en": "Activate on a later turn to steal 1 card from any player regardless of distance.",
       "effect_icon": "assets/components/effect_icons/icon_dc_conestoga.png",
       "image": "assets/images/cards/111_dc_conestoga_9_diamonds.png"
     },
@@ -2755,7 +2755,7 @@
       "rank": "7",
       "suit": "spades",
       "desc_type": "icon",
-      "desc_en": "Discard from play to shoot 1 BANG! at distance 1 and draw 1 card.",
+      "desc_en": "Activate on a later turn to shoot 1 BANG! at distance 1 and draw 1 card.",
       "effect_icon": "assets/components/effect_icons/icon_dc_derringer.png",
       "image": "assets/images/cards/112_dc_derringer_7_spades.png"
     },
@@ -2772,7 +2772,7 @@
       "rank": "9",
       "suit": "spades",
       "desc_type": "icon",
-      "desc_en": "Discard from play to shoot a BANG! to all other players.",
+      "desc_en": "Activate on a later turn to shoot 1 BANG! at all other players.",
       "effect_icon": "assets/components/effect_icons/icon_dc_howitzer.png",
       "image": "assets/images/cards/113_dc_howitzer_9_spades.png"
     },
@@ -2789,7 +2789,7 @@
       "rank": "A",
       "suit": "diamonds",
       "desc_type": "icon",
-      "desc_en": "Discard from play to cancel 1 BANG!",
+      "desc_en": "Activate on a later turn to cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_dc_iron_plate.png",
       "image": "assets/images/cards/114_dc_iron_plate_A_diamonds.png"
     },
@@ -2806,7 +2806,7 @@
       "rank": "Q",
       "suit": "spades",
       "desc_type": "icon",
-      "desc_en": "Discard from play to cancel 1 BANG!",
+      "desc_en": "Activate on a later turn to cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_dc_iron_plate.png",
       "image": "assets/images/cards/115_dc_iron_plate_Q_spades.png"
     },
@@ -2823,7 +2823,7 @@
       "rank": "8",
       "suit": "hearts",
       "desc_type": "icon",
-      "desc_en": "Discard from play to shoot 1 BANG! at distance 1.",
+      "desc_en": "Activate on a later turn to shoot 1 BANG! at distance 1.",
       "effect_icon": "assets/components/effect_icons/icon_dc_knife.png",
       "image": "assets/images/cards/116_dc_knife_8_hearts.png"
     },
@@ -2840,7 +2840,7 @@
       "rank": "A",
       "suit": "hearts",
       "desc_type": "icon",
-      "desc_en": "Discard from play to shoot 1 BANG! at a player within reachable distance.",
+      "desc_en": "Activate on a later turn to shoot 1 BANG! at a player within reachable distance.",
       "effect_icon": "assets/components/effect_icons/icon_dc_pepperbox.png",
       "image": "assets/images/cards/117_dc_pepperbox_A_hearts.png"
     },
@@ -2857,7 +2857,7 @@
       "rank": "Q",
       "suit": "diamonds",
       "desc_type": "icon",
-      "desc_en": "Discard from play to draw 3 cards.",
+      "desc_en": "Activate on a later turn to draw 3 cards from the deck.",
       "effect_icon": "assets/components/effect_icons/icon_dc_pony_express.png",
       "image": "assets/images/cards/118_dc_pony_express_Q_diamonds.png"
     },
@@ -2874,7 +2874,7 @@
       "rank": "7",
       "suit": "clubs",
       "desc_type": "icon",
-      "desc_en": "Discard from play to cancel 1 BANG!",
+      "desc_en": "Activate on a later turn to cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_dc_sombrero.png",
       "image": "assets/images/cards/119_dc_sombrero_7_clubs.png"
     },
@@ -2891,7 +2891,7 @@
       "rank": "J",
       "suit": "diamonds",
       "desc_type": "icon",
-      "desc_en": "Discard from play to cancel 1 BANG!",
+      "desc_en": "Activate on a later turn to cancel 1 BANG! targeting you.",
       "effect_icon": "assets/components/effect_icons/icon_dc_ten_gallon_hat.png",
       "image": "assets/images/cards/120_dc_ten_gallon_hat_J_diamonds.png"
     }
@@ -2902,7 +2902,7 @@
       "pack": "base",
       "name": "Bart Cassidy",
       "hp": 4,
-      "desc_en": "Each time he is hit, he draws a card.",
+      "desc_en": "Each time he loses 1 life point, he immediately draws 1 card from the deck.",
       "image": "assets/images/characters/char_bart_cassidy.png"
     },
     {
@@ -2910,7 +2910,7 @@
       "pack": "base",
       "name": "Black Jack",
       "hp": 4,
-      "desc_en": "He shows the second card he draws. On Heart or Diamonds, he draws one more card.",
+      "desc_en": "During phase 1, he reveals the second card he draws; if it is Hearts or Diamonds, he draws 1 extra card.",
       "image": "assets/images/characters/char_black_jack.png"
     },
     {
@@ -2918,7 +2918,7 @@
       "pack": "base",
       "name": "Calamity Janet",
       "hp": 4,
-      "desc_en": "She can play BANG! cards as Missed! cards and vice versa.",
+      "desc_en": "She can play BANG! cards as Missed! cards and Missed! cards as BANG! cards.",
       "image": "assets/images/characters/char_calamity_janet.png"
     },
     {
@@ -2926,7 +2926,7 @@
       "pack": "base",
       "name": "El Gringo",
       "hp": 3,
-      "desc_en": "Each time he is hit by a player, he steals a card from the hand of that player.",
+      "desc_en": "Each time he loses 1 life point due to another player's card, he steals 1 random card from their hand.",
       "image": "assets/images/characters/char_el_gringo.png"
     },
     {
@@ -2934,7 +2934,7 @@
       "pack": "base",
       "name": "Jesse Jones",
       "hp": 4,
-      "desc_en": "He may steal his first card from the hand of a player.",
+      "desc_en": "During phase 1, he may steal his first card from any player's hand instead of drawing from the deck.",
       "image": "assets/images/characters/char_jesse_jones.png"
     },
     {
@@ -2942,7 +2942,7 @@
       "pack": "base",
       "name": "Jourdonnais",
       "hp": 4,
-      "desc_en": "Whenever he is the target of a BANG!, he may Draw!: on a Heart, he is missed.",
+      "desc_en": "Whenever he is targeted by a BANG!, he may check the top card: on Hearts, the shot is canceled.",
       "image": "assets/images/characters/char_jourdonnais.png"
     },
     {
@@ -2950,7 +2950,7 @@
       "pack": "base",
       "name": "Kit Carlson",
       "hp": 4,
-      "desc_en": "He looks at the top three cards of the deck and chooses the 2 to draw.",
+      "desc_en": "During phase 1, he looks at the top 3 cards, chooses 2 into hand, and returns 1 to the top.",
       "image": "assets/images/characters/char_kit_carlson.png"
     },
     {
@@ -2958,7 +2958,7 @@
       "pack": "base",
       "name": "Lucky Duke",
       "hp": 4,
-      "desc_en": "Each time he is required to Draw!, he flips the top two cards and chooses the result.",
+      "desc_en": "Each time he must perform a Check, he checks the top 2 cards and chooses which result to apply.",
       "image": "assets/images/characters/char_lucky_duke.png"
     },
     {
@@ -2966,7 +2966,7 @@
       "pack": "base",
       "name": "Paul Regret",
       "hp": 3,
-      "desc_en": "All players see him at a distance increased by 1.",
+      "desc_en": "All other players view him at a distance increased by +1.",
       "image": "assets/images/characters/char_paul_regret.png"
     },
     {
@@ -2974,7 +2974,7 @@
       "pack": "base",
       "name": "Pedro Ramirez",
       "hp": 4,
-      "desc_en": "He may draw his first card from the discard pile.",
+      "desc_en": "During phase 1, he may draw his first card from the top of the discard pile instead of the deck.",
       "image": "assets/images/characters/char_pedro_ramirez.png"
     },
     {
@@ -2982,7 +2982,7 @@
       "pack": "base",
       "name": "Rose Doolan",
       "hp": 4,
-      "desc_en": "She sees all players at a distance decreased by 1.",
+      "desc_en": "She views all other players at a distance decreased by -1 (minimum 1).",
       "image": "assets/images/characters/char_rose_doolan.png"
     },
     {
@@ -2990,7 +2990,7 @@
       "pack": "base",
       "name": "Sid Ketchum",
       "hp": 4,
-      "desc_en": "He may discard 2 cards to regain one life point.",
+      "desc_en": "At any time, he may discard 2 cards from his hand to regain 1 life point.",
       "image": "assets/images/characters/char_sid_ketchum.png"
     },
     {
@@ -2998,7 +2998,7 @@
       "pack": "base",
       "name": "Slab the Killer",
       "hp": 4,
-      "desc_en": "Players need 2 Missed! cards to cancel his BANG! card.",
+      "desc_en": "Players targeted by his BANG! must cancel it twice (2 Missed! effects).",
       "image": "assets/images/characters/char_slab_the_killer.png"
     },
     {
@@ -3006,7 +3006,7 @@
       "pack": "base",
       "name": "Suzy Lafayette",
       "hp": 4,
-      "desc_en": "As soon as she has no cards in hand, she draws a card.",
+      "desc_en": "As soon as she has no cards left in hand, she immediately draws 1 card from the deck.",
       "image": "assets/images/characters/char_suzy_lafayette.png"
     },
     {
@@ -3014,7 +3014,7 @@
       "pack": "base",
       "name": "Vulture Sam",
       "hp": 4,
-      "desc_en": "Whenever a player is eliminated from play, he takes in hand all the cards of that player.",
+      "desc_en": "Whenever another player is eliminated, he takes all of their cards (in hand and in play) into his hand.",
       "image": "assets/images/characters/char_vulture_sam.png"
     },
     {
@@ -3022,7 +3022,7 @@
       "pack": "base",
       "name": "Willy the Kid",
       "hp": 4,
-      "desc_en": "He can play any number of BANG! cards.",
+      "desc_en": "He can play any number of BANG! cards during his turn.",
       "image": "assets/images/characters/char_willy_the_kid.png"
     },
     {
@@ -3030,7 +3030,7 @@
       "pack": "dodge_city",
       "name": "Apache Kid",
       "hp": 3,
-      "desc_en": "Cards of Diamonds played by other players do not affect him.",
+      "desc_en": "Cards of the Diamonds suit played by other players have no effect on him.",
       "image": "assets/images/characters/char_apache_kid.png"
     },
     {
@@ -3038,7 +3038,7 @@
       "pack": "dodge_city",
       "name": "Belle Star",
       "hp": 4,
-      "desc_en": "During her turn, cards in play in front of other players have no effect.",
+      "desc_en": "During her turn, no cards in play (blue or green) in front of any other player have any effect.",
       "image": "assets/images/characters/char_belle_star.png"
     },
     {
@@ -3046,7 +3046,7 @@
       "pack": "dodge_city",
       "name": "Bill Noface",
       "hp": 4,
-      "desc_en": "He draws 1 card, plus 1 card for each wound he has.",
+      "desc_en": "During phase 1, he draws 1 card plus 1 extra card for each wound (missing HP) he has.",
       "image": "assets/images/characters/char_bill_noface.png"
     },
     {
@@ -3054,7 +3054,7 @@
       "pack": "dodge_city",
       "name": "Chuck Wengam",
       "hp": 4,
-      "desc_en": "During his turn, he may choose to lose 1 life point to draw 2 cards.",
+      "desc_en": "During his turn, he may lose 1 life point (except his last one) to draw 2 cards.",
       "image": "assets/images/characters/char_chuck_wengam.png"
     },
     {
@@ -3062,7 +3062,7 @@
       "pack": "dodge_city",
       "name": "Doc Holyday",
       "hp": 4,
-      "desc_en": "During his turn, he may discard any 2 cards from the hand to shoot a BANG!",
+      "desc_en": "Once during his turn, he may discard any 2 cards from hand to shoot a BANG! (does not count toward BANG! limit).",
       "image": "assets/images/characters/char_doc_holyday.png"
     },
     {
@@ -3070,7 +3070,7 @@
       "pack": "dodge_city",
       "name": "Elena Fuente",
       "hp": 3,
-      "desc_en": "She may use any card in her hand as a Missed!",
+      "desc_en": "She may play any card from her hand as a Missed! card.",
       "image": "assets/images/characters/char_elena_fuente.png"
     },
     {
@@ -3086,7 +3086,7 @@
       "pack": "dodge_city",
       "name": "Herb Hunter",
       "hp": 4,
-      "desc_en": "Each time another player is eliminated, he draws 2 extra cards.",
+      "desc_en": "Each time another player is eliminated, he draws 2 extra cards from the deck.",
       "image": "assets/images/characters/char_herb_hunter.png"
     },
     {
@@ -3094,7 +3094,7 @@
       "pack": "dodge_city",
       "name": "Jose Delgado",
       "hp": 4,
-      "desc_en": "Twice in his turn, he may discard a blue card from the hand to draw 2 cards.",
+      "desc_en": "Up to twice during his turn, he may discard a blue card from his hand to draw 2 cards.",
       "image": "assets/images/characters/char_jose_delgado.png"
     },
     {
@@ -3102,7 +3102,7 @@
       "pack": "dodge_city",
       "name": "Molly Stark",
       "hp": 4,
-      "desc_en": "Each time she uses a card from her hand out of turn, she draws a card.",
+      "desc_en": "Each time she plays or voluntarily discards a card from her hand out of turn, she draws 1 card.",
       "image": "assets/images/characters/char_molly_stark.png"
     },
     {
@@ -3110,7 +3110,7 @@
       "pack": "dodge_city",
       "name": "Pat Brennan",
       "hp": 4,
-      "desc_en": "He may steal only one card in play in front of any one player instead of drawing during phase 1.",
+      "desc_en": "During phase 1, instead of drawing 2 cards from the deck, he may steal 1 card in play in front of any player.",
       "image": "assets/images/characters/char_pat_brennan.png"
     },
     {
@@ -3118,7 +3118,7 @@
       "pack": "dodge_city",
       "name": "Pixie Pete",
       "hp": 3,
-      "desc_en": "He draws 3 cards instead of 2.",
+      "desc_en": "During phase 1, he draws 3 cards from the deck instead of 2.",
       "image": "assets/images/characters/char_pixie_pete.png"
     },
     {
@@ -3126,7 +3126,7 @@
       "pack": "dodge_city",
       "name": "Sean Mallory",
       "hp": 3,
-      "desc_en": "He may hold in his hand up to 10 cards.",
+      "desc_en": "At the end of his turn (phase 3), he may hold up to 10 cards in hand instead of his life points limit.",
       "image": "assets/images/characters/char_sean_mallory.png"
     },
     {
@@ -3134,7 +3134,7 @@
       "pack": "dodge_city",
       "name": "Tequila Joe",
       "hp": 4,
-      "desc_en": "Each time he plays a Beer, he regains 2 life points instead of 1.",
+      "desc_en": "Each time he plays a Beer card, he regains 2 life points instead of 1.",
       "image": "assets/images/characters/char_tequila_joe.png"
     },
     {
@@ -3142,7 +3142,7 @@
       "pack": "dodge_city",
       "name": "Vera Custer",
       "hp": 3,
-      "desc_en": "For one whole round, she gains the same ability of another character in play of her choice.",
+      "desc_en": "At the start of her turn (before phase 1), she copies another living character's ability until her next turn.",
       "image": "assets/images/characters/char_vera_custer.png"
     }
   ],
@@ -3150,25 +3150,25 @@
     {
       "role_id": "role_sheriff",
       "name": "Sheriff",
-      "desc_en": "Kill all the Outlaws and the Renegade!",
+      "desc_en": "Eliminate all Outlaws and the Renegade!",
       "image": "assets/images/roles/role_sheriff.png"
     },
     {
       "role_id": "role_deputy",
       "name": "Deputy Sheriff",
-      "desc_en": "Protect the Sheriff! Kill all the Outlaws and the Renegade!",
+      "desc_en": "Protect the Sheriff! Eliminate all Outlaws and the Renegade!",
       "image": "assets/images/roles/role_deputy.png"
     },
     {
       "role_id": "role_outlaw",
       "name": "Outlaw",
-      "desc_en": "Kill the Sheriff!",
+      "desc_en": "Eliminate the Sheriff!",
       "image": "assets/images/roles/role_outlaw.png"
     },
     {
       "role_id": "role_renegade",
       "name": "Renegade",
-      "desc_en": "Be the last one in play!",
+      "desc_en": "Be the last player standing!",
       "image": "assets/images/roles/role_renegade.png"
     }
   ],
@@ -3191,14 +3191,14 @@
       "event_id": "hn_ghost_town",
       "pack": "high_noon",
       "name": "Ghost Town",
-      "desc_en": "During their turn, eliminated players return to play as ghosts: they draw 3 cards instead of 2, cannot die, and leave play at the end of their turn.",
+      "desc_en": "During their turn, eliminated players return as ghosts: they draw 3 cards, cannot die, and leave play at turn end.",
       "image": "assets/images/events/hn_ghost_town.png"
     },
     {
       "event_id": "hn_gold_rush",
       "pack": "high_noon",
       "name": "Gold Rush",
-      "desc_en": "The game proceeds counterclockwise, always starting from the Sheriff. All card effects proceed counterclockwise.",
+      "desc_en": "Turn order reverses counterclockwise, starting from the Sheriff.",
       "image": "assets/images/events/hn_gold_rush.png"
     },
     {
@@ -3212,91 +3212,91 @@
       "event_id": "hn_high_noon",
       "pack": "high_noon",
       "name": "High Noon",
-      "desc_en": "Each player loses 1 life point at the start of his turn.",
+      "desc_en": "Each player loses 1 life point at the start of their turn.",
       "image": "assets/images/events/hn_high_noon.png"
     },
     {
       "event_id": "hn_shootout",
       "pack": "high_noon",
       "name": "Shootout",
-      "desc_en": "Each player can play a second BANG! card during his turn.",
+      "desc_en": "Each player may play a second BANG! card during their turn.",
       "image": "assets/images/events/hn_shootout.png"
     },
     {
       "event_id": "hn_the_daltons",
       "pack": "high_noon",
       "name": "The Daltons",
-      "desc_en": "When The Daltons enter play, each player with blue cards in front of him discards one of his choice.",
+      "desc_en": "When this enters play, each player with blue cards in play must remove 1 of their choice.",
       "image": "assets/images/events/hn_the_daltons.png"
     },
     {
       "event_id": "hn_the_doctor",
       "pack": "high_noon",
       "name": "The Doctor",
-      "desc_en": "When The Doctor enters play, the player(s) in play with the fewest current life points regain(s) 1 life point.",
+      "desc_en": "When this enters play, the player(s) with the fewest current life points regain 1 life point.",
       "image": "assets/images/events/hn_the_doctor.png"
     },
     {
       "event_id": "hn_the_reverend",
       "pack": "high_noon",
       "name": "The Reverend",
-      "desc_en": "Players cannot play any Beer cards.",
+      "desc_en": "Players cannot play Beer cards.",
       "image": "assets/images/events/hn_the_reverend.png"
     },
     {
       "event_id": "hn_the_sermon",
       "pack": "high_noon",
       "name": "The Sermon",
-      "desc_en": "Each player cannot use BANG! cards during his turn.",
+      "desc_en": "Players cannot play BANG! cards during their turn.",
       "image": "assets/images/events/hn_the_sermon.png"
     },
     {
       "event_id": "hn_thirst",
       "pack": "high_noon",
       "name": "Thirst",
-      "desc_en": "Each player only draws his first card, not the second one, during phase 1 of his turn.",
+      "desc_en": "Each player draws only 1 card instead of 2 during phase 1 of their turn.",
       "image": "assets/images/events/hn_thirst.png"
     },
     {
       "event_id": "hn_train_arrival",
       "pack": "high_noon",
       "name": "Train Arrival",
-      "desc_en": "Each player draws one extra card at the end of phase 1 of his turn.",
+      "desc_en": "Each player draws 1 extra card at the end of phase 1 of their turn.",
       "image": "assets/images/events/hn_train_arrival.png"
     },
     {
       "event_id": "foc_ambush",
       "pack": "fistful_of_cards",
       "name": "Ambush",
-      "desc_en": "The distance between any two players is 1. This is modified only by cards in play.",
+      "desc_en": "Base distance between any two players is 1 (modified only by cards in play).",
       "image": "assets/images/events/foc_ambush.png"
     },
     {
       "event_id": "foc_sniper",
       "pack": "fistful_of_cards",
       "name": "Sniper",
-      "desc_en": "During his turn, the player may discard 2 BANG! cards together against a player: this counts as a BANG!, but requires 2 Missed! to be canceled.",
+      "desc_en": "During their turn, a player may spend 2 BANG! cards together against 1 target within range: counts as 1 BANG! requiring 2 Missed! effects to cancel.",
       "image": "assets/images/events/foc_sniper.png"
     },
     {
       "event_id": "foc_dead_man",
       "pack": "fistful_of_cards",
       "name": "Dead Man",
-      "desc_en": "During his turn, the player who was eliminated first returns to play with 2 life points and 2 cards.",
+      "desc_en": "During their turn, the first eliminated player returns to play with 2 life points and draws 2 cards.",
       "image": "assets/images/events/foc_dead_man.png"
     },
     {
       "event_id": "foc_blood_brothers",
       "pack": "fistful_of_cards",
       "name": "Blood Brothers",
-      "desc_en": "At the beginning of his turn, each player may lose one life point (except his last one) to give one life point to any player of his choice.",
+      "desc_en": "At turn start, each player may lose 1 life point (except their last) to give 1 life point to any chosen player.",
       "image": "assets/images/events/foc_blood_brothers.png"
     },
     {
       "event_id": "foc_the_judge",
       "pack": "fistful_of_cards",
       "name": "The Judge",
-      "desc_en": "You cannot play cards in front of yourself or any other player.",
+      "desc_en": "Players cannot place cards in front of themselves or any other player.",
       "image": "assets/images/events/foc_the_judge.png"
     },
     {
@@ -3310,71 +3310,71 @@
       "event_id": "foc_law_of_the_west",
       "pack": "fistful_of_cards",
       "name": "Law of the West",
-      "desc_en": "During his phase 1, each player shows the second card he draws: if he can, he must play it during his phase 2.",
+      "desc_en": "During phase 1, each player reveals the second card drawn: if playable, they must play it during phase 2.",
       "image": "assets/images/events/foc_law_of_the_west.png"
     },
     {
       "event_id": "foc_hard_liquor",
       "pack": "fistful_of_cards",
       "name": "Hard Liquor",
-      "desc_en": "Each player may skip his phase 1 to regain 1 life point.",
+      "desc_en": "Each player may skip phase 1 to regain 1 life point.",
       "image": "assets/images/events/foc_hard_liquor.png"
     },
     {
       "event_id": "foc_abandoned_mine",
       "pack": "fistful_of_cards",
       "name": "Abandoned Mine",
-      "desc_en": "During his phase 1, each player draws from the discard pile and discards face up on the deck.",
+      "desc_en": "During phase 1, each player draws from the discard pile and discards face up onto the deck.",
       "image": "assets/images/events/foc_abandoned_mine.png"
     },
     {
       "event_id": "foc_fistful_of_cards",
       "pack": "fistful_of_cards",
       "name": "A Fistful of Cards",
-      "desc_en": "At the beginning of his turn, the player is the target of as many BANG! as the number of cards in his hand.",
+      "desc_en": "At the start of their turn, each player becomes the target of as many BANG! shots as cards in their hand.",
       "image": "assets/images/events/foc_fistful_of_cards.png"
     },
     {
       "event_id": "foc_peyote",
       "pack": "fistful_of_cards",
       "name": "Peyote",
-      "desc_en": "Instead of drawing in his phase 1, each player guesses if the suit of the top card of the deck is red or black. He then draws and shows it: if he guessed right, he keeps it and may guess again; otherwise he proceeds to phase 2.",
+      "desc_en": "Instead of drawing in phase 1, guess red or black for the top deck card, draw and reveal it; repeat while correct.",
       "image": "assets/images/events/foc_peyote.png"
     },
     {
       "event_id": "foc_ranch",
       "pack": "fistful_of_cards",
       "name": "Ranch",
-      "desc_en": "At the end of his phase 1, each player may discard any number of cards from his hand once to draw an equal number of cards from the deck.",
+      "desc_en": "At the end of phase 1, each player may once discard any number of hand cards to draw that many from the deck.",
       "image": "assets/images/events/foc_ranch.png"
     },
     {
       "event_id": "foc_ricochet",
       "pack": "fistful_of_cards",
       "name": "Ricochet",
-      "desc_en": "Each player may play BANG! cards against cards in play in front of any player: that card is discarded unless the owner plays a Missed!",
+      "desc_en": "Players may shoot BANG! cards at cards in play in front of any player: the card is removed unless its owner cancels with Missed!.",
       "image": "assets/images/events/foc_ricochet.png"
     },
     {
       "event_id": "foc_russian_roulette",
       "pack": "fistful_of_cards",
       "name": "Russian Roulette",
-      "desc_en": "When Russian Roulette enters play, starting from the Sheriff each player discards a Missed!, until one player does not: he loses 2 life points and the Roulette stops.",
+      "desc_en": "Starting from the Sheriff, each player plays a Missed! effect until one fails; that player loses 2 life points.",
       "image": "assets/images/events/foc_russian_roulette.png"
     },
     {
       "event_id": "foc_vendetta",
       "pack": "fistful_of_cards",
       "name": "Vendetta",
-      "desc_en": "At the end of his turn, each player may Draw!: on a Heart, he plays another turn (but does not Draw! again).",
+      "desc_en": "At the end of their turn, each player checks the top card: on Hearts, they play another turn (without triggering Vendetta again).",
       "image": "assets/images/events/foc_vendetta.png"
     }
   ],
   "symbol_grammar": {
     "BANG_BULLET": "Shoot 1 BANG!",
-    "MISSED_HAT": "Cancel the effect of 1 BANG! card",
+    "MISSED_HAT": "Cancel 1 BANG! effect",
     "LIFE_BULLET": "+1 Life Point (cannot exceed max HP; no effect with only 2 players left)",
-    "ALL_PLAYERS_HAT_RING": "Affects all other players in play regardless of distance",
+    "ALL_PLAYERS_HAT_RING": "Affects all other living players regardless of distance",
     "ANY_PLAYER_HAT": "Target any 1 other player regardless of distance",
     "CROSSHAIR_1": "Target 1 player at reachable distance <= 1 (modified by Scope/Binocular/Mustang/Hideout)",
     "CROSSHAIR_2": "Weapon with Range 2 (replaces current gun in play)",
@@ -3382,8 +3382,8 @@
     "CROSSHAIR_4": "Weapon with Range 4 (replaces current gun in play)",
     "CROSSHAIR_5": "Weapon with Range 5 (replaces current gun in play)",
     "CROSSHAIR_GUN_RANGE": "Target 1 player within your current weapon's reachable distance",
-    "DRAW_CARD_HAND": "Draw 1 card (from the deck, or from target player's hand/in-play when paired with a player symbol)",
-    "DISCARD_CARD_X": "Discard 1 card (as an extra cost when on the left of colon, or force target to discard when on the right)",
-    "DRAW_CHECK_EQUAL": "Draw! check from the deck: effect triggers if the drawn card matches the required suit/rank"
+    "DRAW_CARD_HAND": "Draw 1 card from deck, or steal 1 card when targeting a player",
+    "DISCARD_CARD_X": "Pay 1 extra card cost (left of colon) or remove 1 target card (right)",
+    "DRAW_CHECK_EQUAL": "Check the top card of the deck: effect triggers if suit/rank matches"
   }
 }

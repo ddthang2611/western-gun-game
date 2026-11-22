@@ -5,6 +5,7 @@ export type RoleType = "sheriff" | "deputy" | "outlaw" | "renegade";
 
 export interface Card {
   id: string;
+  templateId?: string;
   name: string;
   border: CardBorder;
   rank: Rank;
@@ -199,6 +200,13 @@ export interface InFlightCard {
   actionText: string;
   kind?: ArenaEntryKind;
   outcome?: ArenaOutcomeTag;
+  meta?: {
+    actor?: string;
+    target?: string;
+    kind?: ArenaEntryKind;
+    outcome?: ArenaOutcomeTag;
+    actionLabel?: string;
+  };
 }
 
 export interface PendingReactionInfo {
@@ -215,6 +223,8 @@ export interface PendingReactionInfo {
   canUseJourdonnais: boolean;
   barrelChecked: boolean;
   jourdonnaisChecked: boolean;
+  canUseBeer?: boolean;
+  canUseSidKetchum?: boolean;
   pendingDamage?: number;
   ricochetTargetArea?: "EQUIPMENT" | "GREEN" | "JUDGEMENT";
   ricochetTargetCardId?: string;
@@ -302,15 +312,53 @@ export interface GeneralStoreInfo {
   currentPickerName?: string | null;
 }
 
+export interface PendingBrawlPickInfo {
+  actorPlayerId: string;
+  actorPlayerName?: string;
+  currentTargetId: string;
+  currentTargetName?: string;
+  remainingCount: number;
+  sourceCard: Card;
+}
+
+export interface LuckyDukeCardOption extends Card {
+  matches: boolean;
+}
+
+export interface PendingLuckyDukePickInfo {
+  playerId: string;
+  playerName?: string;
+  reason: "BARREL" | "JOURDONNAIS" | "JAIL" | "DYNAMITE" | "VENDETTA";
+  drawnCards: LuckyDukeCardOption[];
+}
+
+export interface PendingElGringoPickInfo {
+  victimId: string;
+  victimName?: string;
+  attackerId: string;
+  attackerName?: string;
+  remainingSteals: number;
+}
+
+export interface StructuredLogEntry {
+  id: string;
+  eventType: string;
+  params: Record<string, unknown>;
+  fallbackText: string;
+}
+
 export interface GameOverInfo {
   winner: string | null;
   message: string;
+  outcomeCode?: string;
+  outcomeParams?: Record<string, string | number | null>;
 }
 
 export interface TableState {
   roomId: string;
   matchId?: string;
   isHost?: boolean;
+  hostName?: string;
   hostInfo: string;
   stateSeq?: number;
   matchPhase?: "CHARACTER_SELECT" | "PLAYING" | "FINISHED";
@@ -327,6 +375,7 @@ export interface TableState {
   inFlightCards: InFlightCard[];
   arenaChain?: ArenaChainState;
   combatLog: string[];
+  structuredCombatLog?: StructuredLogEntry[];
   roleCounts: {
     police: number;
     outlaw: number;
@@ -348,6 +397,9 @@ export interface TableState {
   myPendingReaction?: PendingReactionInfo | null;
   pendingReactions?: PublicPendingReaction[];
   generalStore?: GeneralStoreInfo | null;
+  pendingBrawlPick?: PendingBrawlPickInfo | null;
+  pendingLuckyDukePick?: PendingLuckyDukePickInfo | null;
+  pendingElGringoPick?: PendingElGringoPickInfo | null;
   gameOver?: GameOverInfo | null;
   activeEvent?: ActiveEventInfo | null;
   matchPaused?: boolean;

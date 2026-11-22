@@ -18,12 +18,6 @@ export interface GameEventChoreographyContext {
     options?: Omit<FlyingCardItem, "id" | "fromSelector" | "toSelector">
   ) => void;
   scheduleTimeout: (fn: () => void, ms: number) => void;
-  onHoldHandCard?: (cardId: string) => void;
-  onOpenElGringoPicker: (
-    attacker: Player,
-    attackerId: string,
-    stolenCard?: Card
-  ) => void;
 }
 
 type EventPayload = Record<string, unknown>;
@@ -237,14 +231,6 @@ const GAME_EVENT_HANDLERS: Record<string, EventHandler> = {
     if (!attackerId || !victimId) return;
     const myId = ctx.getMyPlayerId();
     const card = asCard(p.card);
-    const attackerObj = ctx.getPlayers().find((pl) => pl.id === attackerId);
-    if (victimId === myId && attackerObj) {
-      if (card?.id && card.id !== "SECRET") {
-        ctx.onHoldHandCard?.(card.id);
-      }
-      ctx.onOpenElGringoPicker(attackerObj, attackerId, card as Card | undefined);
-      return;
-    }
     const isKnown = isKnownSecretCard(card);
     ctx.scheduleTimeout(() => {
       ctx.enqueueFlight(

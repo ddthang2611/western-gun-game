@@ -1,5 +1,6 @@
 import React from "react";
 import type { Player } from "../../../types/game";
+import { CardTooltipContent, useI18n } from "../../../i18n";
 import { getFixedEquipmentSlots } from "../../../utils/equipments";
 import { BulletMeter } from "../BulletMeter/BulletMeter";
 import { CharacterPortrait } from "../CharacterPortrait/CharacterPortrait";
@@ -29,6 +30,7 @@ export const OpponentSeat: React.FC<OpponentSeatProps> = ({
   concealedInPlayCardIds,
   onSelectTarget,
 }) => {
+  const { locale, t, tCard, tChar } = useI18n();
   const concealedSet = concealedInPlayCardIds?.length
     ? new Set(concealedInPlayCardIds)
     : undefined;
@@ -101,8 +103,8 @@ export const OpponentSeat: React.FC<OpponentSeatProps> = ({
       <div className="opponent-seat__main-pane">
         <div
           className="opponent-seat__hand-count"
-          aria-label={`${player.handCount} cards in hand`}
-          title={`${player.handCount} card(s) in hand`}
+          aria-label={t("common.cardsCount", { count: player.handCount })}
+          title={t("common.cardsCount", { count: player.handCount })}
         >
           <span className="opponent-seat__hand-fan" aria-hidden="true">
             <span className="opponent-seat__mini-card opponent-seat__mini-card--left" />
@@ -117,7 +119,7 @@ export const OpponentSeat: React.FC<OpponentSeatProps> = ({
           <div className="opponent-seat__player-meta">
             {player.isSheriff && (
               <Badge variant="warning" shape="tag">
-                SHERIFF
+                {t("table.sheriffTag")}
               </Badge>
             )}
             <span className="opponent-seat__player-name">{player.name}</span>
@@ -127,13 +129,27 @@ export const OpponentSeat: React.FC<OpponentSeatProps> = ({
         {/* Hero portraits, names, and vertical HP */}
         <div className="opponent-seat__body">
           <div className="opponent-seat__hero-columns">
-            {player.characters.slice(0, 2).map((hero) => (
-              <DebouncedPopover key={hero.id} title={hero.name} content={hero.desc}>
-                <div className="opponent-seat__hero-slot">
-                  <CharacterPortrait character={hero} size="seat" />
-                </div>
-              </DebouncedPopover>
-            ))}
+            {player.characters.slice(0, 2).map((hero) => {
+              const charLoc = tChar(hero);
+              return (
+                <DebouncedPopover
+                  key={hero.id}
+                  title={charLoc.primary.name}
+                  content={
+                    <CardTooltipContent
+                      typeLabel={t("popover.type.character")}
+                      primaryDesc={charLoc.primary.desc}
+                      secondaryTitle={charLoc.secondary?.name}
+                      secondaryDesc={charLoc.secondary?.desc}
+                    />
+                  }
+                >
+                  <div className="opponent-seat__hero-slot">
+                    <CharacterPortrait character={hero} size="seat" />
+                  </div>
+                </DebouncedPopover>
+              );
+            })}
           </div>
 
           <div className="opponent-seat__side-meta">
@@ -151,7 +167,7 @@ export const OpponentSeat: React.FC<OpponentSeatProps> = ({
                     ? "opponent-seat__distance--in-range"
                     : "opponent-seat__distance--out-of-range"
                 }`}
-                title={`Distance: ${distance}`}
+                title={t("table.distanceLabel", { dist: distance })}
               >
                 D{distance}
               </span>
@@ -181,14 +197,32 @@ export const OpponentSeat: React.FC<OpponentSeatProps> = ({
                   );
                 }
 
+                const cardLoc = tCard(slot.card);
+                const sub =
+                  locale === "vi" && cardLoc.primary.subtitleVi
+                    ? ` (${cardLoc.primary.subtitleVi})`
+                    : "";
                 const title = slot.card.range
-                  ? `${slot.card.name} (Range ${slot.card.range})`
-                  : slot.card.name;
+                  ? `${cardLoc.primary.name}${sub} (${t("common.range", {
+                      range: slot.card.range,
+                    })})`
+                  : `${cardLoc.primary.name}${sub}`;
                 return (
                   <DebouncedPopover
                     key={slot.slotKey}
                     title={title}
-                    content={slot.card.desc || slot.card.name}
+                    content={
+                      <CardTooltipContent
+                        typeLabel={t("popover.type.blue")}
+                        primaryDesc={cardLoc.primary.desc || slot.card.desc}
+                        actionSummary={cardLoc.primary.actionSummary}
+                        secondaryTitle={cardLoc.secondary?.name}
+                        secondaryDesc={cardLoc.secondary?.desc}
+                        range={slot.card.range}
+                        suit={slot.card.suit}
+                        rank={slot.card.rank}
+                      />
+                    }
                     delayMs={250}
                   >
                     <div
@@ -234,11 +268,26 @@ export const OpponentSeat: React.FC<OpponentSeatProps> = ({
                   );
                 }
 
+                const gLoc = tCard(gCard.card);
+                const gSub =
+                  locale === "vi" && gLoc.primary.subtitleVi
+                    ? ` (${gLoc.primary.subtitleVi})`
+                    : "";
                 return (
                   <DebouncedPopover
                     key={gCard.id || `grn_${idx}`}
-                    title={gCard.card.name}
-                    content={gCard.card.desc || gCard.card.name}
+                    title={`${gLoc.primary.name}${gSub}`}
+                    content={
+                      <CardTooltipContent
+                        typeLabel={t("popover.type.green")}
+                        primaryDesc={gLoc.primary.desc || gCard.card.desc}
+                        actionSummary={gLoc.primary.actionSummary}
+                        secondaryTitle={gLoc.secondary?.name}
+                        secondaryDesc={gLoc.secondary?.desc}
+                        suit={gCard.card.suit}
+                        rank={gCard.card.rank}
+                      />
+                    }
                     delayMs={250}
                   >
                     <div

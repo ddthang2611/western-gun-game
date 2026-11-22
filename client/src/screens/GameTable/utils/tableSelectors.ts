@@ -35,9 +35,7 @@ export interface CardPickerConfig {
   allowInPlay?: boolean;
   sourceGreenCardId?: string;
   stealContext?: {
-    mode: "JESSE_STEAL_AND_DECK" | "PAT_BRENNAN_STEAL" | "EL_GRINGO";
-    attackerId?: string;
-    stolenCard?: Card;
+    mode: "JESSE_STEAL_AND_DECK" | "PAT_BRENNAN_STEAL";
   };
 }
 
@@ -58,6 +56,9 @@ export const EMPTY_LIVE_TABLE: TableState = {
   myPendingReaction: null,
   pendingReactions: [],
   generalStore: null,
+  pendingBrawlPick: null,
+  pendingLuckyDukePick: null,
+  pendingElGringoPick: null,
   gameOver: null,
   activeEvent: null,
   matchPaused: false,
@@ -75,6 +76,7 @@ export interface ComputeActionHintParams {
   discardCostIds: string[];
   isSniperBangSelected: boolean;
   canRicochetEquip: boolean;
+  t?: (key: string, params?: Record<string, string | number>, fallback?: string) => string;
 }
 
 // Derive contextual action hint banner
@@ -90,53 +92,121 @@ export function computeActionHint({
   discardCostIds,
   isSniperBangSelected,
   canRicochetEquip,
+  t,
 }: ComputeActionHintParams): string | null {
+  const tr = (key: string, params: Record<string, string | number>, fallback: string) =>
+    t ? t(key, params, fallback) : fallback;
+
   if (skillMode === "CHUCK_WENGAM_SACRIFICE") {
-    return "Chuck Wengam: Sacrifice 1 HP to draw 2 cards - Click Confirm Skill";
+    return tr(
+      "table.hints.chuck",
+      {},
+      "Chuck Wengam: Sacrifice 1 HP to draw 2 cards - Click Confirm Skill"
+    );
   }
   if (skillMode === "JOSE_DELGADO_DRAW") {
-    return `Jose Delgado: Select 1 blue card (${skillDiscardIds.length}/1) - Click Confirm Skill`;
+    return tr(
+      "table.hints.jose",
+      { count: skillDiscardIds.length },
+      `Jose Delgado: Select 1 blue card (${skillDiscardIds.length}/1) - Click Confirm Skill`
+    );
   }
   if (skillMode === "SID_KETCHUM_HEAL") {
-    return `Sid Ketchum: Select 2 cards (${skillDiscardIds.length}/2) - Click Confirm Skill`;
+    return tr(
+      "table.hints.sid",
+      { count: skillDiscardIds.length },
+      `Sid Ketchum: Select 2 cards (${skillDiscardIds.length}/2) - Click Confirm Skill`
+    );
   }
   if (skillMode === "DOC_HOLYDAY_BANG") {
-    return `Doc Holyday: Select 2 cards (${skillDiscardIds.length}/2) & a target - Click Confirm Skill`;
+    return tr(
+      "table.hints.doc",
+      { count: skillDiscardIds.length },
+      `Doc Holyday: Select 2 cards (${skillDiscardIds.length}/2) & a target - Click Confirm Skill`
+    );
   }
   if (selectedGreenCard) {
     return TARGETED_GREEN_CARDS.has(selectedGreenCard.card.name) && !selectedTargetId
-      ? `Green Ready: ${selectedGreenCard.card.name} - Select a target opponent, then click Play.`
-      : `Green Ready: ${selectedGreenCard.card.name} - Click Play to activate.`;
+      ? tr(
+          "table.hints.greenNeedTarget",
+          { card: selectedGreenCard.card.name },
+          `Green Ready: ${selectedGreenCard.card.name} - Select a target opponent, then click Play.`
+        )
+      : tr(
+          "table.hints.greenReady",
+          { card: selectedGreenCard.card.name },
+          `Green Ready: ${selectedGreenCard.card.name} - Click Activate to use.`
+        );
   }
   if (selectedCard && selectedCard.border === "green" && currentPhase !== 3) {
     return GREEN_DEFENSE_NAMES.has(selectedCard.name)
-      ? `Green Defense (${selectedCard.name}): Click Play to place in front of you (ready after your turn).`
-      : `Green Card (${selectedCard.name}): Click Play to place in play (ready next turn).`;
+      ? tr(
+          "table.hints.greenPlaceDefense",
+          { card: selectedCard.name },
+          `Green Defense (${selectedCard.name}): Click Play to place in front of you (ready next turn).`
+        )
+      : tr(
+          "table.hints.greenPlace",
+          { card: selectedCard.name },
+          `Green Card (${selectedCard.name}): Click Play to place in play (ready next turn).`
+        );
   }
   if (requiresExtraDiscard && selectedCard) {
     if (activeHandLength < 2) {
-      return `${selectedCard.name}: Requires 1 extra discard card, but your hand has no second card.`;
+      return tr(
+        "table.hints.extraNeedSecondCard",
+        { card: selectedCard.name },
+        `${selectedCard.name}: Requires 1 extra card from hand, but your hand has no second card.`
+      );
     }
     if (discardCostIds.length < 1) {
-      return `${selectedCard.name}: Select 1 extra card in hand to discard (0/1).`;
+      return tr(
+        "table.hints.extraSelectCost",
+        { card: selectedCard.name },
+        `${selectedCard.name}: Select 1 extra card from hand to pay cost (0/1).`
+      );
     }
     if (
       TARGETED_SINGLE_CARDS.has(selectedCard.name) ||
       MANIPULATE_CARDS.has(selectedCard.name)
     ) {
       return selectedTargetId
-        ? `${selectedCard.name}: Extra discard ready (1/1) - Click Play.`
-        : `${selectedCard.name}: Extra discard ready (1/1) - Select a target opponent.`;
+        ? tr(
+            "table.hints.extraReady",
+            { card: selectedCard.name },
+            `${selectedCard.name}: Extra card cost ready (1/1) - Click Play.`
+          )
+        : tr(
+            "table.hints.extraNeedTarget",
+            { card: selectedCard.name },
+            `${selectedCard.name}: Extra card cost ready (1/1) - Select a target opponent.`
+          );
     }
-    return `${selectedCard.name}: Extra discard ready (1/1) - Click Play.`;
+    return tr(
+      "table.hints.extraReady",
+      { card: selectedCard.name },
+      `${selectedCard.name}: Extra card cost ready (1/1) - Click Play.`
+    );
   }
   if (isSniperBangSelected) {
     return discardCostIds.length > 0
-      ? "Sniper: 2nd BANG! selected (requires 2 Missed!) - Select target & click Play."
-      : "Sniper: Select target for normal shot, or pick 2nd BANG! first.";
+      ? tr(
+          "table.hints.sniperReady",
+          {},
+          "Sniper: 2nd BANG! selected (requires 2 Missed!) - Select target & click Play."
+        )
+      : tr(
+          "table.hints.sniperPrompt",
+          {},
+          "Sniper: Select target for normal shot, or pick 2nd BANG! first."
+        );
   }
   if (canRicochetEquip) {
-    return "Ricochet: Click Play to shoot HP, or Ricochet Equip to shoot a card in play.";
+    return tr(
+      "table.hints.ricochet",
+      {},
+      "Ricochet: Click Play to shoot HP, or Ricochet Equip to shoot a card in play."
+    );
   }
   return null;
 }
@@ -163,6 +233,7 @@ export interface ComputeTableViewModelParams {
   isArenaBlockingActions: boolean;
   isStepAnimating: boolean;
   concealedInPlayCardIds: string[];
+  t?: (key: string, params?: Record<string, string | number>, fallback?: string) => string;
 }
 
 export interface TableViewModel {
@@ -303,6 +374,7 @@ export function computeTableViewModel({
   isArenaBlockingActions,
   isStepAnimating,
   concealedInPlayCardIds,
+  t,
 }: ComputeTableViewModelParams): TableViewModel {
   const base = deriveBaseTableContext({
     state,
@@ -421,6 +493,7 @@ export function computeTableViewModel({
     discardCostIds,
     isSniperBangSelected,
     canRicochetEquip,
+    t,
   });
 
   const isSkillMode = skillMode !== null;

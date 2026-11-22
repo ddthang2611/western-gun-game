@@ -12,6 +12,8 @@ import {
   ArenaChainState,
 } from "../types/state";
 import { ArenaChainManager } from "../arena/arena_chain_manager";
+import { SkillHooks } from "../interact/skill_hooks";
+import type { LuckyDukeReason } from "../interact/interact_types";
 import {
   EngineCard,
   EngineEventCard,
@@ -61,6 +63,25 @@ export interface GeneralStoreSnapshot {
   currentPickerId: string | null;
 }
 
+export interface BrawlPickSnapshot {
+  actorPlayerId: string;
+  currentTargetId: string;
+  remainingCount: number;
+  sourceCard: EngineCard;
+}
+
+export interface LuckyDukePickSnapshot {
+  playerId: string;
+  reason: LuckyDukeReason;
+  drawnCards: Array<EngineCard & { matches: boolean }>;
+}
+
+export interface ElGringoPickSnapshot {
+  victimId: string;
+  attackerId: string;
+  remainingSteals: number;
+}
+
 export interface SanitizedPendingCharacterChoice {
   playerId: string;
   candidates: EngineCharacter[];
@@ -106,6 +127,9 @@ export interface SanitizedGameState {
   pendingReactionTargets: PublicReactionSummary[];
   arenaChain: ArenaChainState;
   generalStore: GeneralStoreSnapshot | null;
+  pendingBrawlPick: BrawlPickSnapshot | null;
+  pendingLuckyDukePick: LuckyDukePickSnapshot | null;
+  pendingElGringoPick: ElGringoPickSnapshot | null;
   gameOver?: {
     winner: string | null;
     message: string;
@@ -128,6 +152,7 @@ export class FogOfWarFilter {
       const shouldRevealRole =
         player.isSheriff ||
         player.isDead ||
+        Boolean(player.isGhost) ||
         isMe ||
         state.is3PlayerVariant ||
         state.matchPhase === "FINISHED" ||
@@ -183,9 +208,10 @@ export class FogOfWarFilter {
       const target = state.players.get(r.targetPlayerId);
       return Boolean(target && !target.isDead);
     });
+    const headChain = state.activeChain[0];
     const headReaction = activeReactions[0] || null;
     const myPendingReaction =
-      headReaction && headReaction.targetPlayerId === targetPlayerId
+      !headChain && headReaction && headReaction.targetPlayerId === targetPlayerId
         ? headReaction
         : null;
 
@@ -202,15 +228,45 @@ export class FogOfWarFilter {
       })
     );
 
-    const storeChain = state.activeChain[0];
     const generalStore: GeneralStoreSnapshot | null =
-      storeChain && Array.isArray(storeChain.storePool)
+      headChain && "storePool" in headChain && Array.isArray(headChain.storePool)
         ? {
-            originPlayerId: storeChain.originPlayerId,
-            pool: [...storeChain.storePool],
-            draftOrder: [...storeChain.draftOrder],
-            currentPickerIndex: storeChain.currentPickerIndex,
-            currentPickerId: storeChain.draftOrder[storeChain.currentPickerIndex] || null,
+            originPlayerId: headChain.originPlayerId,
+            pool: [...headChain.storePool],
+            draftOrder: [...headChain.draftOrder],
+            currentPickerIndex: headChain.currentPickerIndex,
+            currentPickerId: headChain.draftOrder[headChain.currentPickerIndex] || null,
+          }
+        : null;
+
+    const pendingBrawlPick: BrawlPickSnapshot | null =
+      headChain && headChain.type === "BRAWL_CARD_PICK"
+        ? {
+            actorPlayerId: headChain.actorPlayerId,
+            currentTargetId: headChain.currentTargetId,
+            remainingCount: headChain.remainingTargetIds.length,
+            sourceCard: { ...headChain.sourceCard },
+          }
+        : null;
+
+    const pendingLuckyDukePick: LuckyDukePickSnapshot | null =
+      headChain && headChain.type === "LUCKY_DUKE_PICK"
+        ? {
+            playerId: headChain.playerId,
+            reason: headChain.reason,
+            drawnCards: headChain.drawnCards.map((c) => ({
+              ...c,
+              matches: SkillHooks.isDrawCheckSuccess(headChain.reason, c, state),
+            })),
+          }
+        : null;
+
+    const pendingElGringoPick: ElGringoPickSnapshot | null =
+      headChain && headChain.type === "EL_GRINGO_PICK"
+        ? {
+            victimId: headChain.victimId,
+            attackerId: headChain.attackerId,
+            remainingSteals: headChain.remainingSteals,
           }
         : null;
 
@@ -277,9 +333,9 @@ export class FogOfWarFilter {
             };
     }
 
-    const sanitizedActiveChain = (state.activeChain || []).map((entry: any) => {
+    const sanitizedActiveChain = (state.activeChain || []).map((entry) => {
       if (!entry || typeof entry !== "object") return entry;
-      if (Array.isArray(entry.storePool)) {
+      if ("storePool" in entry && Array.isArray(entry.storePool)) {
         return {
           type: "GENERAL_STORE_DRAFT",
           originPlayerId: entry.originPlayerId,
@@ -289,15 +345,31 @@ export class FogOfWarFilter {
           currentPickerId: entry.draftOrder?.[entry.currentPickerIndex] || null,
         };
       }
-      const clean: Record<string, any> = { ...entry };
-      delete clean.card;
-      delete clean.cards;
-      delete clean.storePool;
-      delete clean.handCards;
-      delete clean.drawnCards;
-      delete clean.previewCards;
-      delete clean.drawnSoFar;
-      return clean;
+      if (entry.type === "BRAWL_CARD_PICK") {
+        return {
+          type: entry.type,
+          actorPlayerId: entry.actorPlayerId,
+          currentTargetId: entry.currentTargetId,
+          remainingCount: entry.remainingTargetIds.length,
+        };
+      }
+      if (entry.type === "LUCKY_DUKE_PICK") {
+        return {
+          type: entry.type,
+          playerId: entry.playerId,
+          reason: entry.reason,
+          drawnCards: entry.drawnCards.map((c) => ({ ...c })),
+        };
+      }
+      if (entry.type === "EL_GRINGO_PICK") {
+        return {
+          type: entry.type,
+          victimId: entry.victimId,
+          attackerId: entry.attackerId,
+          remainingSteals: entry.remainingSteals,
+        };
+      }
+      return entry;
     });
 
     return {
@@ -341,6 +413,9 @@ export class FogOfWarFilter {
         };
       })(),
       generalStore,
+      pendingBrawlPick,
+      pendingLuckyDukePick,
+      pendingElGringoPick,
       gameOver: state.gameOver,
     };
   }

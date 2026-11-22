@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EventRuleRegistry = void 0;
+const card_registry_1 = require("../cards/card_registry");
 const EVENT_RULES = {
     EVENT_HN_BLESSING: {
         modifySuit: () => "hearts",
@@ -74,12 +75,10 @@ const EVENT_RULES = {
     },
     EVENT_FOC_THE_JUDGE: {
         canPlayCard: (_state, _player, card) => {
-            if (card.border === "blue" ||
-                card.border === "green" ||
-                card.category === "weapon" ||
-                card.category === "equipment" ||
-                card.category === "green_delayed" ||
-                card.category === "green_delay") {
+            const isInPlayCard = card_registry_1.CardRegistry.get(card)
+                ? card_registry_1.CardRegistry.isEquippableCard(card)
+                : card.border === "blue" || card.border === "green";
+            if (isInPlayCard) {
                 return "The Judge forbids playing cards in front of any player";
             }
             return null;

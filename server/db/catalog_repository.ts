@@ -30,6 +30,7 @@ export class CatalogRepository {
   private roles: Map<string, RoleRow> = new Map();
   private events: Map<string, EventRow> = new Map();
   private symbols: Map<string, string> = new Map();
+  private symbolsVi: Map<string, string> = new Map();
   private uiComponents: Map<string, UiComponentRow> = new Map();
   private settings: Map<string, string> = new Map();
   private meta: Map<string, string> = new Map();
@@ -58,8 +59,12 @@ export class CatalogRepository {
 
     const symbolRows = db.prepare("SELECT * FROM symbol_lexicon").all() as SymbolLexiconRow[];
     this.symbols.clear();
+    this.symbolsVi.clear();
     for (const row of symbolRows) {
       this.symbols.set(row.symbol_code, row.meaning_en);
+      if (row.meaning_vi) {
+        this.symbolsVi.set(row.symbol_code, row.meaning_vi);
+      }
     }
 
     const templateRows = db.prepare("SELECT * FROM card_templates").all() as CardTemplateRow[];
@@ -214,9 +219,21 @@ export class CatalogRepository {
     return this.symbols.get(code);
   }
 
+  public getSymbolMeaningVi(code: string): string | undefined {
+    return this.symbolsVi.get(code);
+  }
+
   public getAllSymbols(): Record<string, string> {
     const obj: Record<string, string> = {};
     for (const [k, v] of this.symbols.entries()) {
+      obj[k] = v;
+    }
+    return obj;
+  }
+
+  public getAllSymbolsVi(): Record<string, string> {
+    const obj: Record<string, string> = {};
+    for (const [k, v] of this.symbolsVi.entries()) {
       obj[k] = v;
     }
     return obj;

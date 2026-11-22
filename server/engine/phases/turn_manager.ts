@@ -16,13 +16,7 @@ import { AtomicEffects } from "../interact/primitives/atomic_effects";
 import { InteractManager } from "../interact/interact_manager";
 import { ArenaChainManager } from "../arena/arena_chain_manager";
 import { getAllEquippedCards } from "../utils/inventory";
-
-const GREEN_MISSED_CARDS = new Set([
-  "BIBLE",
-  "SOMBRERO",
-  "IRON PLATE",
-  "TEN GALLON HAT",
-]);
+import { CardRegistry } from "../cards/card_registry";
 
 export class TurnManager {
   // Read current turn start choice
@@ -225,6 +219,11 @@ export class TurnManager {
       timestamp: Date.now(),
     });
 
+    // Resolve dead Sheriff ghost/revival before advancing round event
+    if (player.isDead) {
+      EventEngine.resolveDeadPlayerTurnEntry(state, player, events);
+    }
+
     // Advance event on Sheriff round boundary
     if (
       state.roundNumber >= 2 &&
@@ -237,6 +236,9 @@ export class TurnManager {
     const prep = EventEngine.prepareTurnStart(state, player, events);
     if (player.isDead) {
       state.pendingTurnStartChoice = null;
+      if (state.pendingReactions.length > 0) {
+        return;
+      }
       this.advanceToNextTurn(state, player.id, events);
       return;
     }
@@ -303,7 +305,11 @@ export class TurnManager {
       return;
     }
 
-    if (state.pendingTurnStartChoice || state.pendingReactions.length > 0) {
+    if (
+      state.pendingTurnStartChoice ||
+      state.pendingReactions.length > 0 ||
+      state.activeChain.length > 0
+    ) {
       return;
     }
 
@@ -315,7 +321,7 @@ export class TurnManager {
     state.currentPhase = 0;
     const jRes = JudgementPhase.executePhase0(state, player, events);
 
-    if (jRes.waitingForRescue) {
+    if (jRes.waitingForRescue || state.activeChain.length > 0) {
       return;
     }
 
@@ -353,11 +359,11 @@ export class TurnManager {
     // Priority 1: Ghost Town or Peyote override
     if (ctx.overrideMode === "GHOST_TOWN") {
       const drawn = this.drawCardsWithMineSupport(state, player, 3, events);
-      let extraCount = 0;
+      const extraCards: EngineCard[] = [];
       for (let i = 0; i < ctx.postDrawBonus; i++) {
         const extra = this.drawSingleWithMineSupport(state, player, events);
         if (extra) {
-          extraCount += 1;
+          extraCards.push(extra);
           events.push({
             type: "EVENT_TRAIN_ARRIVAL_DRAW",
             payload: { playerId: player.id, playerName: player.name, drawnCount: 1 },
@@ -366,10 +372,11 @@ export class TurnManager {
         }
       }
       this.pushPhase1DrawEvent(player, drawn, events);
-      if (extraCount > 0) {
+      if (extraCards.length > 0) {
+        this.emitPhase1CardsDrawn(player, extraCards, events);
         events.push({
           type: "PHASE_CHANGED",
-          payload: { phase: 1, playerId: player.id, drawnCount: extraCount },
+          payload: { phase: 1, playerId: player.id, drawnCount: extraCards.length },
           timestamp: Date.now(),
         });
       }
@@ -509,14 +516,19 @@ export class TurnManager {
   ): void {
     const ctx = EventRuleRegistry.buildDrawContext(state, player);
     const keepCount = Math.max(1, 2 + ctx.drawDelta);
-    const { cards: previewCards, events: drawEvents } = DeckManager.drawCards(state, 3);
-    events.push(...drawEvents);
+    const previewCards = this.drawCardsWithMineSupport(state, player, 3, events);
 
     if (previewCards.length <= keepCount) {
-      player.handCards.push(...previewCards);
       state.pendingPhase1Choice = null;
       this.finalizePhase1(state, player, previewCards, events);
       return;
+    }
+
+    if (previewCards.length > 0) {
+      player.handCards.splice(
+        player.handCards.length - previewCards.length,
+        previewCards.length
+      );
     }
 
     state.currentPhase = 1;
@@ -559,6 +571,7 @@ export class TurnManager {
         bonusCard = this.drawSingleWithMineSupport(state, player, events);
         if (bonusCard) {
           allDrawn.push(bonusCard);
+          this.emitPhase1CardsDrawn(player, [bonusCard], events);
         }
       }
 
@@ -618,9 +631,11 @@ export class TurnManager {
       });
     }
 
+    const trainBonusCards: EngineCard[] = [];
     for (let i = 0; i < ctx.postDrawBonus; i++) {
       const extra = this.drawSingleWithMineSupport(state, player, events);
       if (extra) {
+        trainBonusCards.push(extra);
         events.push({
           type: "EVENT_TRAIN_ARRIVAL_DRAW",
           payload: {
@@ -631,6 +646,9 @@ export class TurnManager {
           timestamp: Date.now(),
         });
       }
+    }
+    if (trainBonusCards.length > 0) {
+      this.emitPhase1CardsDrawn(player, trainBonusCards, events);
     }
 
     if (
@@ -645,6 +663,11 @@ export class TurnManager {
         options: ["DISCARD_AND_DRAW", "SKIP"],
         ranchUsed: true,
       };
+      events.push({
+        type: "PHASE_CHANGED",
+        payload: { phase: 1, mode: "RANCH_EXCHANGE" },
+        timestamp: Date.now(),
+      });
       return;
     }
 
@@ -967,6 +990,9 @@ export class TurnManager {
 
         const cardId =
           command.targetCardId ?? command.cardId ?? command.payload?.targetCardId;
+        if (!cardId) {
+          return { success: false, message: "Target card ID in play is required." };
+        }
         let area = (command.targetArea ?? command.payload?.targetArea) as
           | "HAND"
           | "EQUIPMENT"
@@ -977,7 +1003,7 @@ export class TurnManager {
         if (area === "HAND") {
           return { success: false, message: "Pat Brennan can only steal cards in play." };
         }
-        if (!area && cardId) {
+        if (!area) {
           area = this.findCardInPlayArea(target, cardId);
         }
         if (!area) {
@@ -1053,6 +1079,7 @@ export class TurnManager {
         return { success: false, message: "One or more selected cards not in hand." };
       }
 
+      let drawnCount = 0;
       if (matched.length > 0) {
         player.handCards = player.handCards.filter((c) => !idSet.has(c.id));
         for (const card of matched) {
@@ -1073,6 +1100,7 @@ export class TurnManager {
         const ranchDraw = AtomicEffects.drawCards(state, matched.length);
         events.push(...ranchDraw.events);
         player.handCards.push(...ranchDraw.cards);
+        drawnCount = ranchDraw.cards.length;
         if (player.handCards.length === 0) {
           SkillHooks.checkSuzyLafayette(state, player, events);
         }
@@ -1084,7 +1112,7 @@ export class TurnManager {
           playerId: player.id,
           playerName: player.name,
           discardedCount: matched.length,
-          drawnCount: matched.length,
+          drawnCount,
         },
         timestamp: Date.now(),
       });
@@ -1220,7 +1248,7 @@ export class TurnManager {
       const idx = player.handCards.findIndex((c) => c.id === id);
       if (idx !== -1) {
         const card = player.handCards.splice(idx, 1)[0];
-        AtomicEffects.discardCard(state, card);
+        AtomicEffects.discardCard(state, card, undefined, "PHASE_3_EXCESS");
         discardedBatch.push(card);
         if (player.forcedPlayCardId === card.id) {
           player.forcedPlayCardId = null;
@@ -1349,9 +1377,9 @@ export class TurnManager {
       }
     }
 
-    // Green Missed! cards become ready on turn end; active greens wait 1 full round
+    // Ready defense greens on turn end
     player.greenCards.forEach((g) => {
-      if (GREEN_MISSED_CARDS.has(g.card.name)) {
+      if (CardRegistry.isGreenDefenseCard(g.card)) {
         g.isDelay = false;
       }
     });
@@ -1365,6 +1393,9 @@ export class TurnManager {
     });
 
     const endRes = EventEngine.onTurnEnd(state, player, events);
+    if (endRes.pendingInteraction) {
+      return { success: true, events };
+    }
     if (endRes.extraTurnGranted) {
       this.startTurn(state, player, events);
     } else {

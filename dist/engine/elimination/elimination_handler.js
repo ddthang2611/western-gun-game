@@ -11,12 +11,7 @@ class EliminationHandler {
     static discardCards(state, cards, deckManager) {
         if (cards.length === 0)
             return;
-        if (deckManager) {
-            deckManager.discardMultiple(cards);
-        }
-        else {
-            deck_manager_1.DeckManager.discardCards(state, cards);
-        }
+        deck_manager_1.DeckManager.discardCardsRespectingMine(state, cards, deckManager);
     }
     // Draw cards via manager or state
     static drawCards(state, count, deckManager) {
@@ -73,7 +68,10 @@ class EliminationHandler {
         });
         // Vulture Sam scavenges victim cards
         const aliveOrder = seat_manager_1.SeatManager.getClockwisePlayers(state, deadPlayer.id, false);
-        const vultureSam = aliveOrder.find((p) => !p.isDead && p.id !== deadPlayer.id && skill_hooks_1.SkillHooks.hasSkill(p, "Vulture Sam", state));
+        const vultureSam = aliveOrder.find((p) => !p.isDead &&
+            !p.isGhost &&
+            p.id !== deadPlayer.id &&
+            skill_hooks_1.SkillHooks.hasSkill(p, "Vulture Sam", state));
         if (vultureSam) {
             vultureSam.handCards.push(...cardsToTransfer);
             events.push({
@@ -127,19 +125,21 @@ class EliminationHandler {
                     });
                 }
             }
-            if (skill_hooks_1.SkillHooks.hasSkill(player, "Herb Hunter", state)) {
+            if (!player.isGhost && skill_hooks_1.SkillHooks.hasSkill(player, "Herb Hunter", state)) {
                 const { cards, events: drawEvents } = this.drawCards(state, 2, deckManager);
                 player.handCards.push(...cards);
                 events.push(...drawEvents);
-                events.push({
-                    type: "HERB_HUNTER_DRAW",
-                    payload: {
-                        playerId: player.id,
-                        playerName: player.name,
-                        drawnCount: cards.length,
-                    },
-                    timestamp: Date.now(),
-                });
+                if (cards.length > 0) {
+                    events.push({
+                        type: "HERB_HUNTER_DRAW",
+                        payload: {
+                            playerId: player.id,
+                            playerName: player.name,
+                            drawnCount: cards.length,
+                        },
+                        timestamp: Date.now(),
+                    });
+                }
             }
         }
         // Sheriff penalty after elimination draws
@@ -152,15 +152,18 @@ class EliminationHandler {
             killerPlayer.handCards = [];
             killerPlayer.equipments = { extras: [] };
             killerPlayer.greenCards = [];
+            killerPlayer.forcedPlayCardId = null;
             this.discardCards(state, sheriffLoss, deckManager);
             events.push({
                 type: "SHERIFF_PENALTY_DISCARD",
                 payload: {
                     sheriffId: killerPlayer.id,
+                    sheriffName: killerPlayer.name,
                     cardsLostCount: sheriffLoss.length,
                 },
                 timestamp: Date.now(),
             });
+            skill_hooks_1.SkillHooks.checkSuzyLafayette(state, killerPlayer, events);
         }
         // Evaluate win condition
         const winCheck = win_condition_1.WinConditionEvaluator.evaluate(state, {
@@ -171,12 +174,16 @@ class EliminationHandler {
             state.gameOver = {
                 winner: winCheck.winner,
                 message: winCheck.message || "",
+                outcomeCode: winCheck.outcomeCode,
+                outcomeParams: winCheck.outcomeParams,
             };
             events.push({
                 type: "GAME_OVER",
                 payload: {
                     winner: winCheck.winner,
                     message: winCheck.message,
+                    outcomeCode: winCheck.outcomeCode,
+                    outcomeParams: winCheck.outcomeParams,
                 },
                 timestamp: Date.now(),
             });

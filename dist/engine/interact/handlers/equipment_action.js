@@ -7,6 +7,7 @@ const skill_hooks_1 = require("../skill_hooks");
 const atomic_effects_1 = require("../primitives/atomic_effects");
 const arena_chain_manager_1 = require("../../arena/arena_chain_manager");
 const inventory_1 = require("../../utils/inventory");
+const card_registry_1 = require("../../cards/card_registry");
 class EquipmentAction {
     // Check if blue extra already equipped
     static hasExtraEquipName(player, cardName) {
@@ -18,10 +19,17 @@ class EquipmentAction {
         if (blockReason) {
             return { success: false, message: blockReason };
         }
-        const isWeapon = card.category === "weapon" || (card.border === "blue" && Boolean(card.weaponRange));
-        const isGreen = card.border === "green" ||
-            card.category === "green_delayed" ||
-            card.category === "green_delay";
+        const def = card_registry_1.CardRegistry.get(card);
+        const isWeapon = def
+            ? def.slotKey === "weapon"
+            : card.category === "weapon" || (card.border === "blue" && Boolean(card.weaponRange));
+        const isGreen = def
+            ? def.zone === "EQUIP_GREEN"
+            : card.border === "green" ||
+                card.category === "green_delayed" ||
+                card.category === "green_delay" ||
+                card.category === "green_active";
+        const isBlue = def ? def.zone === "EQUIP_BLUE" : card.border === "blue";
         // Validate all preconditions before splicing
         if (isWeapon) {
             if (player.equipments.weapon?.name === card.name) {
@@ -41,19 +49,20 @@ class EquipmentAction {
                 return { success: false, message: "You already have Dynamite in play." };
             }
         }
-        else if (card.border === "blue") {
-            if (card.name === "MUSTANG" && player.equipments.horseDef) {
+        else if (isBlue) {
+            const slotKey = def?.slotKey ?? arena_chain_manager_1.ArenaChainManager.resolveEquipmentSlotKey(card);
+            if (slotKey === "horseDef" && player.equipments.horseDef) {
                 return { success: false, message: "You already have Mustang equipped." };
             }
-            if (card.name === "SCOPE" && player.equipments.horseOff) {
+            if (slotKey === "horseOff" && player.equipments.horseOff) {
                 return { success: false, message: "You already have Scope equipped." };
             }
-            if (card.name === "BARREL" && player.equipments.barrel) {
+            if (slotKey === "barrel" && player.equipments.barrel) {
                 return { success: false, message: "You already have Barrel equipped." };
             }
-            if (card.name !== "MUSTANG" &&
-                card.name !== "SCOPE" &&
-                card.name !== "BARREL" &&
+            if (slotKey !== "horseDef" &&
+                slotKey !== "horseOff" &&
+                slotKey !== "barrel" &&
                 this.hasExtraEquipName(player, card.name)) {
                 return { success: false, message: `You already have ${card.name} equipped.` };
             }
@@ -202,14 +211,15 @@ class EquipmentAction {
             skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, events);
             return { success: true, events };
         }
-        if (card.border === "blue") {
-            if (card.name === "MUSTANG") {
+        if (isBlue) {
+            const slotKey = def?.slotKey ?? arena_chain_manager_1.ArenaChainManager.resolveEquipmentSlotKey(card);
+            if (slotKey === "horseDef") {
                 player.equipments.horseDef = card;
             }
-            else if (card.name === "SCOPE") {
+            else if (slotKey === "horseOff") {
                 player.equipments.horseOff = card;
             }
-            else if (card.name === "BARREL") {
+            else if (slotKey === "barrel") {
                 player.equipments.barrel = card;
             }
             else {

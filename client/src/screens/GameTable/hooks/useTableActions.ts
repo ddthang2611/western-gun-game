@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import type { Card, GreenCard, TableState } from "../../../types/game";
+import { useI18n } from "../../../i18n";
 import {
   MANIPULATE_CARDS,
   TARGETED_SINGLE_CARDS,
@@ -71,21 +72,21 @@ export function useTableActions({
   triggerVfx,
   showError,
 }: UseTableActionsParams) {
+  const { t } = useI18n();
+
   const handleConfirmSkill = useCallback(() => {
     if (vm.isTurnLocked) {
       showError(
-        isWsConnected
-          ? "Match is paused. Actions are locked."
-          : "Connection lost. Reconnecting..."
+        isWsConnected ? t("table.errors.paused") : t("table.errors.reconnecting")
       );
       return;
     }
     if (vm.isArenaLocked) {
-      showError("Wait for Card Arena cards to finish clearing.");
+      showError(t("table.errors.arenaBusy"));
       return;
     }
     if (vm.isActionLocked) {
-      showError("Active skills can only be used during Phase 2 of your turn.");
+      showError(t("table.errors.phase2SkillsOnly"));
       return;
     }
 
@@ -110,7 +111,7 @@ export function useTableActions({
     if (skillMode === "JOSE_DELGADO_DRAW") {
       const chosenCard = vm.activeHand.find((c) => c.id === skillDiscardIds[0]);
       if (!chosenCard || chosenCard.border !== "blue") {
-        showError("Select a blue card for Jose Delgado.");
+        showError(t("table.errors.selectBlueJose"));
         return;
       }
       sendLiveCommand("USE_ACTIVE_SKILL", {
@@ -122,7 +123,7 @@ export function useTableActions({
 
     if (skillMode === "SID_KETCHUM_HEAL") {
       if (skillDiscardIds.length !== 2) {
-        showError("Select 2 cards from your hand for Sid Ketchum.");
+        showError(t("table.errors.select2Sid"));
         return;
       }
       sendLiveCommand("USE_ACTIVE_SKILL", {
@@ -137,11 +138,11 @@ export function useTableActions({
 
     if (skillMode === "DOC_HOLYDAY_BANG") {
       if (skillDiscardIds.length < 2) {
-        showError("Select 2 cards from your hand to discard for Doc Holyday.");
+        showError(t("table.errors.select2Doc"));
         return;
       }
       if (!selectedTargetId) {
-        showError("Select a target opponent to shoot.");
+        showError(t("table.errors.selectTargetShoot"));
         return;
       }
       sendLiveCommand("USE_ACTIVE_SKILL", {
@@ -163,6 +164,7 @@ export function useTableActions({
     showError,
     skillDiscardIds,
     skillMode,
+    t,
     vm.activeHand,
     vm.isActionLocked,
     vm.isArenaLocked,
@@ -172,37 +174,39 @@ export function useTableActions({
   const handlePlayCard = useCallback(() => {
     if (vm.isTurnLocked) {
       showError(
-        isWsConnected
-          ? "Match is paused. Actions are locked."
-          : "Connection lost. Reconnecting..."
+        isWsConnected ? t("table.errors.paused") : t("table.errors.reconnecting")
       );
       return;
     }
     if (vm.isArenaLocked) {
-      showError("Wait for Card Arena cards to finish clearing.");
+      showError(t("table.errors.arenaBusy"));
       return;
     }
 
     if (vm.selectedGreenCard) {
       if (vm.isActionLocked) {
-        showError("Green cards can only be activated during Phase 2 of your turn.");
+        showError(t("table.errors.phase2GreenOnly"));
         return;
       }
       if (vm.selectedGreenCard.isDelay) {
         showError(
-          `${vm.selectedGreenCard.card.name} is still pending until your next turn.`
+          t("table.errors.greenPending", { card: vm.selectedGreenCard.card.name })
         );
         return;
       }
       const gName = vm.selectedGreenCard.card.name;
       if (gName === "CAN CAN" || gName === "CONESTOGA") {
         if (!selectedTargetId) {
-          showError(`Select a target opponent for ${gName}.`);
+          showError(t("table.errors.selectTargetCard", { card: gName }));
           return;
         }
         const target = state.players.find((p) => p.id === selectedTargetId);
         if (!target || countInspectableCards(target) === 0) {
-          showError(`${target?.name || "Target"} has no cards to steal or discard.`);
+          showError(
+            t("table.errors.targetNoStealCards", {
+              target: target?.name || t("common.unknown"),
+            })
+          );
           return;
         }
         setCardPickerConfig({
@@ -215,7 +219,7 @@ export function useTableActions({
         return;
       }
       if (TARGETED_SINGLE_CARDS.has(gName) && !selectedTargetId) {
-        showError(`Select a target opponent for ${gName}.`);
+        showError(t("table.errors.selectTargetCard", { card: gName }));
         return;
       }
       if (!isMock) {
@@ -244,7 +248,7 @@ export function useTableActions({
           ? [vm.selectedCard.id]
           : [];
       if (idsToDiscard.length === 0) {
-        showError("Select excess card(s) to discard.");
+        showError(t("table.errors.selectExcessDiscard"));
         return;
       }
       if (sendLiveCommand("DISCARD_CARD", { discardCardIds: idsToDiscard })) {
@@ -256,13 +260,13 @@ export function useTableActions({
     if (!vm.selectedCard) return;
 
     if (vm.requiresExtraDiscard && discardCostIds.length < 1) {
-      showError(`${vm.selectedCard.name}: Select 1 additional card in hand to discard.`);
+      showError(t("table.errors.selectExtraCostFirst", { card: vm.selectedCard.name }));
       return;
     }
 
     if (!isMock) {
       if (vm.isActionLocked) {
-        showError("Cards can only be played during Phase 2 of your turn.");
+        showError(t("table.errors.phase2CardsOnly"));
         return;
       }
       if (vm.selectedCard.border === "green") {
@@ -273,12 +277,16 @@ export function useTableActions({
       }
       if (MANIPULATE_CARDS.has(vm.selectedCard.name)) {
         if (!selectedTargetId) {
-          showError(`Select a target opponent for ${vm.selectedCard.name}.`);
+          showError(t("table.errors.selectTargetCard", { card: vm.selectedCard.name }));
           return;
         }
         const target = state.players.find((p) => p.id === selectedTargetId);
         if (!target || countInspectableCards(target) === 0) {
-          showError(`${target?.name || "Target"} has no cards in any zone.`);
+          showError(
+            t("table.errors.targetNoCards", {
+              target: target?.name || t("common.unknown"),
+            })
+          );
           return;
         }
         setCardPickerConfig({
@@ -297,7 +305,7 @@ export function useTableActions({
           isBangCardForHeroes(vm.selectedCard, vm.effectiveSkillHeroes)) &&
         !selectedTargetId
       ) {
-        showError(`Select a target opponent for ${vm.selectedCard.name}.`);
+        showError(t("table.errors.selectTargetCard", { card: vm.selectedCard.name }));
         return;
       }
       if (
@@ -314,12 +322,16 @@ export function useTableActions({
 
     if (MANIPULATE_CARDS.has(vm.selectedCard.name)) {
       if (!selectedTargetId) {
-        showError(`Select a target opponent for ${vm.selectedCard.name}.`);
+        showError(t("table.errors.selectTargetCard", { card: vm.selectedCard.name }));
         return;
       }
       const target = state.players.find((p) => p.id === selectedTargetId);
       if (!target || countInspectableCards(target) === 0) {
-        showError(`${target?.name || "Target"} has no cards in any zone.`);
+        showError(
+          t("table.errors.targetNoCards", {
+            target: target?.name || t("common.unknown"),
+          })
+        );
         return;
       }
       setCardPickerConfig({
@@ -352,6 +364,7 @@ export function useTableActions({
     showError,
     state.currentPhase,
     state.players,
+    t,
     triggerVfx,
     vm.effectiveSkillHeroes,
     vm.isActionLocked,
@@ -366,14 +379,12 @@ export function useTableActions({
   const handleEndTurn = useCallback(() => {
     if (vm.isTurnLocked) {
       showError(
-        isWsConnected
-          ? "Match is paused. Actions are locked."
-          : "Connection lost. Reconnecting..."
+        isWsConnected ? t("table.errors.paused") : t("table.errors.reconnecting")
       );
       return;
     }
     if (vm.isArenaLocked) {
-      showError("Wait for Card Arena cards to finish clearing.");
+      showError(t("table.errors.arenaBusy"));
       return;
     }
     if (!isMock && !vm.isMyTurn) return;
@@ -393,6 +404,7 @@ export function useTableActions({
     isWsConnected,
     sendLiveCommand,
     showError,
+    t,
     vm.isArenaLocked,
     vm.isMyTurn,
     vm.isTurnLocked,
@@ -403,7 +415,9 @@ export function useTableActions({
       if (vm.isActionLocked || vm.isArenaLocked) return;
       if (vm.requiresExtraDiscard && discardCostIds.length < 1) {
         showError(
-          `${vm.selectedCard?.name || "Card"}: Select 1 extra card in hand first.`
+          t("table.errors.selectExtraCostFirst", {
+            card: vm.selectedCard?.name || t("common.unknown"),
+          })
         );
         return;
       }
@@ -413,6 +427,7 @@ export function useTableActions({
       discardCostIds.length,
       setSelectedTargetId,
       showError,
+      t,
       vm.isActionLocked,
       vm.isArenaLocked,
       vm.requiresExtraDiscard,

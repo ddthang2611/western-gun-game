@@ -40,6 +40,7 @@ export class DuelInteraction {
       id: `reaction_duel_${targetPlayer.id}_${Date.now()}`,
       type: "DUEL_RESPONSE",
       sourcePlayerId: player.id,
+      duelInitiatorId: player.id,
       targetPlayerId: targetPlayer.id,
       sourceCard: card,
       requiredCard: "BANG",

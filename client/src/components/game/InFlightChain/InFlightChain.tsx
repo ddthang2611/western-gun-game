@@ -1,5 +1,6 @@
 import React, { useLayoutEffect, useRef } from "react";
 import type { ArenaOutcomeTag, InFlightCard } from "../../../types/game";
+import { useI18n } from "../../../i18n";
 import { CardView } from "../CardView/CardView";
 import "./InFlightChain.scss";
 
@@ -22,6 +23,7 @@ export const InFlightChain: React.FC<InFlightChainProps> = ({
   cards,
   isExiting = false,
 }) => {
+  const { t, tOutcome } = useI18n();
   const fanRef = useRef<HTMLDivElement | null>(null);
   const safeCards = cards || [];
   const cardCount = safeCards.length;
@@ -42,7 +44,7 @@ export const InFlightChain: React.FC<InFlightChainProps> = ({
   if (cardCount === 0) {
     return (
       <div className="inflight-chain inflight-chain--empty" data-flight-anchor="card-arena">
-        <span className="inflight-chain__placeholder">Card Arena</span>
+        <span className="inflight-chain__placeholder">{t("arena.defaultTitle")}</span>
       </div>
     );
   }
@@ -54,7 +56,9 @@ export const InFlightChain: React.FC<InFlightChainProps> = ({
     >
       <div ref={fanRef} className="inflight-chain__fan">
         {safeCards.map((item, index) => {
-          const outcomeTone = item.outcome ? OUTCOME_TONE[item.outcome] : undefined;
+          const outcome = item.outcome ?? item.meta?.outcome;
+          const outcomeTone = outcome ? OUTCOME_TONE[outcome] : undefined;
+          const kindLabel = item.kind ? t(`arena.kinds.${item.kind}`, undefined, item.actionText) : item.actionText;
           const actorCaption = item.targetPlayerName
             ? `${item.sourcePlayerName} -> ${item.targetPlayerName}`
             : item.sourcePlayerName;
@@ -62,15 +66,15 @@ export const InFlightChain: React.FC<InFlightChainProps> = ({
             <div
               key={item.id || index}
               className="inflight-chain__card-slot"
-              title={`${actorCaption}: ${item.actionText}`}
+              title={`${actorCaption}: ${kindLabel}`}
             >
               <div className="inflight-chain__card-frame">
                 <CardView card={item.card} isPlayable={false} />
-                {item.outcome && (
+                {outcome && (
                   <span
                     className={`inflight-chain__outcome inflight-chain__outcome--${outcomeTone}`}
                   >
-                    {item.outcome}
+                    {tOutcome(outcome)}
                   </span>
                 )}
               </div>

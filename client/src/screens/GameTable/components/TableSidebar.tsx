@@ -1,5 +1,6 @@
 import React from "react";
-import type { RoleType, Card, Suit } from "../../../types/game";
+import type { RoleType, Card, Suit, StructuredLogEntry } from "../../../types/game";
+import { CardTooltipContent, useI18n } from "../../../i18n";
 import { DebouncedPopover } from "../../../components/ui";
 import { formatSimpleLog } from "../../../utils/formatters";
 import "./TableSidebar.scss";
@@ -8,6 +9,7 @@ export interface TableSidebarProps {
   myRole?: RoleType;
   roleCounts: { police: number; outlaw: number; renegade: number };
   combatLog: string[];
+  structuredCombatLog?: StructuredLogEntry[];
   deckCount?: number;
   discardCount?: number;
   topDiscard?: Card;
@@ -25,15 +27,26 @@ export const TableSidebar: React.FC<TableSidebarProps> = ({
   myRole,
   roleCounts,
   combatLog,
+  structuredCombatLog,
   deckCount = 80,
   discardCount = 0,
   topDiscard,
   onOpenCombatLog,
 }) => {
-  const recentLogs = combatLog.slice(0, 6);
+  const { locale, t, tCard, tRole, tLog } = useI18n();
+  const displayLogs =
+    structuredCombatLog && structuredCombatLog.length > 0
+      ? structuredCombatLog.slice(0, 6).map((entry) => tLog(entry))
+      : combatLog.slice(0, 6).map((log) => formatSimpleLog(log));
+  const logCount =
+    structuredCombatLog && structuredCombatLog.length > 0
+      ? structuredCombatLog.length
+      : combatLog.length;
+
+  const topCardLoc = topDiscard ? tCard(topDiscard) : null;
   const topDiscardLabel = topDiscard
-    ? `${topDiscard.name} ${topDiscard.rank}${SUIT_SYMBOLS[topDiscard.suit] || ""}`
-    : "None";
+    ? `${topCardLoc?.primary.name || topDiscard.name} ${topDiscard.rank}${SUIT_SYMBOLS[topDiscard.suit] || ""}`
+    : t("common.unknown");
 
   return (
     <aside className="game-table__sidebar">
@@ -43,23 +56,37 @@ export const TableSidebar: React.FC<TableSidebarProps> = ({
             <div
               className="game-table__pile-card game-table__pile-card--stack"
               data-flight-anchor="draw-pile"
-              title={`Draw deck: ${deckCount} card(s)`}
+              title={t("table.deckLabel", { count: deckCount })}
             >
               <img
                 src="/assets/images/ui/card_back.png"
-                alt="Face-down draw deck"
+                alt={t("table.deckShort")}
                 className="game-table__pile-img"
               />
               <span className="game-table__pile-count">{deckCount}</span>
             </div>
-            <span className="game-table__deck-stat-label">Deck</span>
+            <span className="game-table__deck-stat-label">{t("table.deckShort")}</span>
           </div>
 
           <div className="game-table__deck-pile">
-            {topDiscard ? (
+            {topDiscard && topCardLoc ? (
               <DebouncedPopover
-                title={`${topDiscard.name} (${topDiscard.rank} ${topDiscard.suit})`}
-                content={topDiscard.desc}
+                title={`${topCardLoc.primary.name}${
+                  locale === "vi" && topCardLoc.primary.subtitleVi
+                    ? ` (${topCardLoc.primary.subtitleVi})`
+                    : ""
+                } (${topDiscard.rank}${SUIT_SYMBOLS[topDiscard.suit] || ""})`}
+                content={
+                  <CardTooltipContent
+                    typeLabel={t(`popover.type.${topDiscard.border || "brown"}`)}
+                    primaryDesc={topCardLoc.primary.desc || topDiscard.desc}
+                    actionSummary={topCardLoc.primary.actionSummary}
+                    secondaryTitle={topCardLoc.secondary?.name}
+                    secondaryDesc={topCardLoc.secondary?.desc}
+                    suit={topDiscard.suit}
+                    rank={topDiscard.rank}
+                  />
+                }
                 delayMs={200}
               >
                 <div
@@ -86,7 +113,7 @@ export const TableSidebar: React.FC<TableSidebarProps> = ({
                 <span className="game-table__pile-count">{discardCount}</span>
               </div>
             )}
-            <span className="game-table__deck-stat-label">Discard</span>
+            <span className="game-table__deck-stat-label">{t("table.discardShort")}</span>
           </div>
         </div>
       </div>
@@ -98,35 +125,37 @@ export const TableSidebar: React.FC<TableSidebarProps> = ({
       >
         <div className="game-table__log-header">
           <div className="game-table__box-title game-table__box-title--inline">
-            Log
+            {t("table.logTitle")}
           </div>
-          <span className="game-table__log-expand">
-            ({combatLog.length})
-          </span>
+          <span className="game-table__log-expand">({logCount})</span>
         </div>
         <div className="game-table__log-list">
-          {recentLogs.map((log, idx) => (
-            <div key={idx}>{formatSimpleLog(log)}</div>
+          {displayLogs.map((logText, idx) => (
+            <div key={idx}>{logText}</div>
           ))}
-          {combatLog.length === 0 && (
-            <div className="game-table__log-empty">—</div>
-          )}
+          {logCount === 0 && <div className="game-table__log-empty">—</div>}
         </div>
       </button>
 
       <div className="game-table__sidebar-box game-table__sidebar-box--secret-role">
         <div className="game-table__roles-grid">
-          <span className="game-table__role-count--police">Police {roleCounts.police}</span>
-          <span className="game-table__role-count--outlaw">Outlaw {roleCounts.outlaw}</span>
-          <span className="game-table__role-count--renegade">Renegade {roleCounts.renegade}</span>
+          <span className="game-table__role-count--police">
+            {t("roles.counter.law")} {roleCounts.police}
+          </span>
+          <span className="game-table__role-count--outlaw">
+            {t("roles.counter.outlaw")} {roleCounts.outlaw}
+          </span>
+          <span className="game-table__role-count--renegade">
+            {t("roles.counter.renegade")} {roleCounts.renegade}
+          </span>
         </div>
-        <div className="game-table__role-caption">You are the</div>
+        <div className="game-table__role-caption">{t("table.roleCaption")}</div>
         <div
           className={`game-table__role-name ${
             myRole ? "" : "game-table__role-name--pending"
           }`.trim()}
         >
-          {myRole ? myRole.toUpperCase() : "ASSIGNING..."}
+          {myRole ? tRole(myRole).toUpperCase() : t("table.assigningRole")}
         </div>
       </div>
     </aside>

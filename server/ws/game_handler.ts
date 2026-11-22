@@ -13,7 +13,10 @@ import { EngineCharacter, HpRuleType } from "../engine/types/state";
 import { PlayerCommand, DomainEvent } from "../engine/types/actions";
 import { InteractManager } from "../engine/interact/interact_manager";
 import { SkillHooks } from "../engine/interact/skill_hooks";
-import { getAllEquippedCards } from "../engine/utils/inventory";
+import {
+  getAllEquippedCards,
+  pickFirstTargetCard,
+} from "../engine/utils/inventory";
 import { CatalogRepository } from "../db/catalog_repository";
 import { SessionRepository } from "../db/session_repository";
 import { MatchEventRow } from "../db/schema";
@@ -25,6 +28,7 @@ import {
   StoredLogEntry,
   formatEventToLog,
   getLogsForPlayer,
+  getStructuredLogsForPlayer,
 } from "./combat_log_formatter";
 import { buildTableState } from "./table_state_presenter";
 
@@ -177,7 +181,67 @@ export class GameSessionManager {
     } else {
       InteractManager.pruneStaleReactions(simState);
 
-      if (simState.pendingReactions.length > 0) {
+      if (simState.activeChain.length > 0) {
+        const head = simState.activeChain[0];
+        if (head?.type === "BRAWL_CARD_PICK") {
+          const target = simState.players.get(head.currentTargetId);
+          const pick = target ? pickFirstTargetCard(target) : null;
+          if (target && pick) {
+            const res = engine.handleCommand({
+              playerId: head.actorPlayerId,
+              type: "SELECT_STOLEN_CARD",
+              targetPlayerId: target.id,
+              targetArea: pick.targetArea,
+              targetCardId: pick.targetCardId,
+            });
+            if (res.success) {
+              mutated = true;
+              if (res.events?.length) collectedEvents.push(...res.events);
+            }
+          }
+        } else if (head?.type === "LUCKY_DUKE_PICK") {
+          const preferred =
+            head.drawnCards.find((c) =>
+              SkillHooks.isDrawCheckSuccess(head.reason, c, simState)
+            ) || head.drawnCards[0];
+          if (preferred) {
+            const res = engine.handleCommand({
+              playerId: head.playerId,
+              type: "SELECT_STOLEN_CARD",
+              cardId: preferred.id,
+            });
+            if (res.success) {
+              mutated = true;
+              if (res.events?.length) collectedEvents.push(...res.events);
+            }
+          }
+        } else if (head?.type === "EL_GRINGO_PICK") {
+          const res = engine.handleCommand({
+            playerId: head.victimId,
+            type: "SELECT_STOLEN_CARD",
+            targetPlayerId: head.attackerId,
+            targetArea: "HAND",
+          });
+          if (res.success) {
+            mutated = true;
+            if (res.events?.length) collectedEvents.push(...res.events);
+          }
+        } else if (head && "storePool" in head) {
+          const pickerId = head.draftOrder?.[head.currentPickerIndex];
+          const cardId = head.storePool?.[0]?.id;
+          if (pickerId && cardId) {
+            const res = engine.handleCommand({
+              playerId: pickerId,
+              type: "SELECT_STOLEN_CARD",
+              cardId,
+            });
+            if (res.success) {
+              mutated = true;
+              if (res.events?.length) collectedEvents.push(...res.events);
+            }
+          }
+        }
+      } else if (simState.pendingReactions.length > 0) {
         const head = simState.pendingReactions[0];
         let cmd: PlayerCommand;
         if (head.type === "EVENT_DALTONS_DISCARD") {
@@ -202,21 +266,6 @@ export class GameSessionManager {
         if (res.success) {
           mutated = true;
           if (res.events?.length) collectedEvents.push(...res.events);
-        }
-      } else if (simState.activeChain.length > 0) {
-        const draft = simState.activeChain[0];
-        const pickerId = draft?.draftOrder?.[draft.currentPickerIndex];
-        const cardId = draft?.storePool?.[0]?.id;
-        if (pickerId && cardId) {
-          const res = engine.handleCommand({
-            playerId: pickerId,
-            type: "SELECT_STOLEN_CARD",
-            cardId,
-          });
-          if (res.success) {
-            mutated = true;
-            if (res.events?.length) collectedEvents.push(...res.events);
-          }
         }
       } else if (simState.pendingTurnStartChoice) {
         const choice = simState.pendingTurnStartChoice;
@@ -707,11 +756,9 @@ export class GameSessionManager {
     if (!engine.getState().players.has(playerId)) return;
 
     const snapshot = engine.getFilteredSnapshot(playerId);
-    const logs = getLogsForPlayer(
-      this.combatLogs.get(roomId) || [],
-      playerId,
-      100
-    );
+    const roomLogs = this.combatLogs.get(roomId) || [];
+    const logs = getLogsForPlayer(roomLogs, playerId, 100);
+    const structuredLogs = getStructuredLogsForPlayer(roomLogs, playerId, 100);
     const tableState = buildTableState(
       snapshot,
       playerId,
@@ -720,7 +767,8 @@ export class GameSessionManager {
       this.isMatchPaused(engine, lobbyManager),
       (pId) => lobbyManager.isPlayerOnline(pId),
       this.matchIds.get(roomId),
-      lobbyManager.getHostId()
+      lobbyManager.getHostId(),
+      structuredLogs
     );
 
     lobbyManager.sendToPlayer(playerId, "TABLE_STATE", tableState);
@@ -792,6 +840,7 @@ export class GameSessionManager {
       for (const pId of participantIds) {
         lobbyManager.sendToPlayer(pId, "COMBAT_LOG_UPDATE", {
           combatLog: getLogsForPlayer(logs, pId, 50),
+          structuredCombatLog: getStructuredLogsForPlayer(logs, pId, 50),
         });
       }
     }

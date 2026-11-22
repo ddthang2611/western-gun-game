@@ -1,5 +1,6 @@
 import React from "react";
 import type { EquipmentSlot } from "../../../../types/game";
+import { CardTooltipContent, useI18n } from "../../../../i18n";
 import { DebouncedPopover } from "../../../../components/ui";
 import { getFixedEquipmentSlots } from "../../../../utils/equipments";
 
@@ -12,6 +13,7 @@ export const EquipmentColumn: React.FC<EquipmentColumnProps> = ({
   equipments,
   concealedCardIds,
 }) => {
+  const { locale, t, tCard } = useI18n();
   const concealedSet = concealedCardIds?.length ? new Set(concealedCardIds) : undefined;
   const slots = getFixedEquipmentSlots(equipments, concealedSet);
 
@@ -30,15 +32,31 @@ export const EquipmentColumn: React.FC<EquipmentColumnProps> = ({
           );
         }
 
+        const cardLoc = tCard(slot.card);
+        const sub =
+          locale === "vi" && cardLoc.primary.subtitleVi
+            ? ` (${cardLoc.primary.subtitleVi})`
+            : "";
         const title = slot.card.range
-          ? `${slot.card.name} (Range ${slot.card.range})`
-          : slot.card.name;
+          ? `${cardLoc.primary.name}${sub} (${t("common.range", { range: slot.card.range })})`
+          : `${cardLoc.primary.name}${sub}`;
 
         return (
           <DebouncedPopover
             key={slot.slotKey}
             title={title}
-            content={slot.card.desc || slot.card.name}
+            content={
+              <CardTooltipContent
+                typeLabel={t("popover.type.blue")}
+                primaryDesc={cardLoc.primary.desc || slot.card.desc}
+                actionSummary={cardLoc.primary.actionSummary}
+                secondaryTitle={cardLoc.secondary?.name}
+                secondaryDesc={cardLoc.secondary?.desc}
+                range={slot.card.range}
+                suit={slot.card.suit}
+                rank={slot.card.rank}
+              />
+            }
             delayMs={250}
           >
             <div

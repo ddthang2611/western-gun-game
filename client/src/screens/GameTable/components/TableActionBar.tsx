@@ -1,5 +1,6 @@
 import React from "react";
 import type { Card, Character, GreenCard } from "../../../types/game";
+import { useI18n } from "../../../i18n";
 import "./TableActionBar.scss";
 
 export interface TableActionBarProps {
@@ -55,6 +56,7 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
   onEndTurn,
   onTriggerSkill,
 }) => {
+  const { t } = useI18n();
   const isInteractionBlocked = isLocked || isArenaLocked;
   const isPhase3Discard = !isMock && isMyTurn && currentPhase === 3;
   const isActionPhase = isMock || currentPhase === 2 || isPhase3Discard;
@@ -62,9 +64,11 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
   const canUseSkill = !isInteractionBlocked && isMyTurn && (isMock || currentPhase === 2);
   const primaryLabel = isPhase3Discard
     ? phase3DiscardCount > 0
-      ? `Discard (${phase3DiscardCount})`
-      : "Discard"
-    : "Play";
+      ? t("table.discardSelected", { count: phase3DiscardCount })
+      : t("table.discardBtn")
+    : selectedGreenCard
+    ? t("table.activateGreen")
+    : t("table.playBtn");
   const hasSelection = Boolean(selectedCard || selectedGreenCard);
   const canPlayNow =
     canActInTurn &&
@@ -78,12 +82,12 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
       <div className="game-table__action-left" data-flight-anchor="my-judgements">
         {myJudgements.hasJail && (
           <span className="game-table__judgement-tag game-table__judgement-tag--jail">
-            JAIL
+            {t("table.jailTag")}
           </span>
         )}
         {myJudgements.hasDynamite && (
           <span className="game-table__judgement-tag game-table__judgement-tag--dynamite">
-            DYNAMITE
+            {t("table.dynamiteTag")}
           </span>
         )}
       </div>
@@ -92,11 +96,11 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
         <div className="game-table__hint-slot">
           {isLocked ? (
             <span className="game-table__hint game-table__hint--warning">
-              Match paused or reconnecting - actions locked
+              {t("table.matchPausedLock")}
             </span>
           ) : isArenaLocked ? (
             <span className="game-table__hint game-table__hint--skill">
-              Resolving cards in Card Arena...
+              {t("table.resolvingArena")}
             </span>
           ) : activeSkillHint ? (
             <span className="game-table__hint game-table__hint--skill">
@@ -104,7 +108,7 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
             </span>
           ) : isPhase3Discard && excessCardsCount > 0 ? (
             <span className="game-table__hint game-table__hint--warning">
-              Discard {excessCardsCount} excess card(s) to end turn
+              {t("table.excessDiscardHint", { count: excessCardsCount })}
             </span>
           ) : null}
         </div>
@@ -122,7 +126,7 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
                   isSkillMode ? " game-table__btn--skill-active" : ""
                 }`}
               >
-                Skill: {hero.name}
+                {t("table.skillLabel", { name: hero.name })}
               </button>
             ))}
 
@@ -134,7 +138,7 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
               disabled={!canUseSkill || !canConfirmSkill}
               className="game-table__btn game-table__btn--skill-confirm"
             >
-              Confirm Skill
+              {t("table.confirmSkill")}
             </button>
           ) : (
             <button
@@ -153,7 +157,7 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
               disabled={!canActInTurn}
               className="game-table__btn game-table__btn--skill"
             >
-              Ricochet Equip
+              {t("table.ricochetEquip")}
             </button>
           )}
           <button
@@ -170,7 +174,7 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
             }
             className="game-table__btn game-table__btn--secondary"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
           <button
             type="button"
@@ -178,7 +182,7 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
             disabled={!canActInTurn || (isPhase3Discard && excessCardsCount > 0)}
             className="game-table__btn game-table__btn--danger"
           >
-            End Turn
+            {t("table.endTurn")}
           </button>
         </div>
       </div>

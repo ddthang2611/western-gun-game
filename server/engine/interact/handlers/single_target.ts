@@ -12,34 +12,28 @@ import { getAllEquippedCards } from "../../utils/inventory";
 
 export class SingleTargetActions {
   // Resolve Ricochet target card ID
-  private static resolveRicochetTargetCardId(
+  public static resolveRicochetTargetCardId(
     targetPlayer: EnginePlayer,
     area: "EQUIPMENT" | "GREEN" | "JUDGEMENT",
     requestedId?: string
   ): string | undefined {
+    if (!requestedId) return undefined;
+
     if (area === "EQUIPMENT") {
-      const list = getAllEquippedCards(targetPlayer);
-      if (requestedId) {
-        return list.find((c) => c.id === requestedId)?.id;
-      }
-      return list[0]?.id;
+      return getAllEquippedCards(targetPlayer).find((c) => c.id === requestedId)?.id;
     }
 
     if (area === "GREEN") {
-      const list = targetPlayer.greenCards || [];
-      if (requestedId) {
-        const match = list.find((g) => g.id === requestedId || g.card.id === requestedId);
-        return match?.card.id;
-      }
-      return list[0]?.card.id;
-    }
-
-    const list = targetPlayer.judgements || [];
-    if (requestedId) {
-      const match = list.find((j) => j.id === requestedId || j.card.id === requestedId);
+      const match = (targetPlayer.greenCards || []).find(
+        (g) => g.id === requestedId || g.card.id === requestedId
+      );
       return match?.card.id;
     }
-    return list[0]?.card.id;
+
+    const match = (targetPlayer.judgements || []).find(
+      (j) => j.id === requestedId || j.card.id === requestedId
+    );
+    return match?.card.id;
   }
 
   // Remove specific card IDs from hand

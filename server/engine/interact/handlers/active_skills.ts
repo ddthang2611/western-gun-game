@@ -12,7 +12,8 @@ export class ActiveSkills {
   public static handleActiveSkill(
     state: SimulationState,
     command: PlayerCommand,
-    events: DomainEvent[]
+    events: DomainEvent[],
+    deckManager?: DeckManager
   ): CommandResult {
     const player = state.players.get(command.playerId);
     if (!player) return { success: false, message: "Player not found." };
@@ -23,19 +24,19 @@ export class ActiveSkills {
     );
 
     if (skillType === "SID_KETCHUM_HEAL") {
-      return ActiveSkills.handleSidKetchumHeal(state, player, command, events);
+      return ActiveSkills.handleSidKetchumHeal(state, player, command, events, deckManager);
     }
 
     if (skillType === "CHUCK_WENGAM_HP" || skillType === "CHUCK_WENGAM_SACRIFICE") {
-      return ActiveSkills.handleChuckWengamHp(state, player, skillType, events);
+      return ActiveSkills.handleChuckWengamHp(state, player, skillType, events, deckManager);
     }
 
     if (skillType === "JOSE_DELGADO_DRAW") {
-      return ActiveSkills.handleJoseDelgadoDraw(state, player, command, events);
+      return ActiveSkills.handleJoseDelgadoDraw(state, player, command, events, deckManager);
     }
 
     if (skillType === "DOC_HOLYDAY_BANG") {
-      return ActiveSkills.handleDocHolydayBang(state, player, command, events);
+      return ActiveSkills.handleDocHolydayBang(state, player, command, events, deckManager);
     }
 
     return { success: false, message: `Unknown active skill: ${skillType}` };
@@ -45,7 +46,8 @@ export class ActiveSkills {
     state: SimulationState,
     player: EnginePlayer,
     command: PlayerCommand,
-    events: DomainEvent[]
+    events: DomainEvent[],
+    deckManager?: DeckManager
   ): CommandResult {
     if (player.isGhost) {
       return { success: false, message: "Ghosts have no life points." };
@@ -73,7 +75,7 @@ export class ActiveSkills {
     }
 
     for (const card of discarded) {
-      AtomicEffects.discardCard(state, card);
+      AtomicEffects.discardCard(state, card, deckManager);
     }
     ArenaChainManager.appendBatch(
       state,
@@ -89,13 +91,15 @@ export class ActiveSkills {
         vfxTargetId: idx === 0 ? player.id : undefined,
       }))
     );
-    player.hp = Math.min(player.hp + 1, player.maxHp);
+    AtomicEffects.applyHeal(state, player, 1, undefined, events, deckManager);
 
     events.push({
       type: "ACTIVE_SKILL_USED",
       payload: {
         playerId: player.id,
+        playerName: player.name,
         skill: "SID_KETCHUM_HEAL",
+        detail: "discarded 2 cards to heal 1 HP",
         discardedCount: 2,
         currentHp: player.hp,
       },
@@ -109,7 +113,8 @@ export class ActiveSkills {
     state: SimulationState,
     player: EnginePlayer,
     skillName: string,
-    events: DomainEvent[]
+    events: DomainEvent[],
+    deckManager?: DeckManager
   ): CommandResult {
     if (!SkillHooks.hasSkill(player, "Chuck Wengam", state)) {
       return { success: false, message: "Player does not have Chuck Wengam ability." };
@@ -136,7 +141,11 @@ export class ActiveSkills {
       timestamp: Date.now(),
     });
 
-    const { cards: drawn, events: drawEvents } = DeckManager.drawCards(state, 2);
+    const { cards: drawn, events: drawEvents } = AtomicEffects.drawCards(
+      state,
+      2,
+      deckManager
+    );
     events.push(...drawEvents);
     player.handCards.push(...drawn);
     if (drawn.length > 0) {
@@ -162,7 +171,9 @@ export class ActiveSkills {
       type: "ACTIVE_SKILL_USED",
       payload: {
         playerId: player.id,
+        playerName: player.name,
         skill: skillName,
+        detail: `sacrificed 1 HP to draw ${drawn.length} card(s)`,
         currentHp: player.hp,
         drawnCount: drawn.length,
       },
@@ -176,7 +187,8 @@ export class ActiveSkills {
     state: SimulationState,
     player: EnginePlayer,
     command: PlayerCommand,
-    events: DomainEvent[]
+    events: DomainEvent[],
+    deckManager?: DeckManager
   ): CommandResult {
     if (!SkillHooks.hasSkill(player, "Jose Delgado", state)) {
       return { success: false, message: "Player does not have Jose Delgado ability." };
@@ -209,7 +221,7 @@ export class ActiveSkills {
     }
 
     player.handCards.splice(cardIdx, 1);
-    AtomicEffects.discardCard(state, card);
+    AtomicEffects.discardCard(state, card, deckManager);
     ArenaChainManager.appendBatch(state, [
       {
         kind: "EXTRA_COST",
@@ -226,7 +238,11 @@ export class ActiveSkills {
 
     SkillHooks.checkSuzyLafayette(state, player, events);
 
-    const { cards: drawn, events: drawEvents } = DeckManager.drawCards(state, 2);
+    const { cards: drawn, events: drawEvents } = AtomicEffects.drawCards(
+      state,
+      2,
+      deckManager
+    );
     events.push(...drawEvents);
     player.handCards.push(...drawn);
     if (drawn.length > 0) {
@@ -254,7 +270,9 @@ export class ActiveSkills {
       type: "ACTIVE_SKILL_USED",
       payload: {
         playerId: player.id,
+        playerName: player.name,
         skill: "JOSE_DELGADO_DRAW",
+        detail: `discarded ${card.name} to draw ${drawn.length} card(s)`,
         discardedCardId: card.id,
         drawnCount: drawn.length,
         usesThisTurn: state.joseDelgadoCountThisTurn,
@@ -268,7 +286,8 @@ export class ActiveSkills {
     state: SimulationState,
     player: EnginePlayer,
     command: PlayerCommand,
-    events: DomainEvent[]
+    events: DomainEvent[],
+    deckManager?: DeckManager
   ): CommandResult {
     if (!SkillHooks.hasSkill(player, "Doc Holyday", state)) {
       return { success: false, message: "Player does not have Doc Holyday ability." };
@@ -337,7 +356,7 @@ export class ActiveSkills {
       return { success: false, message: "Selected discard cards not found in hand." };
     }
     for (const card of discarded) {
-      AtomicEffects.discardCard(state, card);
+      AtomicEffects.discardCard(state, card, deckManager);
     }
     ArenaChainManager.appendBatch(
       state,

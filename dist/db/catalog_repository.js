@@ -10,6 +10,7 @@ class CatalogRepository {
     roles = new Map();
     events = new Map();
     symbols = new Map();
+    symbolsVi = new Map();
     uiComponents = new Map();
     settings = new Map();
     meta = new Map();
@@ -32,8 +33,12 @@ class CatalogRepository {
         }
         const symbolRows = db.prepare("SELECT * FROM symbol_lexicon").all();
         this.symbols.clear();
+        this.symbolsVi.clear();
         for (const row of symbolRows) {
             this.symbols.set(row.symbol_code, row.meaning_en);
+            if (row.meaning_vi) {
+                this.symbolsVi.set(row.symbol_code, row.meaning_vi);
+            }
         }
         const templateRows = db.prepare("SELECT * FROM card_templates").all();
         this.templates.clear();
@@ -162,9 +167,19 @@ class CatalogRepository {
     getSymbolMeaning(code) {
         return this.symbols.get(code);
     }
+    getSymbolMeaningVi(code) {
+        return this.symbolsVi.get(code);
+    }
     getAllSymbols() {
         const obj = {};
         for (const [k, v] of this.symbols.entries()) {
+            obj[k] = v;
+        }
+        return obj;
+    }
+    getAllSymbolsVi() {
+        const obj = {};
+        for (const [k, v] of this.symbolsVi.entries()) {
             obj[k] = v;
         }
         return obj;
