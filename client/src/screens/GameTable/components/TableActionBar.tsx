@@ -16,6 +16,7 @@ export interface TableActionBarProps {
   isMyTurn?: boolean;
   isLocked?: boolean;
   isArenaLocked?: boolean;
+  hasBlockingPrompt?: boolean;
   excessCardsCount?: number;
   phase3DiscardCount?: number;
   activeSkillHint?: string | null;
@@ -34,6 +35,8 @@ export interface TableActionBarProps {
 export const TableActionBar: React.FC<TableActionBarProps> = ({
   myJudgements,
   heroes = [],
+  myHp,
+  myMaxHp,
   selectedCard,
   selectedGreenCard,
   selectedTargetId,
@@ -42,6 +45,7 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
   isMyTurn = true,
   isLocked = false,
   isArenaLocked = false,
+  hasBlockingPrompt = false,
   excessCardsCount = 0,
   phase3DiscardCount = 0,
   activeSkillHint,
@@ -62,6 +66,11 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
   const isActionPhase = isMock || currentPhase === 2 || isPhase3Discard;
   const canActInTurn = !isInteractionBlocked && isMyTurn && isActionPhase;
   const canUseSkill = !isInteractionBlocked && isMyTurn && (isMock || currentPhase === 2);
+  const canUseSidAnytime =
+    !isInteractionBlocked &&
+    !hasBlockingPrompt &&
+    (myHp ?? 0) > 0 &&
+    (myHp ?? 0) < (myMaxHp ?? 0);
   const primaryLabel = isPhase3Discard
     ? phase3DiscardCount > 0
       ? t("table.discardSelected", { count: phase3DiscardCount })
@@ -115,27 +124,29 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
 
         <div className="game-table__action-buttons">
           {onTriggerSkill &&
-            activeSkillHeroes.map((hero) => (
-              <button
-                key={hero.id}
-                type="button"
-                data-target-origin="skill"
-                onClick={() => onTriggerSkill(hero.id)}
-                disabled={!canUseSkill}
-                className={`game-table__btn game-table__btn--skill${
-                  isSkillMode ? " game-table__btn--skill-active" : ""
-                }`}
-              >
-                {t("table.skillLabel", { name: hero.name })}
-              </button>
-            ))}
+            activeSkillHeroes.map((hero) => {
+              const heroCanUse =
+                hero.name === "Sid Ketchum" ? canUseSidAnytime : canUseSkill;
+              return (
+                <button
+                  key={hero.id}
+                  type="button"
+                  onClick={() => onTriggerSkill(hero.id)}
+                  disabled={!heroCanUse}
+                  className={`game-table__btn game-table__btn--skill${
+                    isSkillMode ? " game-table__btn--skill-active" : ""
+                  }`}
+                >
+                  {t("table.skillLabel", { name: hero.name })}
+                </button>
+              );
+            })}
 
           {isSkillMode ? (
             <button
               type="button"
-              data-target-origin="skill-confirm"
               onClick={onConfirmSkill}
-              disabled={!canUseSkill || !canConfirmSkill}
+              disabled={!canConfirmSkill}
               className="game-table__btn game-table__btn--skill-confirm"
             >
               {t("table.confirmSkill")}
@@ -164,13 +175,14 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
             type="button"
             onClick={onCancel}
             disabled={
-              !canActInTurn ||
+              isInteractionBlocked ||
               (!isSkillMode &&
-                !selectedCard &&
-                !selectedGreenCard &&
-                !selectedTargetId &&
-                !activeSkillHint &&
-                phase3DiscardCount === 0)
+                (!canActInTurn ||
+                  (!selectedCard &&
+                    !selectedGreenCard &&
+                    !selectedTargetId &&
+                    !activeSkillHint &&
+                    phase3DiscardCount === 0)))
             }
             className="game-table__btn game-table__btn--secondary"
           >

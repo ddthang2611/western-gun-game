@@ -10,6 +10,8 @@
   cursor: pointer;
   background-color: $western-bg-surface;
   color: $western-text-main;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: background-color 0.15s ease, opacity 0.15s ease;
 
   &:hover {

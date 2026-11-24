@@ -277,9 +277,17 @@ export class ReactionResolver {
     if (player.hp > 0) {
       state.pendingReactions.splice(reactionIdx, 1);
       SkillHooks.checkSuzyLafayette(state, player, events);
-      if ((reaction.rescueBeersUsed ?? 0) > 0) {
-        SkillHooks.onPlayOutOfTurn(state, player, events, reaction.rescueBeersUsed);
+
+      const deferredSelf = reaction.deferredMollyDraws?.[player.id] ?? 0;
+      const totalMollyDraws = deferredSelf + (reaction.rescueBeersUsed ?? 0);
+      if (reaction.deferredMollyDraws) {
+        delete reaction.deferredMollyDraws[player.id];
+        SkillHooks.flushDeferredMollyDraws(state, reaction, events);
       }
+      if (totalMollyDraws > 0) {
+        SkillHooks.onPlayOutOfTurn(state, player, events, totalMollyDraws);
+      }
+
       if (!player.isDead && player.hp > 0) {
         SkillHooks.onTakeDamage(
           state,
@@ -1029,14 +1037,17 @@ export class ReactionResolver {
         reaction.type === "EVENT_RUSSIAN_ROULETTE"
           ? reaction.pendingDamage ?? 2
           : reaction.pendingDamage ?? 1;
+      // Resolve Duel damage attribution
       const damageSourceAttacker =
         reaction.type === "EVENT_RUSSIAN_ROULETTE"
           ? undefined
           : reaction.type === "DUEL_RESPONSE"
-          ? attacker && attacker.id !== player.id
+          ? reaction.duelInitiatorId !== undefined
+            ? reaction.duelInitiatorId !== player.id
+              ? state.players.get(reaction.duelInitiatorId)
+              : undefined
+            : attacker && attacker.id !== player.id
             ? attacker
-            : reaction.duelInitiatorId && reaction.duelInitiatorId !== player.id
-            ? state.players.get(reaction.duelInitiatorId)
             : undefined
           : attacker;
 

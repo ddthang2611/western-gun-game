@@ -14,10 +14,12 @@ export interface UseTableSelectionParams {
   isTurnLocked: boolean;
   isArenaLocked: boolean;
   isActionLocked: boolean;
+  hasBlockingPrompt: boolean;
   isWsConnected: boolean;
   currentPhase: number;
   activeHand: Card[];
   activeHp: number;
+  activeMaxHp: number;
   effectiveSkillHeroes: Character[];
   isSniperActive: boolean;
   showError: (message: string) => void;
@@ -30,10 +32,12 @@ export function useTableSelection({
   isTurnLocked,
   isArenaLocked,
   isActionLocked,
+  hasBlockingPrompt,
   isWsConnected,
   currentPhase,
   activeHand,
   activeHp,
+  activeMaxHp,
   effectiveSkillHeroes,
   isSniperActive,
   showError,
@@ -101,6 +105,17 @@ export function useTableSelection({
       if (isTurnLocked || isArenaLocked) return;
       setSelectedGreenCardId(null);
 
+      if (skillMode === "SID_KETCHUM_HEAL" || skillMode === "DOC_HOLYDAY_BANG") {
+        setSkillDiscardIds((prev) =>
+          prev.includes(card.id)
+            ? prev.filter((id) => id !== card.id)
+            : prev.length < 2
+            ? [...prev, card.id]
+            : prev
+        );
+        return;
+      }
+
       if (!isMock && isMyTurn && currentPhase === 3) {
         const maxDiscard = Math.max(1, excessCardsCount);
         setPhase3DiscardIds((prev) => {
@@ -112,17 +127,6 @@ export function useTableSelection({
           }
           return [...prev, card.id];
         });
-        return;
-      }
-
-      if (skillMode === "SID_KETCHUM_HEAL" || skillMode === "DOC_HOLYDAY_BANG") {
-        setSkillDiscardIds((prev) =>
-          prev.includes(card.id)
-            ? prev.filter((id) => id !== card.id)
-            : prev.length < 2
-            ? [...prev, card.id]
-            : prev
-        );
         return;
       }
 
@@ -234,13 +238,35 @@ export function useTableSelection({
       if (isArenaLocked) {
         return;
       }
+
+      const hero = effectiveSkillHeroes.find((h) => h.id === heroId);
+      if (!hero) return;
+
+      if (hero.name === "Sid Ketchum") {
+        if (skillMode === "SID_KETCHUM_HEAL") {
+          clearSkillState();
+          return;
+        }
+        if (hasBlockingPrompt) {
+          return;
+        }
+        if (activeHp >= activeMaxHp) {
+          showError(t("table.errors.skillUnavailable", { hero: hero.name }));
+          return;
+        }
+        if (activeHand.length < 2) {
+          showError(t("table.errors.select2Sid"));
+          return;
+        }
+        clearSelectionsForSkill();
+        setSkillMode("SID_KETCHUM_HEAL");
+        return;
+      }
+
       if (isActionLocked) {
         showError(t("table.errors.phase2SkillsOnly"));
         return;
       }
-
-      const hero = effectiveSkillHeroes.find((h) => h.id === heroId);
-      if (!hero) return;
 
       if (hero.name === "Chuck Wengam") {
         if (skillMode === "CHUCK_WENGAM_SACRIFICE") {
@@ -269,16 +295,6 @@ export function useTableSelection({
         return;
       }
 
-      if (hero.name === "Sid Ketchum") {
-        if (skillMode === "SID_KETCHUM_HEAL") {
-          clearSkillState();
-        } else {
-          clearSelectionsForSkill();
-          setSkillMode("SID_KETCHUM_HEAL");
-        }
-        return;
-      }
-
       if (hero.name === "Doc Holyday") {
         if (skillMode === "DOC_HOLYDAY_BANG") {
           clearSkillState(true);
@@ -292,10 +308,13 @@ export function useTableSelection({
       showError(t("table.errors.skillUnavailable", { hero: hero.name }));
     },
     [
+      activeHand.length,
       activeHp,
+      activeMaxHp,
       clearSelectionsForSkill,
       clearSkillState,
       effectiveSkillHeroes,
+      hasBlockingPrompt,
       isActionLocked,
       isArenaLocked,
       isMock,

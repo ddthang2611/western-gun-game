@@ -438,7 +438,7 @@ export class SkillHooks {
       (reaction.deferredMollyDraws[player.id] ?? 0) + 1;
   }
 
-  // Flush Molly Stark deferred draws
+  // Flush or forward Molly draws
   public static flushDeferredMollyDraws(
     state: SimulationState,
     reaction: PendingReaction,
@@ -449,7 +449,20 @@ export class SkillHooks {
     for (const [pid, count] of Object.entries(deferred)) {
       if (count <= 0) continue;
       const targetPlayer = state.players.get(pid);
-      if (!targetPlayer) continue;
+      if (!targetPlayer || targetPlayer.isDead) continue;
+
+      if (!targetPlayer.isGhost && targetPlayer.hp <= 0) {
+        const rescue = state.pendingReactions.find(
+          (r) => r.type === "NEAR_DEATH_RESCUE" && r.targetPlayerId === pid
+        );
+        if (rescue) {
+          if (!rescue.deferredMollyDraws) rescue.deferredMollyDraws = {};
+          rescue.deferredMollyDraws[pid] =
+            (rescue.deferredMollyDraws[pid] ?? 0) + count;
+        }
+        continue;
+      }
+
       SkillHooks.onPlayOutOfTurn(state, targetPlayer, events, count);
     }
     delete reaction.deferredMollyDraws;

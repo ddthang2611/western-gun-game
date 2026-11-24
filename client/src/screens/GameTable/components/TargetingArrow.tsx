@@ -2,13 +2,50 @@ import React, { useId, useLayoutEffect, useRef } from "react";
 import "./TargetingArrow.scss";
 
 export interface TargetingArrowProps {
+  sourcePlayerId?: string | null;
   targetPlayerId: string | null;
+  myPlayerId?: string | null;
   hasSourceSelection: boolean;
   isSkillOrigin?: boolean;
 }
 
+function hasRenderableBox(el: HTMLElement | null): el is HTMLElement {
+  if (!el) return false;
+  const rect = el.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+function resolvePlayerOrigin(
+  sourcePlayerId?: string | null,
+  myPlayerId?: string | null
+): HTMLElement | null {
+  if (sourcePlayerId && (!myPlayerId || sourcePlayerId !== myPlayerId)) {
+    const oppSeat = document.getElementById(`seat-${sourcePlayerId}`);
+    if (hasRenderableBox(oppSeat)) return oppSeat;
+  }
+
+  const candidates = [
+    document.querySelector<HTMLElement>('[data-target-origin="player"]'),
+    document.querySelector<HTMLElement>('[data-flight-anchor="my-heroes"]'),
+    document.querySelector<HTMLElement>(".game-table__console-heroes"),
+  ];
+  return candidates.find(hasRenderableBox) ?? null;
+}
+
+function resolveTargetSeat(
+  targetPlayerId: string,
+  myPlayerId?: string | null
+): HTMLElement | null {
+  if (myPlayerId && targetPlayerId === myPlayerId) {
+    return resolvePlayerOrigin(myPlayerId, myPlayerId);
+  }
+  return document.getElementById(`seat-${targetPlayerId}`);
+}
+
 export const TargetingArrow: React.FC<TargetingArrowProps> = ({
+  sourcePlayerId,
   targetPlayerId,
+  myPlayerId,
   hasSourceSelection,
   isSkillOrigin = false,
 }) => {
@@ -26,16 +63,8 @@ export const TargetingArrow: React.FC<TargetingArrowProps> = ({
     if (!svgEl || !isActive || !targetPlayerId) return;
 
     const updateArrow = () => {
-      const targetEl = document.getElementById(`seat-${targetPlayerId}`);
-      const sourceEl = isSkillOrigin
-        ? document.querySelector<HTMLElement>('[data-target-origin="skill-confirm"]') ||
-          document.querySelector<HTMLElement>('[data-target-origin="skill"]') ||
-          document.querySelector<HTMLElement>(".game-table__btn--skill-confirm") ||
-          document.querySelector<HTMLElement>(".game-table__btn--skill")
-        : document.querySelector<HTMLElement>('[data-target-origin="card"]') ||
-          document.querySelector<HTMLElement>('[data-target-origin="green"]') ||
-          document.querySelector<HTMLElement>(".game-table__hand-card-wrapper--selected") ||
-          document.querySelector<HTMLElement>(".game-table__green-slot--selected");
+      const targetEl = resolveTargetSeat(targetPlayerId, myPlayerId);
+      const sourceEl = resolvePlayerOrigin(sourcePlayerId, myPlayerId);
 
       if (!targetEl || !sourceEl) {
         svgEl.setAttribute("data-visible", "false");
@@ -62,11 +91,22 @@ export const TargetingArrow: React.FC<TargetingArrowProps> = ({
     updateArrow();
     window.addEventListener("resize", updateArrow);
     window.addEventListener("scroll", updateArrow, true);
+
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      const sourceEl = resolvePlayerOrigin(sourcePlayerId, myPlayerId);
+      const targetEl = resolveTargetSeat(targetPlayerId, myPlayerId);
+      observer = new ResizeObserver(updateArrow);
+      if (sourceEl) observer.observe(sourceEl);
+      if (targetEl) observer.observe(targetEl);
+    }
+
     return () => {
+      observer?.disconnect();
       window.removeEventListener("resize", updateArrow);
       window.removeEventListener("scroll", updateArrow, true);
     };
-  }, [isActive, targetPlayerId, hasSourceSelection, isSkillOrigin]);
+  }, [isActive, sourcePlayerId, targetPlayerId, myPlayerId, hasSourceSelection, isSkillOrigin]);
 
   if (!isActive) return null;
 

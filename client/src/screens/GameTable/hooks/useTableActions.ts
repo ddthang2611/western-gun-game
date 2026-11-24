@@ -85,8 +85,11 @@ export function useTableActions({
       showError(t("table.errors.arenaBusy"));
       return;
     }
-    if (vm.isActionLocked) {
+    if (vm.isActionLocked && skillMode !== "SID_KETCHUM_HEAL") {
       showError(t("table.errors.phase2SkillsOnly"));
+      return;
+    }
+    if (skillMode === "SID_KETCHUM_HEAL" && vm.hasBlockingPrompt) {
       return;
     }
 

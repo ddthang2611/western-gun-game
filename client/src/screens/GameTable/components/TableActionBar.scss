@@ -30,10 +30,15 @@
     background: transparent;
     border: none;
     box-shadow: none;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
   }
 
   &__hint-slot {
     min-height: 18px;
+    width: 100%;
+    max-width: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -44,6 +49,7 @@
     font-weight: bold;
     padding: 3px 8px;
     border-radius: 4px;
+    white-space: nowrap;
 
     &--jail {
       background-color: #1e3a8a;
@@ -66,7 +72,7 @@
 
     .game-table__btn {
       height: 36px;
-      min-width: 92px;
+      min-width: 96px;
       padding: 0 16px;
       font-size: 12.5px;
       font-weight: 800;
@@ -81,6 +87,11 @@
 
   &__hint {
     font-size: 12.5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    text-align: center;
 
     &--skill {
       color: #facc15;

@@ -253,6 +253,7 @@ export interface TableViewModel {
   isArenaLocked: boolean;
   isStepAnimating: boolean;
   isActionLocked: boolean;
+  hasBlockingPrompt: boolean;
   activePlayerName: string | undefined;
   handLimit: number;
   excessCardsCount: number;
@@ -285,6 +286,7 @@ export interface BaseTableContext {
   isTurnLocked: boolean;
   isArenaLocked: boolean;
   isActionLocked: boolean;
+  hasBlockingPrompt: boolean;
 }
 
 // Derive player, hero, and turn lock context
@@ -335,6 +337,20 @@ export function deriveBaseTableContext(params: {
     isTurnLocked ||
     isArenaLocked ||
     (!isMock && (!isMyTurn || state.currentPhase !== 2));
+  const hasBlockingPrompt =
+    !isMock &&
+    Boolean(
+      state.matchPhase === "CHARACTER_SELECT" ||
+        state.gameOver ||
+        state.myPendingReaction ||
+        (state.pendingReactions && state.pendingReactions.length > 0) ||
+        state.generalStore ||
+        state.pendingBrawlPick ||
+        state.pendingLuckyDukePick ||
+        state.pendingElGringoPick ||
+        state.pendingTurnStartChoice ||
+        state.pendingPhase1Choice
+    );
 
   return {
     myPlayerIndex,
@@ -348,6 +364,7 @@ export function deriveBaseTableContext(params: {
     isTurnLocked,
     isArenaLocked,
     isActionLocked,
+    hasBlockingPrompt,
   };
 }
 
@@ -397,6 +414,7 @@ export function computeTableViewModel({
     isTurnLocked,
     isArenaLocked,
     isActionLocked,
+    hasBlockingPrompt,
   } = base;
   const opponents =
     myPlayerIndex === -1
@@ -500,16 +518,20 @@ export function computeTableViewModel({
   const canConfirmSkill =
     !isTurnLocked &&
     !isArenaLocked &&
-    !isActionLocked &&
-    (skillMode === "CHUCK_WENGAM_SACRIFICE"
-      ? !isMock || myHp > 1
-      : skillMode === "JOSE_DELGADO_DRAW"
-      ? skillDiscardIds.length === 1
-      : skillMode === "SID_KETCHUM_HEAL"
-      ? skillDiscardIds.length === 2
-      : skillMode === "DOC_HOLYDAY_BANG"
-      ? skillDiscardIds.length === 2 && Boolean(selectedTargetId)
-      : false);
+    (skillMode === "SID_KETCHUM_HEAL"
+      ? !hasBlockingPrompt &&
+        !myPlayer?.isDead &&
+        !myPlayer?.isGhost &&
+        activeHp < activeMaxHp &&
+        skillDiscardIds.length === 2
+      : !isActionLocked &&
+        (skillMode === "CHUCK_WENGAM_SACRIFICE"
+          ? !isMock || myHp > 1
+          : skillMode === "JOSE_DELGADO_DRAW"
+          ? skillDiscardIds.length === 1
+          : skillMode === "DOC_HOLYDAY_BANG"
+          ? skillDiscardIds.length === 2 && Boolean(selectedTargetId)
+          : false));
 
   const canConfirmAction =
     !isTurnLocked &&
@@ -545,6 +567,7 @@ export function computeTableViewModel({
     isArenaLocked,
     isStepAnimating,
     isActionLocked,
+    hasBlockingPrompt,
     activePlayerName,
     handLimit,
     excessCardsCount,

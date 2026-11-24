@@ -83,7 +83,6 @@ export const HandCardsFan: React.FC<HandCardsFanProps> = ({
           return (
             <div
               key={card.id}
-              data-target-origin={isSelected || isDiscardCost ? "card" : undefined}
               data-flight-anchor={isRightmost ? "my-hand-last" : undefined}
               className={[
                 "game-table__hand-card-wrapper",

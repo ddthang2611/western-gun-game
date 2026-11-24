@@ -66,7 +66,6 @@ export const GreenDelayGrid: React.FC<GreenDelayGridProps> = ({
               <button
                 type="button"
                 aria-pressed={isSelected}
-                data-target-origin={isSelected ? "green" : undefined}
                 onClick={() => onTriggerGreenCard(gCard)}
                 className={[
                   "game-table__green-slot",

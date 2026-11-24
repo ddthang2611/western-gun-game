@@ -35,18 +35,15 @@ export const TableTopBar: React.FC<TableTopBarProps> = ({
   onDeleteMatch,
   onBackToLobby,
 }) => {
-  const { locale, t, tEvent } = useI18n();
+  const { t, tEvent } = useI18n();
   const phaseLabel = t(`phases.${currentPhase}`, undefined, String(currentPhase));
   const hostDisplay = hostName || hostInfo.replace(/^Host:\s*/i, "");
   const eventLoc = activeEvent ? tEvent(activeEvent) : null;
   const eventPackName =
     activeEvent?.pack === "fistful" || activeEvent?.pack === "fistful_of_cards"
-      ? "A Fistful of Cards"
+      ? "Fistful of Cards"
       : "High Noon";
-  const eventDisplayName =
-    eventLoc && locale === "vi" && eventLoc.primary.subtitleVi
-      ? `${eventLoc.primary.name} (${eventLoc.primary.subtitleVi})`
-      : eventLoc?.primary.name || activeEvent?.name || "";
+  const eventDisplayName = eventLoc?.primary.name || activeEvent?.name || "";
 
   return (
     <header className="game-table__header">

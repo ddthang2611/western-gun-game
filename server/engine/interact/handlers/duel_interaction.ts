@@ -3,7 +3,6 @@ import { EngineCard } from "../../types/cards";
 import { CommandResult, DomainEvent } from "../../types/actions";
 import { DeckManager } from "../../deck/deck_manager";
 import { SkillHooks } from "../skill_hooks";
-import { PendingReaction } from "../interact_types";
 import { AtomicEffects } from "../primitives/atomic_effects";
 import { ArenaChainManager } from "../../arena/arena_chain_manager";
 
@@ -19,6 +18,7 @@ export class DuelInteraction {
     player.handCards.splice(cardIndex, 1);
     AtomicEffects.discardCard(state, card, deckManager);
 
+    const duelImmune = SkillHooks.isImmuneToCard(targetPlayer, card, player, state);
     ArenaChainManager.appendBatch(state, [
       {
         kind: "PLAYED_CARD",
@@ -30,33 +30,30 @@ export class DuelInteraction {
         originZone: "HAND",
         destinationZone: "DISCARD",
         actionLabel: `${card.name} -> ${targetPlayer.name}`,
-        vfxType: "bullet",
+        vfxType: duelImmune ? undefined : "bullet",
         vfxTargetId: targetPlayer.id,
       },
     ]);
 
     // Target responds first in Duel
-    const reaction: PendingReaction = {
-      id: `reaction_duel_${targetPlayer.id}_${Date.now()}`,
-      type: "DUEL_RESPONSE",
-      sourcePlayerId: player.id,
-      duelInitiatorId: player.id,
-      targetPlayerId: targetPlayer.id,
-      sourceCard: card,
-      requiredCard: "BANG",
-      requiredCount: 1,
-      currentCount: 0,
-      canUseBarrel: false,
-      canUseJourdonnais: false,
-      barrelChecked: false,
-      jourdonnaisChecked: false,
-      createdAt: Date.now(),
-    };
-
-    state.pendingReactions.push(reaction);
-
-    const events: DomainEvent[] = [
+    const reactionRes = AtomicEffects.createReaction(
+      state,
+      targetPlayer,
+      player,
+      card,
       {
+        type: "DUEL_RESPONSE",
+        requiredCard: "BANG",
+        requiredCount: 1,
+        allowBarrel: false,
+        allowJourdonnais: false,
+      },
+      { duelInitiatorId: player.id }
+    );
+
+    const events: DomainEvent[] = [...reactionRes.events];
+    if (!reactionRes.isImmune && reactionRes.reaction) {
+      events.push({
         type: "DUEL_STARTED",
         payload: {
           initiatorId: player.id,
@@ -67,8 +64,8 @@ export class DuelInteraction {
           nextResponderId: targetPlayer.id,
         },
         timestamp: Date.now(),
-      },
-    ];
+      });
+    }
 
     SkillHooks.checkSuzyLafayette(state, player, events);
     return { success: true, events };

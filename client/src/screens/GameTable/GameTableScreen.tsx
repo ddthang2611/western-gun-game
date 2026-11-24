@@ -157,10 +157,12 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
     isTurnLocked: baseCtx.isTurnLocked,
     isArenaLocked: baseCtx.isArenaLocked,
     isActionLocked: baseCtx.isActionLocked,
+    hasBlockingPrompt: baseCtx.hasBlockingPrompt,
     isWsConnected,
     currentPhase: state.currentPhase,
     activeHand: baseCtx.activeHand,
     activeHp: baseCtx.activeHp,
+    activeMaxHp: isMock ? session.myMaxHp : baseCtx.myPlayer?.maxHp ?? session.myMaxHp,
     effectiveSkillHeroes: baseCtx.effectiveSkillHeroes,
     isSniperActive: state.activeEvent?.effectCode === "EVENT_FOC_SNIPER",
     showError: ui.showError,
@@ -403,6 +405,7 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
         isMyTurn={vm.isMyTurn}
         isLocked={vm.isTurnLocked}
         isArenaLocked={vm.isArenaLocked}
+        hasBlockingPrompt={vm.hasBlockingPrompt}
         excessCardsCount={vm.excessCardsCount}
         phase3DiscardCount={selection.phase3DiscardIds.length}
         activeSkillHint={vm.activeSkillHint}
@@ -426,7 +429,11 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
         myHp={vm.activeHp}
         myMaxHp={vm.activeMaxHp}
         selectedCardId={selection.selectedHandCardId}
-        selectedCardIds={!isMock && state.currentPhase === 3 ? selection.phase3DiscardIds : selection.skillDiscardIds}
+        selectedCardIds={
+          !isMock && state.currentPhase === 3 && !vm.isSkillMode
+            ? selection.phase3DiscardIds
+            : selection.skillDiscardIds
+        }
         discardCardIds={selection.discardCostIds}
         concealedCardIds={animations.concealedHandCardIds}
         concealedInPlayCardIds={animations.concealedInPlayCardIds}

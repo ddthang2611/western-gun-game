@@ -20,7 +20,7 @@ export const HeroProfiles: React.FC<HeroProfilesProps> = ({
 
   return (
     <div className="game-table__console-heroes" data-flight-anchor="my-heroes">
-      <div className="game-table__hero-columns-player">
+      <div className="game-table__hero-columns-player" data-target-origin="player">
         {displayHeroes.map((hero) => {
           const charLoc = tChar(hero);
           return (
