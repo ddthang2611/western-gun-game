@@ -364,8 +364,13 @@ class GameEngine {
             }
             return { success: true, events };
         }
+        // Allow Sid Ketchum anytime heal
         if (command.type === "USE_ACTIVE_SKILL") {
-            if (this.state.turnPlayerId !== player.id || this.state.currentPhase !== 2) {
+            const rawSkill = String(command.payload?.skillType ?? command.payload?.skill ?? "")
+                .trim()
+                .toUpperCase();
+            const isAnytimeSid = rawSkill === "SID_KETCHUM_HEAL";
+            if (!isAnytimeSid && (this.state.turnPlayerId !== player.id || this.state.currentPhase !== 2)) {
                 return {
                     success: false,
                     message: "Can only use active skills during Phase 2 of your turn.",

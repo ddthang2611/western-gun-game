@@ -38,7 +38,8 @@ export function buildTableState(
   isPlayerOnline?: (id: string) => boolean,
   matchId?: string,
   hostId?: string,
-  structuredCombatLog: StructuredLogEntry[] = []
+  structuredCombatLog: StructuredLogEntry[] = [],
+  isPlayerBot?: (id: string) => boolean
 ): any {
   const simState = engine.getState();
   const myPlayer = snapshot.players.find((p) => p.id === playerId);
@@ -54,12 +55,14 @@ export function buildTableState(
     const dist = DistanceCalculator.calculateDistance(simState, playerId, p.id);
     const isInRange = dist <= weaponRange;
     const online = isPlayerOnline ? isPlayerOnline(p.id) : !p.isDead;
+    const isBot = isPlayerBot ? isPlayerBot(p.id) : false;
 
     return {
       id: p.id,
       name: p.name,
       seatIndex: p.seatIndex,
       isHost: Boolean(hostId && hostId === p.id),
+      isBot,
       isReady: true,
       isOnline: online && (!p.isDead || Boolean(p.isGhost)),
       isDead: p.isDead,

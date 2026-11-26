@@ -34,7 +34,7 @@ export const CardView: React.FC<CardViewProps> = ({
   onClick,
   className = "",
 }) => {
-  const { locale, t, tCard, tSuitName } = useI18n();
+  const { tCard, tSuitName } = useI18n();
   const suitInfo = suitMeta[card.suit] || { code: "", isRed: false };
   const suitLabel = tSuitName(card.suit);
   const hasArtwork = isFaceDown || Boolean(card.image);
@@ -110,31 +110,13 @@ export const CardView: React.FC<CardViewProps> = ({
   }
 
   const { primary, secondary } = tCard(card);
-  const subtitle =
-    locale === "vi" && primary.subtitleVi ? ` (${primary.subtitleVi})` : "";
-  const titleText = `${primary.name}${subtitle}${
-    card.rank && suitInfo.code ? ` (${card.rank}${suitInfo.code})` : ""
-  }`;
-  const borderKey =
-    card.border === "blue"
-      ? "popover.type.blue"
-      : card.border === "green"
-      ? "popover.type.green"
-      : "popover.type.brown";
 
   return (
     <DebouncedPopover
-      title={titleText}
       content={
         <CardTooltipContent
-          typeLabel={t(borderKey)}
           primaryDesc={primary.desc || card.desc}
-          actionSummary={primary.actionSummary}
-          secondaryTitle={secondary?.name}
           secondaryDesc={secondary?.desc}
-          range={card.range}
-          suit={card.suit}
-          rank={card.rank}
         />
       }
       delayMs={300}

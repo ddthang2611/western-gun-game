@@ -668,7 +668,8 @@ class CardExecutionPipeline {
             vfxTargetId = targetPlayer.id;
         }
         else if (card.name === "DUEL" && targetPlayer) {
-            vfxType = "bullet";
+            const duelImmune = skill_hooks_1.SkillHooks.isImmuneToCard(targetPlayer, card, player, state);
+            vfxType = duelImmune ? undefined : "bullet";
             vfxTargetId = targetPlayer.id;
         }
         else if (def?.combat.reactionType) {
@@ -886,35 +887,28 @@ class CardExecutionPipeline {
         }
         // Duel reaction setup
         if (card.name === "DUEL" && targetPlayer) {
-            const reaction = {
-                id: `reaction_duel_${targetPlayer.id}_${Date.now()}`,
+            const reactionRes = atomic_effects_1.AtomicEffects.createReaction(state, targetPlayer, player, card, {
                 type: "DUEL_RESPONSE",
-                sourcePlayerId: player.id,
-                duelInitiatorId: player.id,
-                targetPlayerId: targetPlayer.id,
-                sourceCard: card,
                 requiredCard: "BANG",
                 requiredCount: 1,
-                currentCount: 0,
-                canUseBarrel: false,
-                canUseJourdonnais: false,
-                barrelChecked: false,
-                jourdonnaisChecked: false,
-                createdAt: Date.now(),
-            };
-            state.pendingReactions.push(reaction);
-            events.push({
-                type: "DUEL_STARTED",
-                payload: {
-                    initiatorId: player.id,
-                    initiatorName: player.name,
-                    targetId: targetPlayer.id,
-                    targetName: targetPlayer.name,
-                    card,
-                    nextResponderId: targetPlayer.id,
-                },
-                timestamp: Date.now(),
-            });
+                allowBarrel: false,
+                allowJourdonnais: false,
+            }, { duelInitiatorId: player.id });
+            events.push(...reactionRes.events);
+            if (!reactionRes.isImmune && reactionRes.reaction) {
+                events.push({
+                    type: "DUEL_STARTED",
+                    payload: {
+                        initiatorId: player.id,
+                        initiatorName: player.name,
+                        targetId: targetPlayer.id,
+                        targetName: targetPlayer.name,
+                        card,
+                        nextResponderId: targetPlayer.id,
+                    },
+                    timestamp: Date.now(),
+                });
+            }
             return { success: true, events };
         }
         // AOE reaction attacks: Indians!, Gatling, Howitzer

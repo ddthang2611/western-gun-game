@@ -15,13 +15,22 @@ function hasRenderableBox(el: HTMLElement | null): el is HTMLElement {
   return rect.width > 0 && rect.height > 0;
 }
 
+function resolveOpponentCharacter(playerId: string): HTMLElement | null {
+  const portraitBox = document.querySelector<HTMLElement>(
+    `#seat-${playerId} .opponent-seat__hero-columns`
+  );
+  if (hasRenderableBox(portraitBox)) return portraitBox;
+  const seatBox = document.getElementById(`seat-${playerId}`);
+  return hasRenderableBox(seatBox) ? seatBox : null;
+}
+
 function resolvePlayerOrigin(
   sourcePlayerId?: string | null,
   myPlayerId?: string | null
 ): HTMLElement | null {
   if (sourcePlayerId && (!myPlayerId || sourcePlayerId !== myPlayerId)) {
-    const oppSeat = document.getElementById(`seat-${sourcePlayerId}`);
-    if (hasRenderableBox(oppSeat)) return oppSeat;
+    const oppChar = resolveOpponentCharacter(sourcePlayerId);
+    if (oppChar) return oppChar;
   }
 
   const candidates = [
@@ -39,7 +48,7 @@ function resolveTargetSeat(
   if (myPlayerId && targetPlayerId === myPlayerId) {
     return resolvePlayerOrigin(myPlayerId, myPlayerId);
   }
-  return document.getElementById(`seat-${targetPlayerId}`);
+  return resolveOpponentCharacter(targetPlayerId);
 }
 
 export const TargetingArrow: React.FC<TargetingArrowProps> = ({
@@ -66,7 +75,7 @@ export const TargetingArrow: React.FC<TargetingArrowProps> = ({
       const targetEl = resolveTargetSeat(targetPlayerId, myPlayerId);
       const sourceEl = resolvePlayerOrigin(sourcePlayerId, myPlayerId);
 
-      if (!targetEl || !sourceEl) {
+      if (!targetEl || !sourceEl || sourceEl === targetEl) {
         svgEl.setAttribute("data-visible", "false");
         return;
       }

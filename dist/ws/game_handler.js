@@ -16,6 +16,7 @@ const database_1 = require("../db/database");
 const expansion_config_1 = require("../engine/events/expansion_config");
 const combat_log_formatter_1 = require("./combat_log_formatter");
 const table_state_presenter_1 = require("./table_state_presenter");
+const bot_runner_1 = require("./bot_runner");
 class GameSessionManager {
     static instance;
     static INACTIVITY_TIMEOUT_MS = 60_000;
@@ -26,6 +27,7 @@ class GameSessionManager {
     matchIds = new Map();
     inactivityTimers = new Map();
     arenaTimers = new Map();
+    botRunners = new Map();
     static getInstance() {
         if (!GameSessionManager.instance) {
             GameSessionManager.instance = new GameSessionManager();
@@ -45,6 +47,55 @@ class GameSessionManager {
             clearTimeout(existing);
             this.inactivityTimers.delete(roomId);
         }
+    }
+    // Stop and remove room bot runner
+    clearBotRunner(roomId) {
+        const existing = this.botRunners.get(roomId);
+        if (existing) {
+            existing.stop();
+            this.botRunners.delete(roomId);
+        }
+    }
+    // Synchronize bot scheduler with current state
+    syncBotRunner(roomId, engine, lobbyManager, forceReschedule = true) {
+        const runner = this.botRunners.get(roomId);
+        if (!runner || !runner.hasBots() || !lobbyManager)
+            return;
+        const simState = engine.getState();
+        if (simState.gameOver ||
+            simState.matchPhase === "FINISHED" ||
+            this.isMatchPaused(engine, lobbyManager)) {
+            runner.stop();
+            return;
+        }
+        if (!forceReschedule && runner.isScheduled()) {
+            return;
+        }
+        runner.scheduleNextStep(engine, () => this.isMatchPaused(engine, lobbyManager), (botId, cmd) => this.handleBotCommand(roomId, botId, cmd, lobbyManager));
+    }
+    // Execute bot command through authoritative session pipeline
+    handleBotCommand(roomId, botId, command, lobbyManager) {
+        const engine = this.engines.get(roomId);
+        if (!engine)
+            return false;
+        if (this.isMatchPaused(engine, lobbyManager))
+            return false;
+        const normalizedCommand = {
+            ...command,
+            playerId: botId,
+            commandId: command.commandId || crypto_1.default.randomUUID(),
+        };
+        const result = engine.handleCommand(normalizedCommand);
+        if (!result.success)
+            return false;
+        this.clearInactivityTimer(roomId);
+        const events = result.events || [];
+        this.persistEventsAndState(roomId, events, engine);
+        if (events.length > 0) {
+            this.emitDomainEvents(roomId, events, engine, lobbyManager);
+        }
+        this.broadcastGameSnapshot(roomId, engine, lobbyManager);
+        return true;
     }
     // Clear room Card Arena settle timer
     clearArenaTimer(roomId) {
@@ -353,6 +404,7 @@ class GameSessionManager {
     endSession(roomId) {
         this.clearInactivityTimer(roomId);
         this.clearArenaTimer(roomId);
+        this.clearBotRunner(roomId);
         this.engines.delete(roomId);
         this.combatLogs.delete(roomId);
         this.matchEventSeqs.delete(roomId);
@@ -426,11 +478,17 @@ class GameSessionManager {
         }
     }
     // Restore saved match from runtime DB
-    restoreSessionFromDb(roomId) {
+    restoreSessionFromDb(roomId, lobbyManager) {
         if (!(0, database_1.isDatabaseUnlocked)())
             return null;
         if (this.engines.has(roomId)) {
-            return this.engines.get(roomId) || null;
+            const existing = this.engines.get(roomId) || null;
+            if (existing && lobbyManager) {
+                this.syncArenaTimer(roomId, existing, lobbyManager);
+                this.refreshInactivityTimer(roomId, existing, lobbyManager);
+                this.syncBotRunner(roomId, existing, lobbyManager, false);
+            }
+            return existing;
         }
         const repo = session_repository_1.SessionRepository.getInstance();
         const saved = repo.getGameState(roomId);
@@ -471,6 +529,18 @@ class GameSessionManager {
                 restoredLogs.push(entry);
         }
         this.combatLogs.set(roomId, restoredLogs.slice(0, GameSessionManager.MAX_RESTORED_EVENTS));
+        if (lobbyManager) {
+            this.clearBotRunner(roomId);
+            const botIds = lobbyManager
+                .getBotIds()
+                .filter((id) => engine.getState().players.has(id));
+            if (botIds.length > 0) {
+                this.botRunners.set(roomId, new bot_runner_1.BotRunner(botIds));
+            }
+            this.syncArenaTimer(roomId, engine, lobbyManager);
+            this.refreshInactivityTimer(roomId, engine, lobbyManager);
+            this.syncBotRunner(roomId, engine, lobbyManager);
+        }
         return engine;
     }
     // Check if any living player offline
@@ -540,6 +610,7 @@ class GameSessionManager {
             });
             this.clearInactivityTimer(roomId);
             this.clearArenaTimer(roomId);
+            this.clearBotRunner(roomId);
             const nextMatchId = crypto_1.default.randomUUID();
             const initialEvents = matchResult.events || [];
             const repo = session_repository_1.SessionRepository.getInstance();
@@ -556,6 +627,10 @@ class GameSessionManager {
                 repo.saveGameState(roomId, serialized);
             })();
             this.engines.set(roomId, engine);
+            const botIds = players.filter((p) => p.isBot).map((p) => p.id);
+            if (botIds.length > 0) {
+                this.botRunners.set(roomId, new bot_runner_1.BotRunner(botIds));
+            }
             this.matchIds.set(roomId, nextMatchId);
             this.matchEventSeqs.set(roomId, seq);
             this.combatLogs.set(roomId, [
@@ -644,13 +719,16 @@ class GameSessionManager {
     }
     // Emit TABLE_STATE only to participant
     emitPlayerSnapshot(engine, playerId, roomId, lobbyManager) {
+        const botRunner = this.botRunners.get(roomId);
+        if (botRunner?.isBot(playerId))
+            return;
         if (!engine.getState().players.has(playerId))
             return;
         const snapshot = engine.getFilteredSnapshot(playerId);
         const roomLogs = this.combatLogs.get(roomId) || [];
         const logs = (0, combat_log_formatter_1.getLogsForPlayer)(roomLogs, playerId, 100);
         const structuredLogs = (0, combat_log_formatter_1.getStructuredLogsForPlayer)(roomLogs, playerId, 100);
-        const tableState = (0, table_state_presenter_1.buildTableState)(snapshot, playerId, engine, logs, this.isMatchPaused(engine, lobbyManager), (pId) => lobbyManager.isPlayerOnline(pId), this.matchIds.get(roomId), lobbyManager.getHostId(), structuredLogs);
+        const tableState = (0, table_state_presenter_1.buildTableState)(snapshot, playerId, engine, logs, this.isMatchPaused(engine, lobbyManager), (pId) => lobbyManager.isPlayerOnline(pId), this.matchIds.get(roomId), lobbyManager.getHostId(), structuredLogs, (pId) => botRunner?.isBot(pId) ?? false);
         lobbyManager.sendToPlayer(playerId, "TABLE_STATE", tableState);
     }
     // Send private snapshot to player
@@ -658,6 +736,7 @@ class GameSessionManager {
         this.emitPlayerSnapshot(engine, playerId, roomId, lobbyManager);
         this.syncArenaTimer(roomId, engine, lobbyManager);
         this.refreshInactivityTimer(roomId, engine, lobbyManager);
+        this.syncBotRunner(roomId, engine, lobbyManager, false);
     }
     // Broadcast snapshots strictly to participants
     broadcastGameSnapshot(roomId, engine, lobbyManager) {
@@ -666,25 +745,30 @@ class GameSessionManager {
         }
         this.syncArenaTimer(roomId, engine, lobbyManager);
         this.refreshInactivityTimer(roomId, engine, lobbyManager);
+        this.syncBotRunner(roomId, engine, lobbyManager);
     }
     // Broadcast domain events and logs
     emitDomainEvents(roomId, events, engine, lobbyManager) {
+        const botRunner = this.botRunners.get(roomId);
+        if (botRunner && events.length > 0) {
+            botRunner.observeEvents(events, engine);
+        }
         const logs = this.combatLogs.get(roomId) || [];
         const players = engine.getState().players;
-        const participantIds = Array.from(players.keys());
+        const humanParticipantIds = Array.from(players.keys()).filter((id) => !botRunner?.isBot(id));
         for (const ev of events) {
             const logEntry = (0, combat_log_formatter_1.formatEventToLog)(ev, players);
             if (logEntry) {
                 logs.unshift(logEntry);
             }
-            for (const pId of participantIds) {
+            for (const pId of humanParticipantIds) {
                 const outgoing = ev.visibleTo && ev.visibleTo.length > 0
                     ? engine.filterEventForPlayer(ev, pId)
                     : ev;
                 lobbyManager.sendToPlayer(pId, "GAME_EVENT", outgoing);
             }
             if (ev.type === "GAME_OVER") {
-                for (const pId of participantIds) {
+                for (const pId of humanParticipantIds) {
                     lobbyManager.sendToPlayer(pId, "GAME_OVER", ev.payload);
                 }
             }
@@ -694,7 +778,7 @@ class GameSessionManager {
         }
         this.combatLogs.set(roomId, logs);
         if (events.length > 0) {
-            for (const pId of participantIds) {
+            for (const pId of humanParticipantIds) {
                 lobbyManager.sendToPlayer(pId, "COMBAT_LOG_UPDATE", {
                     combatLog: (0, combat_log_formatter_1.getLogsForPlayer)(logs, pId, 50),
                     structuredCombatLog: (0, combat_log_formatter_1.getStructuredLogsForPlayer)(logs, pId, 50),

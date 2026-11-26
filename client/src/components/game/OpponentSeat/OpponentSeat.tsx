@@ -30,7 +30,7 @@ export const OpponentSeat: React.FC<OpponentSeatProps> = ({
   concealedInPlayCardIds,
   onSelectTarget,
 }) => {
-  const { locale, t, tCard, tChar } = useI18n();
+  const { t, tCard, tChar } = useI18n();
   const concealedSet = concealedInPlayCardIds?.length
     ? new Set(concealedInPlayCardIds)
     : undefined;
@@ -198,29 +198,13 @@ export const OpponentSeat: React.FC<OpponentSeatProps> = ({
                 }
 
                 const cardLoc = tCard(slot.card);
-                const sub =
-                  locale === "vi" && cardLoc.primary.subtitleVi
-                    ? ` (${cardLoc.primary.subtitleVi})`
-                    : "";
-                const title = slot.card.range
-                  ? `${cardLoc.primary.name}${sub} (${t("common.range", {
-                      range: slot.card.range,
-                    })})`
-                  : `${cardLoc.primary.name}${sub}`;
                 return (
                   <DebouncedPopover
                     key={slot.slotKey}
-                    title={title}
                     content={
                       <CardTooltipContent
-                        typeLabel={t("popover.type.blue")}
                         primaryDesc={cardLoc.primary.desc || slot.card.desc}
-                        actionSummary={cardLoc.primary.actionSummary}
-                        secondaryTitle={cardLoc.secondary?.name}
                         secondaryDesc={cardLoc.secondary?.desc}
-                        range={slot.card.range}
-                        suit={slot.card.suit}
-                        rank={slot.card.rank}
                       />
                     }
                     delayMs={250}
@@ -269,23 +253,13 @@ export const OpponentSeat: React.FC<OpponentSeatProps> = ({
                 }
 
                 const gLoc = tCard(gCard.card);
-                const gSub =
-                  locale === "vi" && gLoc.primary.subtitleVi
-                    ? ` (${gLoc.primary.subtitleVi})`
-                    : "";
                 return (
                   <DebouncedPopover
                     key={gCard.id || `grn_${idx}`}
-                    title={`${gLoc.primary.name}${gSub}`}
                     content={
                       <CardTooltipContent
-                        typeLabel={t("popover.type.green")}
                         primaryDesc={gLoc.primary.desc || gCard.card.desc}
-                        actionSummary={gLoc.primary.actionSummary}
-                        secondaryTitle={gLoc.secondary?.name}
                         secondaryDesc={gLoc.secondary?.desc}
-                        suit={gCard.card.suit}
-                        rank={gCard.card.rank}
                       />
                     }
                     delayMs={250}

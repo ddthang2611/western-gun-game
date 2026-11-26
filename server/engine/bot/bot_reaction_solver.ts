@@ -221,7 +221,7 @@ export function solvePhase1Choice(
       let bestTargetId: string | null = null;
       let bestArea: "EQUIPMENT" | "GREEN" | "JUDGEMENT" | null = null;
       let bestCardId: string | null = null;
-      let bestScore = 104;
+      let bestScore = 84;
 
       for (const p of ctx.alivePlayers) {
         if (p.isGhost) continue;

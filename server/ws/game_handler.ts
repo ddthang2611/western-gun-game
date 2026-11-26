@@ -31,6 +31,7 @@ import {
   getStructuredLogsForPlayer,
 } from "./combat_log_formatter";
 import { buildTableState } from "./table_state_presenter";
+import { BotRunner } from "./bot_runner";
 
 export class GameSessionManager {
   private static instance: GameSessionManager;
@@ -43,6 +44,7 @@ export class GameSessionManager {
   private matchIds: Map<string, string> = new Map();
   private inactivityTimers: Map<string, NodeJS.Timeout> = new Map();
   private arenaTimers: Map<string, NodeJS.Timeout> = new Map();
+  private botRunners: Map<string, BotRunner> = new Map();
 
   public static getInstance(): GameSessionManager {
     if (!GameSessionManager.instance) {
@@ -66,6 +68,75 @@ export class GameSessionManager {
       clearTimeout(existing);
       this.inactivityTimers.delete(roomId);
     }
+  }
+
+  // Stop and remove room bot runner
+  private clearBotRunner(roomId: string): void {
+    const existing = this.botRunners.get(roomId);
+    if (existing) {
+      existing.stop();
+      this.botRunners.delete(roomId);
+    }
+  }
+
+  // Synchronize bot scheduler with current state
+  private syncBotRunner(
+    roomId: string,
+    engine: GameEngine,
+    lobbyManager?: LobbyManager,
+    forceReschedule = true
+  ): void {
+    const runner = this.botRunners.get(roomId);
+    if (!runner || !runner.hasBots() || !lobbyManager) return;
+
+    const simState = engine.getState();
+    if (
+      simState.gameOver ||
+      simState.matchPhase === "FINISHED" ||
+      this.isMatchPaused(engine, lobbyManager)
+    ) {
+      runner.stop();
+      return;
+    }
+
+    if (!forceReschedule && runner.isScheduled()) {
+      return;
+    }
+
+    runner.scheduleNextStep(
+      engine,
+      () => this.isMatchPaused(engine, lobbyManager),
+      (botId, cmd) => this.handleBotCommand(roomId, botId, cmd, lobbyManager)
+    );
+  }
+
+  // Execute bot command through authoritative session pipeline
+  private handleBotCommand(
+    roomId: string,
+    botId: string,
+    command: PlayerCommand,
+    lobbyManager: LobbyManager
+  ): boolean {
+    const engine = this.engines.get(roomId);
+    if (!engine) return false;
+    if (this.isMatchPaused(engine, lobbyManager)) return false;
+
+    const normalizedCommand: PlayerCommand = {
+      ...command,
+      playerId: botId,
+      commandId: command.commandId || crypto.randomUUID(),
+    };
+    const result = engine.handleCommand(normalizedCommand);
+    if (!result.success) return false;
+
+    this.clearInactivityTimer(roomId);
+    const events = result.events || [];
+    this.persistEventsAndState(roomId, events, engine);
+    if (events.length > 0) {
+      this.emitDomainEvents(roomId, events, engine, lobbyManager);
+    }
+    this.broadcastGameSnapshot(roomId, engine, lobbyManager);
+    return true;
   }
 
   // Clear room Card Arena settle timer
@@ -383,6 +454,7 @@ export class GameSessionManager {
   public endSession(roomId: string): void {
     this.clearInactivityTimer(roomId);
     this.clearArenaTimer(roomId);
+    this.clearBotRunner(roomId);
     this.engines.delete(roomId);
     this.combatLogs.delete(roomId);
     this.matchEventSeqs.delete(roomId);
@@ -467,10 +539,19 @@ export class GameSessionManager {
   }
 
   // Restore saved match from runtime DB
-  public restoreSessionFromDb(roomId: string): GameEngine | null {
+  public restoreSessionFromDb(
+    roomId: string,
+    lobbyManager?: LobbyManager
+  ): GameEngine | null {
     if (!isDatabaseUnlocked()) return null;
     if (this.engines.has(roomId)) {
-      return this.engines.get(roomId) || null;
+      const existing = this.engines.get(roomId) || null;
+      if (existing && lobbyManager) {
+        this.syncArenaTimer(roomId, existing, lobbyManager);
+        this.refreshInactivityTimer(roomId, existing, lobbyManager);
+        this.syncBotRunner(roomId, existing, lobbyManager, false);
+      }
+      return existing;
     }
 
     const repo = SessionRepository.getInstance();
@@ -523,6 +604,20 @@ export class GameSessionManager {
       roomId,
       restoredLogs.slice(0, GameSessionManager.MAX_RESTORED_EVENTS)
     );
+
+    if (lobbyManager) {
+      this.clearBotRunner(roomId);
+      const botIds = lobbyManager
+        .getBotIds()
+        .filter((id) => engine.getState().players.has(id));
+      if (botIds.length > 0) {
+        this.botRunners.set(roomId, new BotRunner(botIds));
+      }
+      this.syncArenaTimer(roomId, engine, lobbyManager);
+      this.refreshInactivityTimer(roomId, engine, lobbyManager);
+      this.syncBotRunner(roomId, engine, lobbyManager);
+    }
+
     return engine;
   }
 
@@ -614,6 +709,7 @@ export class GameSessionManager {
 
       this.clearInactivityTimer(roomId);
       this.clearArenaTimer(roomId);
+      this.clearBotRunner(roomId);
       const nextMatchId = crypto.randomUUID();
       const initialEvents = matchResult.events || [];
       const repo = SessionRepository.getInstance();
@@ -632,6 +728,10 @@ export class GameSessionManager {
       })();
 
       this.engines.set(roomId, engine);
+      const botIds = players.filter((p) => p.isBot).map((p) => p.id);
+      if (botIds.length > 0) {
+        this.botRunners.set(roomId, new BotRunner(botIds));
+      }
       this.matchIds.set(roomId, nextMatchId);
       this.matchEventSeqs.set(roomId, seq);
       this.combatLogs.set(roomId, [
@@ -753,6 +853,8 @@ export class GameSessionManager {
     roomId: string,
     lobbyManager: LobbyManager
   ): void {
+    const botRunner = this.botRunners.get(roomId);
+    if (botRunner?.isBot(playerId)) return;
     if (!engine.getState().players.has(playerId)) return;
 
     const snapshot = engine.getFilteredSnapshot(playerId);
@@ -768,7 +870,8 @@ export class GameSessionManager {
       (pId) => lobbyManager.isPlayerOnline(pId),
       this.matchIds.get(roomId),
       lobbyManager.getHostId(),
-      structuredLogs
+      structuredLogs,
+      (pId) => botRunner?.isBot(pId) ?? false
     );
 
     lobbyManager.sendToPlayer(playerId, "TABLE_STATE", tableState);
@@ -784,6 +887,7 @@ export class GameSessionManager {
     this.emitPlayerSnapshot(engine, playerId, roomId, lobbyManager);
     this.syncArenaTimer(roomId, engine, lobbyManager);
     this.refreshInactivityTimer(roomId, engine, lobbyManager);
+    this.syncBotRunner(roomId, engine, lobbyManager, false);
   }
 
   // Broadcast snapshots strictly to participants
@@ -797,6 +901,7 @@ export class GameSessionManager {
     }
     this.syncArenaTimer(roomId, engine, lobbyManager);
     this.refreshInactivityTimer(roomId, engine, lobbyManager);
+    this.syncBotRunner(roomId, engine, lobbyManager);
   }
 
   // Broadcast domain events and logs
@@ -806,9 +911,16 @@ export class GameSessionManager {
     engine: GameEngine,
     lobbyManager: LobbyManager
   ): void {
+    const botRunner = this.botRunners.get(roomId);
+    if (botRunner && events.length > 0) {
+      botRunner.observeEvents(events, engine);
+    }
+
     const logs = this.combatLogs.get(roomId) || [];
     const players = engine.getState().players;
-    const participantIds = Array.from(players.keys());
+    const humanParticipantIds = Array.from(players.keys()).filter(
+      (id) => !botRunner?.isBot(id)
+    );
 
     for (const ev of events) {
       const logEntry = formatEventToLog(ev, players);
@@ -816,7 +928,7 @@ export class GameSessionManager {
         logs.unshift(logEntry);
       }
 
-      for (const pId of participantIds) {
+      for (const pId of humanParticipantIds) {
         const outgoing =
           ev.visibleTo && ev.visibleTo.length > 0
             ? engine.filterEventForPlayer(ev, pId)
@@ -825,7 +937,7 @@ export class GameSessionManager {
       }
 
       if (ev.type === "GAME_OVER") {
-        for (const pId of participantIds) {
+        for (const pId of humanParticipantIds) {
           lobbyManager.sendToPlayer(pId, "GAME_OVER", ev.payload);
         }
       }
@@ -837,7 +949,7 @@ export class GameSessionManager {
     this.combatLogs.set(roomId, logs);
 
     if (events.length > 0) {
-      for (const pId of participantIds) {
+      for (const pId of humanParticipantIds) {
         lobbyManager.sendToPlayer(pId, "COMBAT_LOG_UPDATE", {
           combatLog: getLogsForPlayer(logs, pId, 50),
           structuredCombatLog: getStructuredLogsForPlayer(logs, pId, 50),

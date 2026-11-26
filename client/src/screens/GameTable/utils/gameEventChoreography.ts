@@ -11,7 +11,12 @@ export interface GameEventMessage {
 export interface GameEventChoreographyContext {
   getMyPlayerId: () => string;
   getPlayers: () => Player[];
-  triggerVfx: (type: VfxBeam["type"], targetId?: string, aoeHeal?: boolean) => void;
+  triggerVfx: (
+    type: VfxBeam["type"],
+    targetId?: string,
+    aoeHeal?: boolean,
+    sourceId?: string
+  ) => void;
   enqueueFlight: (
     fromSelector: string,
     toSelector: string,
@@ -106,7 +111,6 @@ const handlePhaseChanged: EventHandler = (p, ctx) => {
   if (p.phase !== 1 || Number(p.drawnCount ?? 0) <= 0 || !playerId) return;
   const targetAnchor = playerHandAnchor(ctx.getMyPlayerId(), playerId);
   const count = Math.max(1, Math.min(5, Number(p.drawnCount || 1)));
-  ctx.triggerVfx("draw");
   for (let i = 0; i < count; i++) {
     ctx.scheduleTimeout(() => {
       ctx.enqueueFlight(DRAW_PILE_ANCHOR, targetAnchor, {
@@ -148,10 +152,12 @@ const createInPlayStolenHandler =
 const GAME_EVENT_HANDLERS: Record<string, EventHandler> = {
   // Non-card passive/event heals
   GREG_DIGGER_HEALED: (p, ctx) => {
-    ctx.triggerVfx("heal", asStr(p.playerId), false);
+    const pid = asStr(p.playerId);
+    ctx.triggerVfx("heal", pid, false, pid);
   },
   EVENT_HARD_LIQUOR_HEAL: (p, ctx) => {
-    ctx.triggerVfx("heal", asStr(p.playerId), false);
+    const pid = asStr(p.playerId);
+    ctx.triggerVfx("heal", pid, false, pid);
   },
   EVENT_THE_DOCTOR_HEAL: (_p, ctx) => {
     ctx.triggerVfx("heal", undefined, true);

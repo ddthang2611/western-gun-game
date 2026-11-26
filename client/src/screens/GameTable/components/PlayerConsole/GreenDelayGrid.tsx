@@ -16,7 +16,7 @@ export const GreenDelayGrid: React.FC<GreenDelayGridProps> = ({
   selectedGreenCardId,
   onTriggerGreenCard,
 }) => {
-  const { locale, t, tCard } = useI18n();
+  const { tCard } = useI18n();
   const visibleGreens = concealedCardIds?.length
     ? greenCards.filter(
         (g) => !concealedCardIds.includes(g.card.id) && !concealedCardIds.includes(g.id)
@@ -40,25 +40,15 @@ export const GreenDelayGrid: React.FC<GreenDelayGridProps> = ({
           }
 
           const cardLoc = tCard(gCard.card);
-          const sub =
-            locale === "vi" && cardLoc.primary.subtitleVi
-              ? ` (${cardLoc.primary.subtitleVi})`
-              : "";
           const isSelected = selectedGreenCardId === gCard.id;
 
           return (
             <DebouncedPopover
               key={gCard.id}
-              title={`${cardLoc.primary.name}${sub}`}
               content={
                 <CardTooltipContent
-                  typeLabel={t("popover.type.green")}
                   primaryDesc={cardLoc.primary.desc || gCard.card.desc}
-                  actionSummary={cardLoc.primary.actionSummary}
-                  secondaryTitle={cardLoc.secondary?.name}
                   secondaryDesc={cardLoc.secondary?.desc}
-                  suit={gCard.card.suit}
-                  rank={gCard.card.rank}
                 />
               }
               delayMs={250}

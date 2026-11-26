@@ -58,16 +58,8 @@ export const InFlightChain: React.FC<InFlightChainProps> = ({
         {safeCards.map((item, index) => {
           const outcome = item.outcome ?? item.meta?.outcome;
           const outcomeTone = outcome ? OUTCOME_TONE[outcome] : undefined;
-          const kindLabel = item.kind ? t(`arena.kinds.${item.kind}`, undefined, item.actionText) : item.actionText;
-          const actorCaption = item.targetPlayerName
-            ? `${item.sourcePlayerName} -> ${item.targetPlayerName}`
-            : item.sourcePlayerName;
           return (
-            <div
-              key={item.id || index}
-              className="inflight-chain__card-slot"
-              title={`${actorCaption}: ${kindLabel}`}
-            >
+            <div key={item.id || index} className="inflight-chain__card-slot">
               <div className="inflight-chain__card-frame">
                 <CardView card={item.card} isPlayable={false} />
                 {outcome && (
@@ -78,9 +70,6 @@ export const InFlightChain: React.FC<InFlightChainProps> = ({
                   </span>
                 )}
               </div>
-              <span className="inflight-chain__actor-tag" title={actorCaption}>
-                {item.sourcePlayerName}
-              </span>
             </div>
           );
         })}

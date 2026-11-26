@@ -4,9 +4,9 @@ exports.EXPANSION_CONFIG = void 0;
 exports.isExpansionActive = isExpansionActive;
 exports.filterActiveExpansions = filterActiveExpansions;
 exports.EXPANSION_CONFIG = [
-    { id: "dodge_city", label: "Dodge City (15 Heroes + Green Cards)", active: true },
-    { id: "high_noon", label: "High Noon (13 Round Events)", active: false },
-    { id: "fistful_of_cards", label: "A Fistful of Cards (15 Round Events)", active: false },
+    { id: "dodge_city", label: "Dodge City", active: true },
+    { id: "high_noon", label: "High Noon", active: false },
+    { id: "fistful_of_cards", label: "Fistful of Cards", active: false },
 ];
 // Check expansion active status
 function isExpansionActive(packId) {

@@ -33,7 +33,7 @@ export const TableSidebar: React.FC<TableSidebarProps> = ({
   topDiscard,
   onOpenCombatLog,
 }) => {
-  const { locale, t, tCard, tRole, tLog } = useI18n();
+  const { t, tCard, tRole, tLog } = useI18n();
   const displayLogs =
     structuredCombatLog && structuredCombatLog.length > 0
       ? structuredCombatLog.slice(0, 6).map((entry) => tLog(entry))
@@ -71,20 +71,10 @@ export const TableSidebar: React.FC<TableSidebarProps> = ({
           <div className="game-table__deck-pile">
             {topDiscard && topCardLoc ? (
               <DebouncedPopover
-                title={`${topCardLoc.primary.name}${
-                  locale === "vi" && topCardLoc.primary.subtitleVi
-                    ? ` (${topCardLoc.primary.subtitleVi})`
-                    : ""
-                } (${topDiscard.rank}${SUIT_SYMBOLS[topDiscard.suit] || ""})`}
                 content={
                   <CardTooltipContent
-                    typeLabel={t(`popover.type.${topDiscard.border || "brown"}`)}
                     primaryDesc={topCardLoc.primary.desc || topDiscard.desc}
-                    actionSummary={topCardLoc.primary.actionSummary}
-                    secondaryTitle={topCardLoc.secondary?.name}
                     secondaryDesc={topCardLoc.secondary?.desc}
-                    suit={topDiscard.suit}
-                    rank={topDiscard.rank}
                   />
                 }
                 delayMs={200}

@@ -335,7 +335,9 @@ export const GameTableScreen: React.FC<GameTableScreenProps> = ({
 
       <VfxLayer beams={animations.vfxBeams} />
       <TargetingArrow
+        sourcePlayerId={state.myPlayerId}
         targetPlayerId={selection.selectedTargetId}
+        myPlayerId={state.myPlayerId}
         hasSourceSelection={Boolean(vm.selectedCard || vm.selectedGreenCard)}
         isSkillOrigin={selection.skillMode === "DOC_HOLYDAY_BANG"}
       />

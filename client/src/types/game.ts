@@ -62,6 +62,7 @@ export interface Player {
   name: string;
   seatIndex: number;
   isHost: boolean;
+  isBot?: boolean;
   isReady: boolean;
   isOnline: boolean;
   isDead?: boolean;
@@ -263,6 +264,7 @@ export interface LobbyPlayer {
   name: string;
   seatIndex: number;
   isHost: boolean;
+  isBot?: boolean;
   isReady: boolean;
   isOnline: boolean;
 }
@@ -271,6 +273,8 @@ export interface GameSettings {
   dualCharacterEnabled: boolean;
   dualCharacterHpRule: "strict" | "balanced" | "juggernaut";
   expansions: string[];
+  targetPlayers: number;
+  autoFillBots: boolean;
 }
 
 export interface ExpansionOptionInfo {

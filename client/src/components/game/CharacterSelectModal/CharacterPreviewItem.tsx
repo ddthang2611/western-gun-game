@@ -10,6 +10,6 @@ export const CharacterPreviewItem: React.FC<CharacterPreviewItemProps> = ({
   character,
 }) => (
   <div className="char-select__preview-card">
-    <CharacterPortrait character={character} size="seat" />
+    <CharacterPortrait character={character} size="modal" />
   </div>
 );

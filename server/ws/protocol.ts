@@ -6,6 +6,9 @@ export type ClientMessageType =
   | "LEAVE_ROOM"
   | "SET_READY"
   | "UPDATE_SETTINGS"
+  | "ADD_BOT"
+  | "REMOVE_BOT"
+  | "FILL_BOTS"
   | "KICK_PLAYER"
   | "START_GAME"
   | "RESET_LOBBY"
@@ -51,6 +54,8 @@ export interface GameSettings {
   dualCharacterEnabled: boolean;
   dualCharacterHpRule: "strict" | "balanced" | "juggernaut";
   expansions: string[];
+  targetPlayers: number;
+  autoFillBots: boolean;
 }
 
 export interface TargetSelectionPayload {
@@ -87,6 +92,7 @@ export interface LobbyPlayer {
   isHost: boolean;
   isReady: boolean;
   isOnline: boolean;
+  isBot?: boolean;
 }
 
 export interface ExpansionOptionInfo {

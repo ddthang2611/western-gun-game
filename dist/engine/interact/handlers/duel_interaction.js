@@ -8,6 +8,7 @@ class DuelInteraction {
     static handleStartDuel(state, player, targetPlayer, card, cardIndex, deckManager) {
         player.handCards.splice(cardIndex, 1);
         atomic_effects_1.AtomicEffects.discardCard(state, card, deckManager);
+        const duelImmune = skill_hooks_1.SkillHooks.isImmuneToCard(targetPlayer, card, player, state);
         arena_chain_manager_1.ArenaChainManager.appendBatch(state, [
             {
                 kind: "PLAYED_CARD",
@@ -19,30 +20,21 @@ class DuelInteraction {
                 originZone: "HAND",
                 destinationZone: "DISCARD",
                 actionLabel: `${card.name} -> ${targetPlayer.name}`,
-                vfxType: "bullet",
+                vfxType: duelImmune ? undefined : "bullet",
                 vfxTargetId: targetPlayer.id,
             },
         ]);
         // Target responds first in Duel
-        const reaction = {
-            id: `reaction_duel_${targetPlayer.id}_${Date.now()}`,
+        const reactionRes = atomic_effects_1.AtomicEffects.createReaction(state, targetPlayer, player, card, {
             type: "DUEL_RESPONSE",
-            sourcePlayerId: player.id,
-            duelInitiatorId: player.id,
-            targetPlayerId: targetPlayer.id,
-            sourceCard: card,
             requiredCard: "BANG",
             requiredCount: 1,
-            currentCount: 0,
-            canUseBarrel: false,
-            canUseJourdonnais: false,
-            barrelChecked: false,
-            jourdonnaisChecked: false,
-            createdAt: Date.now(),
-        };
-        state.pendingReactions.push(reaction);
-        const events = [
-            {
+            allowBarrel: false,
+            allowJourdonnais: false,
+        }, { duelInitiatorId: player.id });
+        const events = [...reactionRes.events];
+        if (!reactionRes.isImmune && reactionRes.reaction) {
+            events.push({
                 type: "DUEL_STARTED",
                 payload: {
                     initiatorId: player.id,
@@ -53,8 +45,8 @@ class DuelInteraction {
                     nextResponderId: targetPlayer.id,
                 },
                 timestamp: Date.now(),
-            },
-        ];
+            });
+        }
         skill_hooks_1.SkillHooks.checkSuzyLafayette(state, player, events);
         return { success: true, events };
     }

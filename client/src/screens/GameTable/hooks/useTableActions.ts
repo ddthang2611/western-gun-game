@@ -45,7 +45,12 @@ export interface UseTableActionsParams {
   handleCancelSelection: () => void;
   clearSkillState: (clearTarget?: boolean, clearHandCard?: boolean) => void;
   setCardPickerConfig: (cfg: CardPickerConfig) => void;
-  triggerVfx: (type: VfxBeam["type"], targetId?: string, aoeHeal?: boolean) => void;
+  triggerVfx: (
+    type: VfxBeam["type"],
+    targetId?: string,
+    aoeHeal?: boolean,
+    sourceId?: string
+  ) => void;
   showError: (message: string) => void;
 }
 
@@ -346,7 +351,7 @@ export function useTableActions({
             : "steal",
         cardName: vm.selectedCard.name,
       });
-      triggerVfx("bullet", target.id);
+      triggerVfx("bullet", target.id, false, state.myPlayerId);
       return;
     }
 
@@ -366,6 +371,7 @@ export function useTableActions({
     setCardPickerConfig,
     showError,
     state.currentPhase,
+    state.myPlayerId,
     state.players,
     t,
     triggerVfx,

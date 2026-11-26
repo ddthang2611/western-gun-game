@@ -8,6 +8,21 @@ const cookie_utils_1 = require("../api/cookie_utils");
 const game_handler_1 = require("./game_handler");
 const expansion_config_1 = require("../engine/events/expansion_config");
 const ws_utils_1 = require("./ws_utils");
+const BOT_ROSTER = [
+    { id: "bot_1", name: "Alexa Bot" },
+    { id: "bot_2", name: "Wyatt Bot" },
+    { id: "bot_3", name: "Calamity Bot" },
+    { id: "bot_4", name: "Django Bot" },
+    { id: "bot_5", name: "Annie Bot" },
+    { id: "bot_6", name: "Jesse Bot" },
+    { id: "bot_7", name: "Butch Bot" },
+];
+function clampTargetPlayers(raw, min = 3, max = 8) {
+    const num = Number(raw);
+    if (!Number.isFinite(num))
+        return 5;
+    return Math.max(min, Math.min(max, Math.trunc(num)));
+}
 class LobbyManager {
     static instance;
     connections = new Map();
@@ -23,6 +38,8 @@ class LobbyManager {
             dualCharacterEnabled: false,
             dualCharacterHpRule: "strict",
             expansions: ["base", "dodge_city"],
+            targetPlayers: 5,
+            autoFillBots: true,
         };
     }
     // Clear match and room state cleanly
@@ -35,10 +52,66 @@ class LobbyManager {
         this.state.status = "waiting";
         this.state.players = [];
         this.state.settings = this.getDefaultSettings();
+        this.state.maxPlayers = this.state.settings.targetPlayers;
         this.persistLobbyState();
     }
     getHostId() {
         return this.state.hostId;
+    }
+    getBotIds() {
+        return this.state.players.filter((p) => p.isBot).map((p) => p.id);
+    }
+    getTargetPlayers() {
+        return clampTargetPlayers(this.state.settings.targetPlayers ?? this.state.maxPlayers, this.state.minPlayers, 8);
+    }
+    reindexSeats() {
+        this.state.players.forEach((p, idx) => {
+            p.seatIndex = idx;
+        });
+    }
+    addNextAvailableBot() {
+        const target = this.getTargetPlayers();
+        if (this.state.players.length >= target)
+            return false;
+        const occupiedIds = new Set(this.state.players.map((p) => p.id));
+        const candidate = BOT_ROSTER.find((b) => !occupiedIds.has(b.id));
+        if (!candidate)
+            return false;
+        this.state.players.push({
+            id: candidate.id,
+            name: candidate.name,
+            seatIndex: this.state.players.length,
+            isHost: false,
+            isBot: true,
+            isReady: true,
+            isOnline: true,
+        });
+        return true;
+    }
+    fillBotsToTarget() {
+        let added = 0;
+        while (this.addNextAvailableBot()) {
+            added += 1;
+        }
+        if (added > 0) {
+            this.reindexSeats();
+        }
+        return added;
+    }
+    trimBotsToTarget(target) {
+        while (this.state.players.length > target) {
+            let botIdx = -1;
+            for (let i = this.state.players.length - 1; i >= 0; i--) {
+                if (this.state.players[i].isBot) {
+                    botIdx = i;
+                    break;
+                }
+            }
+            if (botIdx === -1)
+                break;
+            this.state.players.splice(botIdx, 1);
+        }
+        this.reindexSeats();
     }
     state = {
         roomExists: false,
@@ -50,7 +123,7 @@ class LobbyManager {
         settings: this.getDefaultSettings(),
         expansionCatalog: expansion_config_1.EXPANSION_CONFIG,
         minPlayers: Number(process.env.MIN_PLAYERS || 3),
-        maxPlayers: 8,
+        maxPlayers: 5,
     };
     clearDisconnectTimer(playerId) {
         const timer = this.disconnectTimers.get(playerId);
@@ -357,6 +430,11 @@ class LobbyManager {
                     throw new Error("A room already exists. Please join the active room.");
                 }
                 const rawName = typeof msg.payload?.roomName === "string" ? msg.payload.roomName.trim() : "";
+                const targetPlayers = clampTargetPlayers(msg.payload?.targetPlayers, this.state.minPlayers, 8);
+                const autoFillBots = typeof msg.payload?.autoFillBots === "boolean" ? msg.payload.autoFillBots : true;
+                const expansions = Array.isArray(msg.payload?.expansions)
+                    ? (0, expansion_config_1.filterActiveExpansions)(msg.payload.expansions.map((e) => String(e)))
+                    : ["base", "dodge_city"];
                 const playerName = this.playerNames.get(playerId) ||
                     session_repository_1.SessionRepository.getInstance().getPlayerByToken(currentToken)?.player_name ||
                     "Host";
@@ -367,7 +445,13 @@ class LobbyManager {
                 this.state.roomName = rawName ? rawName.slice(0, 32) : "Saloon Table #1";
                 this.state.hostId = playerId;
                 this.state.status = "waiting";
-                this.state.settings = this.getDefaultSettings();
+                this.state.maxPlayers = targetPlayers;
+                this.state.settings = {
+                    ...this.getDefaultSettings(),
+                    expansions,
+                    targetPlayers,
+                    autoFillBots,
+                };
                 this.state.players = [
                     {
                         id: playerId,
@@ -420,14 +504,14 @@ class LobbyManager {
                 const idx = this.state.players.findIndex((p) => p.id === playerId);
                 if (idx === -1)
                     return currentToken;
-                if (playerId === this.state.hostId && this.state.players.length > 1) {
+                const humanPlayers = this.state.players.filter((p) => !p.isBot);
+                if (playerId === this.state.hostId && humanPlayers.length > 1) {
                     throw new Error("Host cannot leave while other players are waiting.");
                 }
                 this.state.players.splice(idx, 1);
-                this.state.players.forEach((p, seatIdx) => {
-                    p.seatIndex = seatIdx;
-                });
-                if (this.state.players.length === 0) {
+                this.reindexSeats();
+                const remainingHumans = this.state.players.filter((p) => !p.isBot).length;
+                if (remainingHumans === 0) {
                     this.resetRoomToEmptyState();
                 }
                 else {
@@ -454,7 +538,10 @@ class LobbyManager {
                 const playerId = this.resolvePlayerId(ws, currentToken);
                 if (!playerId)
                     return currentToken;
-                if (playerId === this.state.hostId && msg.payload && typeof msg.payload === "object") {
+                if (playerId === this.state.hostId &&
+                    this.state.status === "waiting" &&
+                    msg.payload &&
+                    typeof msg.payload === "object") {
                     const raw = msg.payload;
                     const sanitized = {};
                     if (typeof raw.dualCharacterEnabled === "boolean") {
@@ -466,10 +553,90 @@ class LobbyManager {
                     if (Array.isArray(raw.expansions)) {
                         sanitized.expansions = (0, expansion_config_1.filterActiveExpansions)(raw.expansions.map((e) => String(e)));
                     }
+                    if (raw.targetPlayers !== undefined) {
+                        const requested = clampTargetPlayers(raw.targetPlayers, this.state.minPlayers, 8);
+                        const humanCount = this.state.players.filter((p) => !p.isBot).length;
+                        if (requested < humanCount) {
+                            throw new Error(`Cannot shrink table below ${humanCount} seated human players.`);
+                        }
+                        sanitized.targetPlayers = requested;
+                        this.state.maxPlayers = requested;
+                        this.trimBotsToTarget(requested);
+                    }
+                    if (typeof raw.autoFillBots === "boolean") {
+                        sanitized.autoFillBots = raw.autoFillBots;
+                    }
                     this.state.settings = { ...this.state.settings, ...sanitized };
                     this.persistLobbyState();
                     this.broadcastLobbyState();
                 }
+                return currentToken;
+            }
+            case "ADD_BOT": {
+                const requesterId = this.resolvePlayerId(ws, currentToken);
+                if (!requesterId)
+                    throw new Error("Session not authenticated.");
+                if (!this.state.roomExists)
+                    throw new Error("No active room exists.");
+                if (requesterId !== this.state.hostId)
+                    throw new Error("Only the Host can add bots.");
+                if (this.state.status !== "waiting") {
+                    throw new Error("Cannot add bots while a match is in progress.");
+                }
+                if (!this.addNextAvailableBot()) {
+                    throw new Error("Room is already at target player capacity.");
+                }
+                this.persistLobbyState();
+                this.broadcastLobbyState();
+                return currentToken;
+            }
+            case "REMOVE_BOT": {
+                const requesterId = this.resolvePlayerId(ws, currentToken);
+                if (!requesterId)
+                    throw new Error("Session not authenticated.");
+                if (!this.state.roomExists)
+                    throw new Error("No active room exists.");
+                if (requesterId !== this.state.hostId)
+                    throw new Error("Only the Host can remove bots.");
+                if (this.state.status !== "waiting") {
+                    throw new Error("Cannot remove bots while a match is in progress.");
+                }
+                const targetId = typeof msg.payload?.playerId === "string" ? msg.payload.playerId : "";
+                let removeIdx = -1;
+                if (targetId) {
+                    removeIdx = this.state.players.findIndex((p) => p.id === targetId && Boolean(p.isBot));
+                }
+                else {
+                    for (let i = this.state.players.length - 1; i >= 0; i--) {
+                        if (this.state.players[i].isBot) {
+                            removeIdx = i;
+                            break;
+                        }
+                    }
+                }
+                if (removeIdx === -1) {
+                    throw new Error("Bot player not found in room.");
+                }
+                this.state.players.splice(removeIdx, 1);
+                this.reindexSeats();
+                this.persistLobbyState();
+                this.broadcastLobbyState();
+                return currentToken;
+            }
+            case "FILL_BOTS": {
+                const requesterId = this.resolvePlayerId(ws, currentToken);
+                if (!requesterId)
+                    throw new Error("Session not authenticated.");
+                if (!this.state.roomExists)
+                    throw new Error("No active room exists.");
+                if (requesterId !== this.state.hostId)
+                    throw new Error("Only the Host can fill bots.");
+                if (this.state.status !== "waiting") {
+                    throw new Error("Cannot add bots while a match is in progress.");
+                }
+                this.fillBotsToTarget();
+                this.persistLobbyState();
+                this.broadcastLobbyState();
                 return currentToken;
             }
             case "KICK_PLAYER": {
@@ -494,18 +661,19 @@ class LobbyManager {
                 if (targetIdx === -1) {
                     throw new Error("Target player not found in room.");
                 }
+                const targetPlayer = this.state.players[targetIdx];
                 this.state.players.splice(targetIdx, 1);
-                this.state.players.forEach((p, idx) => {
-                    p.seatIndex = idx;
-                });
-                this.kickedPlayerIds.add(targetPlayerId);
-                try {
-                    session_repository_1.SessionRepository.getInstance().setPlayerOffline(targetPlayerId);
+                this.reindexSeats();
+                if (!targetPlayer.isBot) {
+                    this.kickedPlayerIds.add(targetPlayerId);
+                    try {
+                        session_repository_1.SessionRepository.getInstance().setPlayerOffline(targetPlayerId);
+                    }
+                    catch {
+                        // Ignore DB error on kick
+                    }
+                    this.removePlayerSockets(targetPlayerId, 4003, "You were removed from the room by the Host.", true);
                 }
-                catch {
-                    // Ignore DB error on kick
-                }
-                this.removePlayerSockets(targetPlayerId, 4003, "You were removed from the room by the Host.", true);
                 this.persistLobbyState();
                 this.broadcastLobbyState();
                 return currentToken;
@@ -524,13 +692,20 @@ class LobbyManager {
                 if (playerId !== this.state.hostId) {
                     throw new Error("Only the Host can start the game.");
                 }
-                const onlinePlayers = this.state.players.filter((p) => p.isOnline);
-                if (onlinePlayers.length < this.state.minPlayers) {
-                    throw new Error(`Minimum ${this.state.minPlayers} players required to start.`);
+                const onlineHumans = this.state.players.filter((p) => !p.isBot && p.isOnline);
+                if (onlineHumans.length === 0) {
+                    throw new Error("At least one online human player is required.");
                 }
-                const notReady = onlinePlayers.filter((p) => !p.isHost && !p.isReady);
+                const notReady = onlineHumans.filter((p) => !p.isHost && !p.isReady);
                 if (notReady.length > 0) {
                     throw new Error("All players must be Ready.");
+                }
+                if (this.state.settings.autoFillBots) {
+                    this.fillBotsToTarget();
+                }
+                const onlinePlayers = this.state.players.filter((p) => Boolean(p.isBot) || p.isOnline);
+                if (onlinePlayers.length < this.state.minPlayers) {
+                    throw new Error(`Minimum ${this.state.minPlayers} players required to start.`);
                 }
                 // Initialize and start GameEngine
                 const startResult = game_handler_1.GameSessionManager.getInstance().startGame(this.state.roomId, onlinePlayers, this.state.settings, this);
@@ -567,7 +742,7 @@ class LobbyManager {
                 this.kickedPlayerIds.clear();
                 this.state.status = "waiting";
                 this.state.players.forEach((p) => {
-                    p.isReady = p.isHost;
+                    p.isReady = Boolean(p.isBot || p.isHost);
                 });
                 this.persistLobbyState();
                 this.broadcastLobbyState();
@@ -589,7 +764,7 @@ class LobbyManager {
                 this.kickedPlayerIds.clear();
                 this.state.status = "waiting";
                 this.state.players.forEach((p) => {
-                    p.isReady = p.isHost;
+                    p.isReady = Boolean(p.isBot || p.isHost);
                 });
                 this.persistLobbyState();
                 this.broadcastLobbyState();
@@ -718,8 +893,20 @@ class LobbyManager {
             }
         }
         else {
-            if (this.state.players.length >= this.state.maxPlayers) {
-                throw new Error("Room is full (max 8 players).");
+            const limit = this.getTargetPlayers();
+            this.state.maxPlayers = limit;
+            if (this.state.players.length >= limit) {
+                let replaceBotIdx = -1;
+                for (let i = this.state.players.length - 1; i >= 0; i--) {
+                    if (this.state.players[i].isBot) {
+                        replaceBotIdx = i;
+                        break;
+                    }
+                }
+                if (replaceBotIdx === -1) {
+                    throw new Error(`Room is full (max ${limit} players).`);
+                }
+                this.state.players.splice(replaceBotIdx, 1);
             }
             const isHost = playerId === this.state.hostId;
             player = {
@@ -731,6 +918,7 @@ class LobbyManager {
                 isOnline: true,
             };
             this.state.players.push(player);
+            this.reindexSeats();
         }
     }
     handleDisconnect(ws) {
@@ -778,7 +966,11 @@ class LobbyManager {
     }
     isPlayerOnline(playerId) {
         const player = this.state.players.find((p) => p.id === playerId);
-        return player ? player.isOnline : false;
+        if (!player)
+            return false;
+        if (player.isBot)
+            return true;
+        return player.isOnline;
     }
     persistLobbyState() {
         const repo = session_repository_1.SessionRepository.getInstance();
@@ -795,6 +987,7 @@ class LobbyManager {
                     name: p.name,
                     seatIndex: p.seatIndex,
                     isHost: p.isHost,
+                    isBot: Boolean(p.isBot),
                 })),
             },
         });
@@ -813,8 +1006,11 @@ class LobbyManager {
                 repo.deleteRoomState(this.state.roomId);
                 return;
             }
+            const targetPlayers = clampTargetPlayers(parsed.targetPlayers, this.state.minPlayers, 8);
+            const autoFillBots = typeof parsed.autoFillBots === "boolean" ? parsed.autoFillBots : true;
             this.state.roomExists = true;
             this.state.hostId = row.host_id;
+            this.state.maxPlayers = targetPlayers;
             this.state.roomName =
                 typeof meta?.roomName === "string" && meta.roomName.trim()
                     ? meta.roomName.trim().slice(0, 32)
@@ -827,10 +1023,13 @@ class LobbyManager {
                 expansions: Array.isArray(parsed.expansions)
                     ? (0, expansion_config_1.filterActiveExpansions)(parsed.expansions.map((e) => String(e)))
                     : ["base", "dodge_city"],
+                targetPlayers,
+                autoFillBots,
             };
             this.state.players = savedPlayers.map((p, idx) => {
                 const playerId = String(p.id);
-                const isHost = playerId === row.host_id || Boolean(p.isHost);
+                const isBot = Boolean(p.isBot);
+                const isHost = !isBot && (playerId === row.host_id || Boolean(p.isHost));
                 const name = typeof p.name === "string" ? p.name : `Player_${idx + 1}`;
                 this.playerNames.set(playerId, name);
                 return {
@@ -838,12 +1037,13 @@ class LobbyManager {
                     name,
                     seatIndex: typeof p.seatIndex === "number" ? p.seatIndex : idx,
                     isHost,
-                    isReady: isHost,
-                    isOnline: this.hasOpenSocket(playerId),
+                    ...(isBot ? { isBot: true } : {}),
+                    isReady: isBot ? true : isHost,
+                    isOnline: isBot ? true : this.hasOpenSocket(playerId),
                 };
             });
             if (row.status === "in_game") {
-                const restoredEngine = game_handler_1.GameSessionManager.getInstance().restoreSessionFromDb(this.state.roomId);
+                const restoredEngine = game_handler_1.GameSessionManager.getInstance().restoreSessionFromDb(this.state.roomId, this);
                 if (restoredEngine) {
                     this.state.status = "in_game";
                 }

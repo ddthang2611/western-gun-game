@@ -107,10 +107,6 @@ export const TableActionBar: React.FC<TableActionBarProps> = ({
             <span className="game-table__hint game-table__hint--warning">
               {t("table.matchPausedLock")}
             </span>
-          ) : isArenaLocked ? (
-            <span className="game-table__hint game-table__hint--skill">
-              {t("table.resolvingArena")}
-            </span>
           ) : activeSkillHint ? (
             <span className="game-table__hint game-table__hint--skill">
               {activeSkillHint}

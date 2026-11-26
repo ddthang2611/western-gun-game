@@ -686,7 +686,7 @@ function collectActiveSkillCandidates(
       (a, b) => evaluateKeepValue(a, ctx) - evaluateKeepValue(b, ctx)
     );
     const pairCost = evaluateKeepValue(sorted[0], ctx) + evaluateKeepValue(sorted[1], ctx);
-    const healWorth = me.hp <= 1 ? 150 : me.hp <= 2 ? 115 : hand.length > me.hp + 1 ? 95 : 70;
+    const healWorth = me.hp <= 1 ? 162 : me.hp <= 2 ? 115 : hand.length > me.hp + 1 ? 95 : 70;
     if (healWorth - pairCost > 8) {
       pushCand(
         out,
@@ -747,24 +747,23 @@ function collectActiveSkillCandidates(
   }
 }
 
-// Pick Doc Holyday discard pair
+// Pick Doc Holyday discard pair (prefer non-Diamond vs Apache Kid when available)
 function pickDocHolydayPair(
   sortedHand: EngineCard[],
   target: SanitizedPlayerState,
   ctx: BotDecisionContext
 ): [EngineCard, EngineCard] | null {
   if (sortedHand.length < 2) return null;
-  const needsNonDiamond = hasSkill(target, "Apache Kid", ctx.snapshot);
-  if (!needsNonDiamond) {
-    return [sortedHand[0], sortedHand[1]];
+  if (hasSkill(target, "Apache Kid", ctx.snapshot)) {
+    const firstNonDiamond = sortedHand.find(
+      (c) => getEffectiveSuit(c, ctx.snapshot) !== "diamonds"
+    );
+    if (firstNonDiamond) {
+      const partner = sortedHand.find((c) => c.id !== firstNonDiamond.id);
+      if (partner) return [firstNonDiamond, partner];
+    }
   }
-  const firstNonDiamond = sortedHand.find(
-    (c) => getEffectiveSuit(c, ctx.snapshot) !== "diamonds"
-  );
-  if (!firstNonDiamond) return null;
-  const partner = sortedHand.find((c) => c.id !== firstNonDiamond.id);
-  if (!partner) return null;
-  return [firstNonDiamond, partner];
+  return [sortedHand[0], sortedHand[1]];
 }
 
 // Compute weapon and scope unlock bonus

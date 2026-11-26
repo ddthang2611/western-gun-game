@@ -28,7 +28,7 @@ function mapClientEquipments(equipments) {
     };
 }
 // Convert sanitized snapshot to client TableState
-function buildTableState(snapshot, playerId, engine, combatLog, matchPaused, isPlayerOnline, matchId, hostId, structuredCombatLog = []) {
+function buildTableState(snapshot, playerId, engine, combatLog, matchPaused, isPlayerOnline, matchId, hostId, structuredCombatLog = [], isPlayerBot) {
     const simState = engine.getState();
     const myPlayer = snapshot.players.find((p) => p.id === playerId);
     const mySimPlayer = simState.players.get(playerId);
@@ -41,11 +41,13 @@ function buildTableState(snapshot, playerId, engine, combatLog, matchPaused, isP
         const dist = distance_calculator_1.DistanceCalculator.calculateDistance(simState, playerId, p.id);
         const isInRange = dist <= weaponRange;
         const online = isPlayerOnline ? isPlayerOnline(p.id) : !p.isDead;
+        const isBot = isPlayerBot ? isPlayerBot(p.id) : false;
         return {
             id: p.id,
             name: p.name,
             seatIndex: p.seatIndex,
             isHost: Boolean(hostId && hostId === p.id),
+            isBot,
             isReady: true,
             isOnline: online && (!p.isDead || Boolean(p.isGhost)),
             isDead: p.isDead,

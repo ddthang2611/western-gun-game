@@ -3,6 +3,7 @@ import type { ExpansionOptionInfo, LobbyState } from "../../types/game";
 import { LanguageSwitcher, useI18n } from "../../i18n";
 import { useGameSocket } from "../../hooks/useGameSocket";
 import { Button, Modal } from "../../components/ui";
+import { CreateRoomCard, type CreateRoomPayload } from "./components/CreateRoomCard";
 import { LobbyPlayerList } from "./components/LobbyPlayerList";
 import { LobbySettingsPanel } from "./components/LobbySettingsPanel";
 import "./LobbyScreen.scss";
@@ -31,7 +32,6 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
   const { t, tError } = useI18n();
   const { isConnected, sendMessage, subscribe, disconnectSocket } = useGameSocket();
 
-  const [roomNameInput, setRoomNameInput] = useState("Saloon Table #1");
   const [myPlayerId, setMyPlayerId] = useState(currentUser?.playerId || "");
   const [errorMessage, setErrorMessage] = useState("");
   const [isDbLocked, setIsDbLocked] = useState(false);
@@ -253,6 +253,7 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
 
   const updateSetting = (key: string, value: unknown) => {
     if (!lobbyState || lobbyState.hostId !== myPlayerId) return;
+    setErrorMessage("");
     sendMessage("UPDATE_SETTINGS", { [key]: value });
   };
 
@@ -273,7 +274,26 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
 
   const handleKickPlayer = (targetPlayerId: string) => {
     if (!lobbyState || lobbyState.hostId !== myPlayerId) return;
+    setErrorMessage("");
     sendMessage("KICK_PLAYER", { playerId: targetPlayerId });
+  };
+
+  const handleAddBot = () => {
+    if (!lobbyState || lobbyState.hostId !== myPlayerId) return;
+    setErrorMessage("");
+    sendMessage("ADD_BOT", {});
+  };
+
+  const handleRemoveBot = (botId: string) => {
+    if (!lobbyState || lobbyState.hostId !== myPlayerId) return;
+    setErrorMessage("");
+    sendMessage("REMOVE_BOT", { playerId: botId });
+  };
+
+  const handleFillBots = () => {
+    if (!lobbyState || lobbyState.hostId !== myPlayerId) return;
+    setErrorMessage("");
+    sendMessage("FILL_BOTS", {});
   };
 
   const handleCopyUrl = async (url: string) => {
@@ -286,10 +306,14 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
     }
   };
 
-  const handleCreateRoom = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreateRoom = (payload: CreateRoomPayload) => {
     setErrorMessage("");
-    sendMessage("CREATE_ROOM", { roomName: roomNameInput.trim() || "Saloon Table #1" });
+    sendMessage("CREATE_ROOM", {
+      roomName: payload.roomName,
+      targetPlayers: payload.targetPlayers,
+      expansions: payload.expansions,
+      autoFillBots: payload.autoFillBots,
+    });
   };
 
   const handleJoinRoom = () => {
@@ -321,13 +345,29 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
 
   const me = lobbyState?.players.find((p) => p.id === myPlayerId);
   const isHost = lobbyState?.hostId === myPlayerId;
-  const onlinePlayers = lobbyState?.players.filter((p) => p.isOnline) || [];
-  const activeCount = onlinePlayers.length;
+  const targetPlayers = lobbyState?.settings?.targetPlayers ?? lobbyState?.maxPlayers ?? 5;
+  const autoFillBots = lobbyState?.settings?.autoFillBots ?? true;
+  const seatedPlayers = lobbyState?.players || [];
+  const botCount = seatedPlayers.filter((p) => p.isBot).length;
+  const humanPlayersList = seatedPlayers.filter((p) => !p.isBot);
+  const humanCount = humanPlayersList.length;
+  const onlineHumans = humanPlayersList.filter((p) => p.isOnline);
+  const onlineBots = seatedPlayers.filter((p) => p.isBot);
+  const activeCount = onlineHumans.length + onlineBots.length;
   const minPlayers = lobbyState?.minPlayers ?? 3;
-  const allReady = onlinePlayers.length > 0 && onlinePlayers.every((p) => p.isHost || p.isReady);
-  const unreadyNames = onlinePlayers
+  const allReady = onlineHumans.length > 0 && onlineHumans.every((p) => p.isHost || p.isReady);
+  const unreadyNames = onlineHumans
     .filter((p) => !p.isHost && !p.isReady)
     .map((p) => p.name);
+  const projectedAutoBots = autoFillBots ? Math.max(0, targetPlayers - seatedPlayers.length) : 0;
+  const effectiveCount = activeCount + projectedAutoBots;
+  const showReplaceBotHint = Boolean(
+    lobbyState?.roomExists &&
+      lobbyState.status === "waiting" &&
+      humanCount < targetPlayers &&
+      seatedPlayers.length >= targetPlayers &&
+      botCount > 0
+  );
 
   if (!currentUser || isSessionLocked) {
     return (
@@ -420,29 +460,11 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
             </button>
           </div>
         ) : !lobbyState.roomExists ? (
-          <div className="lobby-screen__auth-card lobby-screen__room-entry">
-            <h2 className="lobby-screen__card-header">{t("lobby.createTitle")}</h2>
-            <p className="lobby-screen__subtitle">{t("lobby.createDesc")}</p>
-            <form onSubmit={handleCreateRoom} className="lobby-screen__form">
-              <div className="lobby-screen__form-group">
-                <label htmlFor="lobby-room-name" className="lobby-screen__label">
-                  {t("lobby.roomNameLabel")}
-                </label>
-                <input
-                  id="lobby-room-name"
-                  type="text"
-                  value={roomNameInput}
-                  onChange={(e) => setRoomNameInput(e.target.value)}
-                  placeholder={t("lobby.roomNamePlaceholder")}
-                  className="lobby-screen__input"
-                  maxLength={32}
-                />
-              </div>
-              <button type="submit" className="lobby-screen__btn lobby-screen__btn--start">
-                {t("lobby.createBtn")}
-              </button>
-            </form>
-          </div>
+          <CreateRoomCard
+            expansionOptions={expansionOptions}
+            isConnected={isConnected}
+            onCreateRoom={handleCreateRoom}
+          />
         ) : !me ? (
           <div className="lobby-screen__auth-card lobby-screen__room-entry">
             <h2 className="lobby-screen__card-header">
@@ -455,20 +477,28 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                   t("common.unknown"),
               })}{" "}
               |{" "}
-              {t("lobby.roomMeta", {
-                count: activeCount,
-                max: lobbyState.maxPlayers || 8,
-                status:
-                  lobbyState.status === "in_game"
-                    ? t("lobby.matchInProgressStatus")
-                    : t("lobby.statusWaiting"),
-              })}
+              {botCount > 0
+                ? t("lobby.roomMetaBots", {
+                    count: seatedPlayers.length,
+                    max: targetPlayers,
+                    bots: botCount,
+                    status:
+                      lobbyState.status === "in_game"
+                        ? t("lobby.matchInProgressStatus")
+                        : t("lobby.statusWaiting"),
+                  })
+                : t("lobby.roomMeta", {
+                    count: seatedPlayers.length,
+                    max: targetPlayers,
+                    status:
+                      lobbyState.status === "in_game"
+                        ? t("lobby.matchInProgressStatus")
+                        : t("lobby.statusWaiting"),
+                  })}
             </p>
             <button
               type="button"
-              disabled={
-                lobbyState.status === "in_game" || activeCount >= (lobbyState.maxPlayers || 8)
-              }
+              disabled={lobbyState.status === "in_game" || humanCount >= targetPlayers}
               onClick={handleJoinRoom}
               className="lobby-screen__btn lobby-screen__btn--ready lobby-screen__btn--full"
             >
@@ -476,27 +506,37 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                 ? t("lobby.matchInProgressBtn")
                 : t("lobby.joinRoom")}
             </button>
+            {showReplaceBotHint && (
+              <p className="lobby-screen__join-hint">{t("lobby.joinReplacesBot")}</p>
+            )}
           </div>
         ) : (
           <>
             <div className="lobby-screen__grid">
               <LobbyPlayerList
                 players={lobbyState.players}
-                activeCount={activeCount}
-                maxPlayers={lobbyState.maxPlayers}
+                targetPlayers={targetPlayers}
+                autoFillBots={autoFillBots}
                 myPlayerId={myPlayerId}
                 isHost={isHost}
                 status={lobbyState.status}
                 onKickPlayer={handleKickPlayer}
+                onAddBot={handleAddBot}
+                onRemoveBot={handleRemoveBot}
+                onFillBots={handleFillBots}
               />
 
               <LobbySettingsPanel
                 settings={lobbyState.settings}
                 expansionOptions={expansionOptions}
                 isHost={isHost}
+                status={lobbyState.status}
+                humanCount={humanCount}
                 tunnelUrl={tunnelUrl}
                 lanUrls={lanUrls}
                 copiedUrl={copiedUrl}
+                onChangeTargetPlayers={(count) => updateSetting("targetPlayers", count)}
+                onToggleAutoFillBots={(enabled) => updateSetting("autoFillBots", enabled)}
                 onToggleExpansion={toggleExpansion}
                 onCopyUrl={(url) => void handleCopyUrl(url)}
               />
@@ -558,17 +598,22 @@ export const LobbyScreen: React.FC<LobbyScreenProps> = ({
                       <button
                         type="button"
                         onClick={handleStartGame}
-                        disabled={!isConnected || isDbLocked || activeCount < minPlayers || !allReady}
+                        disabled={!isConnected || isDbLocked || effectiveCount < minPlayers || !allReady}
                         className="lobby-screen__btn lobby-screen__btn--start"
                       >
-                        {activeCount >= minPlayers
+                        {projectedAutoBots > 0
+                          ? t("lobby.startMatchWithBots", {
+                              count: activeCount,
+                              bots: projectedAutoBots,
+                            })
+                          : effectiveCount >= minPlayers
                           ? t("lobby.startMatchReady", { count: activeCount })
                           : t("lobby.startMatchNeed", { count: activeCount, min: minPlayers })}
                       </button>
                     </div>
                   )}
 
-                  {(!isHost || lobbyState.players.length <= 1) && (
+                  {(!isHost || humanCount <= 1) && (
                     <button
                       type="button"
                       disabled={!isConnected}

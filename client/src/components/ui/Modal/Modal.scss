@@ -63,6 +63,10 @@
     max-height: 60dvh;
     overflow-y: auto;
     overscroll-behavior: contain;
+
+    > * {
+      flex-shrink: 0;
+    }
   }
 
   &__footer {

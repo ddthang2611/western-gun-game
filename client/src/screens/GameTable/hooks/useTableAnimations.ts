@@ -103,6 +103,36 @@ function resolveDestinationAnchor(entry: ArenaCardEntry, myPlayerId: string): st
   return null;
 }
 
+function hasRenderableBox(el: HTMLElement | null): el is HTMLElement {
+  if (!el) return false;
+  const rect = el.getBoundingClientRect();
+  return rect.width > 0 && rect.height > 0;
+}
+
+function resolveCharacterPoint(
+  playerId: string | undefined,
+  myId: string
+): { x: number; y: number } | null {
+  const candidates: Array<HTMLElement | null> =
+    !playerId || playerId === myId
+      ? [
+          document.querySelector<HTMLElement>('[data-target-origin="player"]'),
+          document.querySelector<HTMLElement>(MY_HERO_ANCHOR),
+          document.querySelector<HTMLElement>(".game-table__console-heroes"),
+        ]
+      : [
+          document.querySelector<HTMLElement>(
+            `#seat-${playerId} .opponent-seat__hero-columns`
+          ),
+          document.getElementById(`seat-${playerId}`),
+        ];
+
+  const targetEl = candidates.find(hasRenderableBox);
+  if (!targetEl) return null;
+  const rect = targetEl.getBoundingClientRect();
+  return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+}
+
 function isBoardPlacementEntry(entry: ArenaCardEntry): boolean {
   if (entry.kind === "EQUIP_PLACEMENT") return true;
   if (
@@ -246,113 +276,72 @@ export function useTableAnimations(
   );
 
   const triggerVfx = useCallback(
-    (type: VfxBeam["type"], targetId?: string, aoeHeal = false) => {
-      const centerEl =
-        document.querySelector('[data-flight-anchor="card-arena"]') ||
-        document.querySelector('[data-flight-anchor="center-stage"]') ||
-        document.querySelector(".game-table__center-stage");
-      const centerRect = centerEl?.getBoundingClientRect();
-      const startX = centerRect
-        ? centerRect.left + centerRect.width / 2
-        : window.innerWidth / 2 - 140;
-      const startY = centerRect
-        ? centerRect.top + centerRect.height / 2
-        : window.innerHeight * 0.42;
+    (type: VfxBeam["type"], targetId?: string, aoeHeal = false, sourceId?: string) => {
+      if (type === "draw") return;
 
+      const myId = myPlayerIdRef.current;
       const beams: VfxBeam[] = [];
       const nextBeamId = (suffix: string) => {
         vfxSeqRef.current += 1;
         return `vfx_${vfxSeqRef.current}_${suffix}`;
       };
 
-      const addHeroBeam = (suffix: string) => {
-        const heroEl =
-          document.querySelector('[data-flight-anchor="my-heroes"]') ||
-          document.querySelector(".game-table__console-heroes");
-        const heroRect = heroEl?.getBoundingClientRect();
-        if (!heroRect) return;
+      const pushBeam = (
+        suffix: string,
+        x1: number,
+        y1: number,
+        x2: number,
+        y2: number
+      ) => {
         beams.push({
           id: nextBeamId(suffix),
-          x1: startX,
-          y1: startY,
-          x2: heroRect.left + heroRect.width / 2,
-          y2: heroRect.top + heroRect.height / 2,
+          x1,
+          y1,
+          x2,
+          y2,
           color: VFX_COLORS[type],
           type,
         });
       };
 
-      if (type === "draw") {
-        const consoleEl =
-          document.querySelector('[data-flight-anchor="my-hand"]') ||
-          document.querySelector(".game-table__console-hand");
-        const consoleRect = consoleEl?.getBoundingClientRect();
-        const endX = consoleRect
-          ? consoleRect.left + consoleRect.width / 2
-          : window.innerWidth / 2;
-        const endY = consoleRect ? consoleRect.top + 30 : window.innerHeight - 100;
-        beams.push({
-          id: nextBeamId("draw"),
-          x1: startX,
-          y1: startY - 20,
-          x2: endX,
-          y2: endY,
-          color: VFX_COLORS.draw,
-          type: "draw",
-        });
-      } else if (type === "heal" && aoeHeal) {
-        const seats = document.querySelectorAll(
-          ".opponent-seat:not(.opponent-seat--dead)"
-        );
-        seats.forEach((seat, idx) => {
-          const rect = seat.getBoundingClientRect();
-          beams.push({
-            id: nextBeamId(`heal_${idx}`),
-            x1: startX,
-            y1: startY,
-            x2: rect.left + rect.width / 2,
-            y2: rect.top + rect.height / 2,
-            color: VFX_COLORS.heal,
-            type: "heal",
-          });
-        });
-        addHeroBeam("me_heal");
-      } else if (targetId) {
-        if (targetId === myPlayerIdRef.current) {
-          addHeroBeam("me");
+      if (targetId && !aoeHeal) {
+        const dstPt = resolveCharacterPoint(targetId, myId);
+        if (!dstPt) return;
+
+        if (!sourceId || sourceId === targetId) {
+          pushBeam("self", dstPt.x, dstPt.y, dstPt.x, dstPt.y);
         } else {
-          const victim = document.querySelector(`#seat-${targetId}`);
-          if (victim) {
-            const rect = victim.getBoundingClientRect();
-            beams.push({
-              id: nextBeamId("single"),
-              x1: startX,
-              y1: startY,
-              x2: rect.left + rect.width / 2,
-              y2: rect.top + rect.height / 2,
-              color: VFX_COLORS[type],
-              type,
-            });
+          const srcPt = resolveCharacterPoint(sourceId, myId);
+          if (!srcPt) return;
+          pushBeam("single", srcPt.x, srcPt.y, dstPt.x, dstPt.y);
+        }
+      } else {
+        const srcPt = sourceId ? resolveCharacterPoint(sourceId, myId) : null;
+        if (sourceId && !srcPt) return;
+
+        const targetIds = Array.from(
+          document.querySelectorAll<HTMLElement>(".opponent-seat:not(.opponent-seat--dead)")
+        )
+          .map((seat) => seat.id.replace(/^seat-/, ""))
+          .filter((id) => Boolean(id) && id !== sourceId);
+
+        if (myId && myId !== sourceId) {
+          targetIds.push(myId);
+        }
+
+        for (const tid of targetIds) {
+          const dstPt = resolveCharacterPoint(tid, myId);
+          if (!dstPt) continue;
+          if (srcPt) {
+            pushBeam(`aoe_${tid}`, srcPt.x, srcPt.y, dstPt.x, dstPt.y);
+          } else {
+            pushBeam(`pulse_${tid}`, dstPt.x, dstPt.y, dstPt.x, dstPt.y);
           }
         }
-      } else if (type === "heal") {
-        addHeroBeam("self_heal");
-      } else {
-        const seats = document.querySelectorAll(
-          ".opponent-seat:not(.opponent-seat--dead)"
-        );
-        seats.forEach((seat, idx) => {
-          const rect = seat.getBoundingClientRect();
-          beams.push({
-            id: nextBeamId(`aoe_${idx}`),
-            x1: startX,
-            y1: startY,
-            x2: rect.left + rect.width / 2,
-            y2: rect.top + rect.height / 2,
-            color: VFX_COLORS[type],
-            type,
-          });
-        });
+
+        if (type === "heal" && srcPt) {
+          pushBeam("actor_heal", srcPt.x, srcPt.y, srcPt.x, srcPt.y);
+        }
       }
 
       if (beams.length > 0) {
@@ -495,7 +484,12 @@ export function useTableAnimations(
           );
           setPendingReadPauseCount((c) => c + 1);
           if (entry.vfxType) {
-            triggerVfx(entry.vfxType, entry.vfxTargetId, Boolean(entry.vfxAoe));
+            triggerVfx(
+              entry.vfxType,
+              entry.vfxTargetId,
+              Boolean(entry.vfxAoe),
+              entry.actorPlayerId
+            );
           }
           const readPauseMs = entry.kind === "CHECK_RESULT" ? 750 : 220;
           scheduleTimeout(() => {
