@@ -15,7 +15,7 @@ export const HeroProfiles: React.FC<HeroProfilesProps> = ({
   myHp,
   myMaxHp,
 }) => {
-  const { t, tChar } = useI18n();
+  const { tChar } = useI18n();
   const displayHeroes = heroes.slice(0, 2);
 
   return (
@@ -26,12 +26,9 @@ export const HeroProfiles: React.FC<HeroProfilesProps> = ({
           return (
             <div key={hero.id} className="game-table__hero-card">
               <DebouncedPopover
-                title={`${charLoc.primary.name} (${hero.baseHp} HP)`}
                 content={
                   <CardTooltipContent
-                    typeLabel={t("popover.type.character")}
                     primaryDesc={charLoc.primary.desc}
-                    secondaryTitle={charLoc.secondary?.name}
                     secondaryDesc={charLoc.secondary?.desc}
                   />
                 }

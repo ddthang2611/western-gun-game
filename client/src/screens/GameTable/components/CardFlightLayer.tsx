@@ -52,7 +52,7 @@ const FlightNode: React.FC<FlightNodeProps> = ({ item }) => {
 
     const dx = to.x - from.x;
     const dy = to.y - from.y;
-    const duration = item.durationMs ?? 420;
+    const duration = item.durationMs ?? 720;
     const startScale = item.startScale ?? 0.9;
     const endScale = item.endScale ?? 1;
     const fadeOutAtEnd = item.fadeOutAtEnd ?? false;

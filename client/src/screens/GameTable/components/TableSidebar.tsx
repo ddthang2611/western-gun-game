@@ -36,8 +36,8 @@ export const TableSidebar: React.FC<TableSidebarProps> = ({
   const { t, tCard, tRole, tLog } = useI18n();
   const displayLogs =
     structuredCombatLog && structuredCombatLog.length > 0
-      ? structuredCombatLog.slice(0, 6).map((entry) => tLog(entry))
-      : combatLog.slice(0, 6).map((log) => formatSimpleLog(log));
+      ? structuredCombatLog.slice(0, 16).map((entry) => tLog(entry))
+      : combatLog.slice(0, 16).map((log) => formatSimpleLog(log));
   const logCount =
     structuredCombatLog && structuredCombatLog.length > 0
       ? structuredCombatLog.length

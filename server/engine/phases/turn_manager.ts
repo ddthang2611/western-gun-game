@@ -30,8 +30,10 @@ export class TurnManager {
   private static pushPhase1DrawEvent(
     player: EnginePlayer,
     drawnCards: EngineCard[],
-    events: DomainEvent[]
+    events: DomainEvent[],
+    deckDrawnCount: number = drawnCards.length
   ): void {
+    const safeDeckCount = Math.max(0, Math.min(drawnCards.length, deckDrawnCount));
     events.push({
       type: "PHASE_CHANGED",
       payload: {
@@ -39,6 +41,7 @@ export class TurnManager {
         playerId: player.id,
         playerName: player.name,
         drawnCount: drawnCards.length,
+        deckDrawnCount: safeDeckCount,
         drawnCards,
       },
       visibleTo: [player.id],
@@ -47,17 +50,18 @@ export class TurnManager {
         playerId: player.id,
         playerName: player.name,
         drawnCount: drawnCards.length,
+        deckDrawnCount: safeDeckCount,
       },
       timestamp: Date.now(),
     });
   }
 
-  // Draw single card with Mine support
-  private static drawSingleWithMineSupport(
+  // Draw single card tracking deck origin
+  private static drawSingleTracked(
     state: SimulationState,
     player: EnginePlayer,
     events: DomainEvent[]
-  ): EngineCard | undefined {
+  ): { card?: EngineCard; fromDeck: boolean } {
     if (
       state.activeEvent?.effectCode === "EVENT_FOC_ABANDONED_MINE" &&
       state.discardPile.length > 0
@@ -67,17 +71,49 @@ export class TurnManager {
         player.handCards.push(topDiscard);
         events.push({
           type: "ABANDONED_MINE_DRAW",
-          payload: { playerId: player.id, cardId: topDiscard.id },
+          payload: {
+            playerId: player.id,
+            playerName: player.name,
+            cardId: topDiscard.id,
+            card: topDiscard,
+          },
           timestamp: Date.now(),
         });
-        return topDiscard;
+        return { card: topDiscard, fromDeck: false };
       }
     }
 
     const drawRes = AtomicEffects.drawCards(state, 1);
     events.push(...drawRes.events);
     player.handCards.push(...drawRes.cards);
-    return drawRes.cards[0];
+    return { card: drawRes.cards[0], fromDeck: drawRes.cards.length > 0 };
+  }
+
+  // Draw multiple cards tracking deck origin
+  private static drawMultipleTracked(
+    state: SimulationState,
+    player: EnginePlayer,
+    count: number,
+    events: DomainEvent[]
+  ): { cards: EngineCard[]; deckCount: number } {
+    const cards: EngineCard[] = [];
+    let deckCount = 0;
+    for (let i = 0; i < count; i++) {
+      const res = this.drawSingleTracked(state, player, events);
+      if (!res.card) break;
+      cards.push(res.card);
+      if (res.fromDeck) deckCount += 1;
+    }
+    return { cards, deckCount };
+  }
+
+  // Draw single card with Mine support
+  private static drawSingleWithMineSupport(
+    state: SimulationState,
+    player: EnginePlayer,
+    events: DomainEvent[]
+  ): EngineCard | undefined {
+    return this.drawSingleTracked(state, player, events).card;
   }
 
   // Draw multiple cards with Mine support
@@ -87,22 +123,18 @@ export class TurnManager {
     count: number,
     events: DomainEvent[]
   ): EngineCard[] {
-    const result: EngineCard[] = [];
-    for (let i = 0; i < count; i++) {
-      const card = this.drawSingleWithMineSupport(state, player, events);
-      if (!card) break;
-      result.push(card);
-    }
-    return result;
+    return this.drawMultipleTracked(state, player, count, events).cards;
   }
 
   // Emit Fog-of-War CARDS_DRAWN event
   private static emitPhase1CardsDrawn(
     player: EnginePlayer,
     cards: EngineCard[],
-    events: DomainEvent[]
+    events: DomainEvent[],
+    deckDrawnCount: number = cards.length
   ): void {
     if (cards.length === 0) return;
+    const safeDeckCount = Math.max(0, Math.min(cards.length, deckDrawnCount));
     events.push({
       type: "CARDS_DRAWN",
       visibleTo: [player.id],
@@ -110,12 +142,14 @@ export class TurnManager {
         playerId: player.id,
         playerName: player.name,
         count: cards.length,
+        deckDrawnCount: safeDeckCount,
         cards,
       },
       maskedPayload: {
         playerId: player.id,
         playerName: player.name,
         count: cards.length,
+        deckDrawnCount: safeDeckCount,
       },
       timestamp: Date.now(),
     });
@@ -130,7 +164,8 @@ export class TurnManager {
     wounds: number,
     events: DomainEvent[]
   ): void {
-    const drawn = this.drawCardsWithMineSupport(state, player, count, events);
+    const drawRes = this.drawMultipleTracked(state, player, count, events);
+    const drawn = drawRes.cards;
     events.push({
       type: "ACTIVE_SKILL_USED",
       payload: {
@@ -144,7 +179,9 @@ export class TurnManager {
       },
       timestamp: Date.now(),
     });
-    this.finalizePhase1(state, player, drawn, events);
+    this.finalizePhase1(state, player, drawn, events, {
+      deckDrawnCount: drawRes.deckCount,
+    });
   }
 
   // Check if player has cards in play
@@ -358,12 +395,15 @@ export class TurnManager {
 
     // Priority 1: Ghost Town or Peyote override
     if (ctx.overrideMode === "GHOST_TOWN") {
-      const drawn = this.drawCardsWithMineSupport(state, player, 3, events);
+      const ghostRes = this.drawMultipleTracked(state, player, 3, events);
+      const drawn = ghostRes.cards;
       const extraCards: EngineCard[] = [];
+      let extraDeckCount = 0;
       for (let i = 0; i < ctx.postDrawBonus; i++) {
-        const extra = this.drawSingleWithMineSupport(state, player, events);
-        if (extra) {
-          extraCards.push(extra);
+        const extra = this.drawSingleTracked(state, player, events);
+        if (extra.card) {
+          extraCards.push(extra.card);
+          if (extra.fromDeck) extraDeckCount += 1;
           events.push({
             type: "EVENT_TRAIN_ARRIVAL_DRAW",
             payload: { playerId: player.id, playerName: player.name, drawnCount: 1 },
@@ -371,14 +411,9 @@ export class TurnManager {
           });
         }
       }
-      this.pushPhase1DrawEvent(player, drawn, events);
+      this.pushPhase1DrawEvent(player, drawn, events, ghostRes.deckCount);
       if (extraCards.length > 0) {
-        this.emitPhase1CardsDrawn(player, extraCards, events);
-        events.push({
-          type: "PHASE_CHANGED",
-          payload: { phase: 1, playerId: player.id, drawnCount: extraCards.length },
-          timestamp: Date.now(),
-        });
+        this.emitPhase1CardsDrawn(player, extraCards, events, extraDeckCount);
       }
       state.pendingPhase1Choice = null;
       state.currentPhase = 2;
@@ -504,8 +539,10 @@ export class TurnManager {
     }
 
     const drawCount = Math.max(1, 2 + ctx.drawDelta);
-    const drawn = this.drawCardsWithMineSupport(state, player, drawCount, events);
-    this.finalizePhase1(state, player, drawn, events);
+    const drawRes = this.drawMultipleTracked(state, player, drawCount, events);
+    this.finalizePhase1(state, player, drawRes.cards, events, {
+      deckDrawnCount: drawRes.deckCount,
+    });
   }
 
   // Open Kit Carlson preview selection
@@ -516,11 +553,14 @@ export class TurnManager {
   ): void {
     const ctx = EventRuleRegistry.buildDrawContext(state, player);
     const keepCount = Math.max(1, 2 + ctx.drawDelta);
-    const previewCards = this.drawCardsWithMineSupport(state, player, 3, events);
+    const previewRes = this.drawMultipleTracked(state, player, 3, events);
+    const previewCards = previewRes.cards;
 
     if (previewCards.length <= keepCount) {
       state.pendingPhase1Choice = null;
-      this.finalizePhase1(state, player, previewCards, events);
+      this.finalizePhase1(state, player, previewCards, events, {
+        deckDrawnCount: previewRes.deckCount,
+      });
       return;
     }
 
@@ -538,6 +578,7 @@ export class TurnManager {
       options: previewCards.map((c) => c.id),
       neededCount: keepCount,
       previewCards,
+      remainingBaseDraws: previewRes.deckCount,
     };
     events.push({
       type: "PHASE_CHANGED",
@@ -552,10 +593,20 @@ export class TurnManager {
     player: EnginePlayer,
     drawnCards: EngineCard[],
     events: DomainEvent[],
-    options?: { skipBlackJack?: boolean; ranchDone?: boolean }
+    options?: {
+      skipBlackJack?: boolean;
+      ranchDone?: boolean;
+      deckDrawnCount?: number;
+      secondCardFromDeck?: boolean;
+    }
   ): void {
     const ctx = EventRuleRegistry.buildDrawContext(state, player);
     const allDrawn = [...drawnCards];
+    let deckFlightCount = options?.deckDrawnCount ?? drawnCards.length;
+    const secondFromDeck =
+      options?.secondCardFromDeck ??
+      (drawnCards.length >= 2 && deckFlightCount >= 1);
+    let secondRevealedInArena = false;
 
     if (
       !options?.skipBlackJack &&
@@ -568,10 +619,13 @@ export class TurnManager {
       const isRed = effectiveSuit === "hearts" || effectiveSuit === "diamonds";
       let bonusCard: EngineCard | undefined;
       if (isRed) {
-        bonusCard = this.drawSingleWithMineSupport(state, player, events);
+        const bonusRes = this.drawSingleTracked(state, player, events);
+        bonusCard = bonusRes.card;
         if (bonusCard) {
           allDrawn.push(bonusCard);
-          this.emitPhase1CardsDrawn(player, [bonusCard], events);
+          if (bonusRes.fromDeck) {
+            deckFlightCount += 1;
+          }
         }
       }
 
@@ -581,12 +635,13 @@ export class TurnManager {
           card: secondCard,
           actorPlayerId: player.id,
           actorPlayerName: player.name,
-          originZone: "DECK",
+          originZone: secondFromDeck ? "DECK" : "DISCARD",
           destinationZone: "HAND",
           destinationPlayerId: player.id,
           actionLabel: bonusCard ? "Black Jack (+1 Bonus)" : "Black Jack Reveal",
         },
       ]);
+      secondRevealedInArena = true;
 
       events.push({
         type: "BLACK_JACK_REVEAL",
@@ -601,25 +656,32 @@ export class TurnManager {
       });
     }
 
-    if (allDrawn.length > 0) {
-      this.pushPhase1DrawEvent(player, allDrawn, events);
+    const willRevealLaw = ctx.allowLawOfTheWest && drawnCards.length >= 2;
+    if ((secondRevealedInArena || willRevealLaw) && secondFromDeck) {
+      deckFlightCount = Math.max(0, deckFlightCount - 1);
     }
 
-    if (ctx.allowLawOfTheWest && drawnCards.length >= 2) {
+    if (allDrawn.length > 0) {
+      this.pushPhase1DrawEvent(player, allDrawn, events, deckFlightCount);
+    }
+
+    if (willRevealLaw) {
       const forcedCard = drawnCards[1];
       player.forcedPlayCardId = forcedCard.id;
-      ArenaChainManager.appendBatch(state, [
-        {
-          kind: "REVEAL_CARD",
-          card: forcedCard,
-          actorPlayerId: player.id,
-          actorPlayerName: player.name,
-          originZone: "DECK",
-          destinationZone: "HAND",
-          destinationPlayerId: player.id,
-          actionLabel: "Law of the West",
-        },
-      ]);
+      if (!secondRevealedInArena) {
+        ArenaChainManager.appendBatch(state, [
+          {
+            kind: "REVEAL_CARD",
+            card: forcedCard,
+            actorPlayerId: player.id,
+            actorPlayerName: player.name,
+            originZone: secondFromDeck ? "DECK" : "DISCARD",
+            destinationZone: "HAND",
+            destinationPlayerId: player.id,
+            actionLabel: "Law of the West",
+          },
+        ]);
+      }
       events.push({
         type: "LAW_OF_THE_WEST_REVEAL",
         payload: {
@@ -632,10 +694,14 @@ export class TurnManager {
     }
 
     const trainBonusCards: EngineCard[] = [];
+    let trainDeckCount = 0;
     for (let i = 0; i < ctx.postDrawBonus; i++) {
-      const extra = this.drawSingleWithMineSupport(state, player, events);
-      if (extra) {
-        trainBonusCards.push(extra);
+      const extra = this.drawSingleTracked(state, player, events);
+      if (extra.card) {
+        trainBonusCards.push(extra.card);
+        if (extra.fromDeck) {
+          trainDeckCount += 1;
+        }
         events.push({
           type: "EVENT_TRAIN_ARRIVAL_DRAW",
           payload: {
@@ -648,7 +714,7 @@ export class TurnManager {
       }
     }
     if (trainBonusCards.length > 0) {
-      this.emitPhase1CardsDrawn(player, trainBonusCards, events);
+      this.emitPhase1CardsDrawn(player, trainBonusCards, events, trainDeckCount);
     }
 
     if (
@@ -716,7 +782,11 @@ export class TurnManager {
 
       if (cards.length === 0) {
         state.pendingPhase1Choice = null;
-        this.finalizePhase1(state, player, drawnSoFar, events, { skipBlackJack: true });
+        this.finalizePhase1(state, player, drawnSoFar, events, {
+          skipBlackJack: true,
+          deckDrawnCount: 0,
+          secondCardFromDeck: false,
+        });
         return { success: true, events };
       }
 
@@ -766,7 +836,11 @@ export class TurnManager {
       }
 
       state.pendingPhase1Choice = null;
-      this.finalizePhase1(state, player, drawnSoFar, events, { skipBlackJack: true });
+      this.finalizePhase1(state, player, drawnSoFar, events, {
+        skipBlackJack: true,
+        deckDrawnCount: 0,
+        secondCardFromDeck: false,
+      });
       return { success: true, events };
     }
 
@@ -813,7 +887,13 @@ export class TurnManager {
         timestamp: Date.now(),
       });
 
-      this.finalizePhase1(state, player, pickedCards, events);
+      const kitDeckCount = Math.min(
+        pickedCards.length,
+        choiceState.remainingBaseDraws ?? pickedCards.length
+      );
+      this.finalizePhase1(state, player, pickedCards, events, {
+        deckDrawnCount: kitDeckCount,
+      });
       return { success: true, events };
     }
 
@@ -913,14 +993,24 @@ export class TurnManager {
 
         const drawn: EngineCard[] = [topDiscard];
         const remainingDraws = Math.max(0, keepCount - 1);
+        let secondFromDeck = false;
+        let extraDeckCount = 0;
         for (let i = 0; i < remainingDraws; i++) {
-          const second = this.drawSingleWithMineSupport(state, player, events);
-          if (second) drawn.push(second);
+          const second = this.drawSingleTracked(state, player, events);
+          if (second.card) {
+            drawn.push(second.card);
+            if (second.fromDeck) {
+              extraDeckCount += 1;
+              if (i === 0) secondFromDeck = true;
+            }
+          }
         }
 
         state.pendingPhase1Choice = null;
-        this.emitPhase1CardsDrawn(player, drawn, events);
-        this.finalizePhase1(state, player, drawn, events);
+        this.finalizePhase1(state, player, drawn, events, {
+          deckDrawnCount: extraDeckCount,
+          secondCardFromDeck: secondFromDeck,
+        });
         return { success: true, events };
       }
 
@@ -970,14 +1060,24 @@ export class TurnManager {
         });
 
         const remainingDraws = Math.max(0, keepCount - 1);
+        let secondFromDeck = false;
+        let extraDeckCount = 0;
         for (let i = 0; i < remainingDraws; i++) {
-          const extra = this.drawSingleWithMineSupport(state, player, events);
-          if (extra) drawn.push(extra);
+          const extra = this.drawSingleTracked(state, player, events);
+          if (extra.card) {
+            drawn.push(extra.card);
+            if (extra.fromDeck) {
+              extraDeckCount += 1;
+              if (i === 0) secondFromDeck = true;
+            }
+          }
         }
 
         state.pendingPhase1Choice = null;
-        this.emitPhase1CardsDrawn(player, drawn, events);
-        this.finalizePhase1(state, player, drawn, events);
+        this.finalizePhase1(state, player, drawn, events, {
+          deckDrawnCount: extraDeckCount,
+          secondCardFromDeck: secondFromDeck,
+        });
         return { success: true, events };
       }
 
@@ -1043,16 +1143,19 @@ export class TurnManager {
         });
 
         state.pendingPhase1Choice = null;
-        this.emitPhase1CardsDrawn(player, drawn, events);
-        this.finalizePhase1(state, player, drawn, events);
+        this.finalizePhase1(state, player, drawn, events, {
+          deckDrawnCount: 0,
+          secondCardFromDeck: false,
+        });
         return { success: true, events };
       }
 
       if (option === "NORMAL_DECK" || option === "NORMAL_DRAW") {
         state.pendingPhase1Choice = null;
-        const drawn = this.drawCardsWithMineSupport(state, player, keepCount, events);
-        this.emitPhase1CardsDrawn(player, drawn, events);
-        this.finalizePhase1(state, player, drawn, events);
+        const drawRes = this.drawMultipleTracked(state, player, keepCount, events);
+        this.finalizePhase1(state, player, drawRes.cards, events, {
+          deckDrawnCount: drawRes.deckCount,
+        });
         return { success: true, events };
       }
     }

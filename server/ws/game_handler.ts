@@ -31,6 +31,7 @@ import {
   getStructuredLogsForPlayer,
 } from "./combat_log_formatter";
 import { buildTableState } from "./table_state_presenter";
+import { SetupDealer } from "../engine/deck/setup_dealer";
 import { BotRunner } from "./bot_runner";
 
 export class GameSessionManager {
@@ -45,6 +46,8 @@ export class GameSessionManager {
   private inactivityTimers: Map<string, NodeJS.Timeout> = new Map();
   private arenaTimers: Map<string, NodeJS.Timeout> = new Map();
   private botRunners: Map<string, BotRunner> = new Map();
+  private recentPlayerCharacters: Map<string, string[]> = new Map();
+  private roomCharacterShoes: Map<string, string[]> = new Map();
 
   public static getInstance(): GameSessionManager {
     if (!GameSessionManager.instance) {
@@ -68,6 +71,30 @@ export class GameSessionManager {
       clearTimeout(existing);
       this.inactivityTimers.delete(roomId);
     }
+  }
+
+  // Track dealt candidates symmetrically to avoid immediate repeats
+  private recordRecentPlayerCharacters(
+    playerId: string,
+    dealtIds: string[],
+    poolSize: number
+  ): void {
+    if (dealtIds.length === 0) return;
+    const prev = this.recentPlayerCharacters.get(playerId) || [];
+    const seen = new Set(prev);
+    const merged = [...prev];
+    for (const id of dealtIds) {
+      if (!seen.has(id)) {
+        seen.add(id);
+        merged.push(id);
+      }
+    }
+
+    const maxHistory = Math.max(
+      dealtIds.length,
+      Math.min(poolSize - dealtIds.length, dealtIds.length * 2)
+    );
+    this.recentPlayerCharacters.set(playerId, merged.slice(-maxHistory));
   }
 
   // Stop and remove room bot runner
@@ -582,6 +609,7 @@ export class GameSessionManager {
     this.matchEventSeqs.set(roomId, maxSeq);
 
     const restoredLogs: StoredLogEntry[] = [];
+    const restoredEvents: DomainEvent[] = [];
     for (const row of recentEvents) {
       let payload: any = {};
       try {
@@ -590,16 +618,49 @@ export class GameSessionManager {
         console.error("[GameSessionManager] Failed to parse match event JSON:", err);
         payload = {};
       }
+      const timestamp = Date.parse(row.created_at) || Date.now();
       const entry = formatEventToLog(
         {
           type: row.event_type,
           payload,
-          timestamp: Date.parse(row.created_at) || Date.now(),
+          timestamp,
         },
         engine.getState().players
       );
       if (entry) restoredLogs.push(entry);
+
+      // Scope private restored events
+      let visibleTo: string[] | undefined;
+      let maskedPayload: any;
+      if (
+        (row.event_type === "CARDS_DRAWN" ||
+          (row.event_type === "PHASE_CHANGED" && Array.isArray(payload.drawnCards))) &&
+        typeof payload.playerId === "string"
+      ) {
+        visibleTo = [payload.playerId];
+        const { cards: _c, drawnCards: _d, ...rest } = payload;
+        maskedPayload = rest;
+      } else if (
+        row.event_type === "EL_GRINGO_STOLEN" &&
+        typeof payload.victimId === "string" &&
+        typeof payload.attackerId === "string"
+      ) {
+        visibleTo = [payload.victimId, payload.attackerId];
+        maskedPayload = {
+          ...payload,
+          card: { id: "SECRET", name: "Card from hand", suit: "UNKNOWN", rank: "UNKNOWN" },
+        };
+      }
+
+      restoredEvents.push({
+        type: row.event_type,
+        payload,
+        timestamp,
+        visibleTo,
+        maskedPayload,
+      });
     }
+    restoredEvents.reverse();
     this.combatLogs.set(
       roomId,
       restoredLogs.slice(0, GameSessionManager.MAX_RESTORED_EVENTS)
@@ -611,7 +672,9 @@ export class GameSessionManager {
         .getBotIds()
         .filter((id) => engine.getState().players.has(id));
       if (botIds.length > 0) {
-        this.botRunners.set(roomId, new BotRunner(botIds));
+        const runner = new BotRunner(botIds);
+        this.botRunners.set(roomId, runner);
+        runner.observeEvents(restoredEvents, engine);
       }
       this.syncArenaTimer(roomId, engine, lobbyManager);
       this.refreshInactivityTimer(roomId, engine, lobbyManager);
@@ -686,6 +749,25 @@ export class GameSessionManager {
     const expansions = filterActiveExpansions(settings.expansions);
     const is3PVariant = players.length === 3;
     const playerList = players.map((p) => ({ id: p.id, name: p.name }));
+    const filteredChars = SetupDealer.filterByExpansions(allCharacters, expansions);
+    const activeChars =
+      filteredChars.length >= players.length * (settings.dualCharacterEnabled ? 2 : 1)
+        ? filteredChars
+        : allCharacters;
+    const activeCharIds = new Set(activeChars.map((c) => c.id));
+    const currentShoe = (this.roomCharacterShoes.get(roomId) || []).filter((id) =>
+      activeCharIds.has(id)
+    );
+    const remainingIds = new Set(
+      currentShoe.length > 0 ? currentShoe : activeChars.map((c) => c.id)
+    );
+    const recentByPlayer = new Map<string, Set<string>>();
+    for (const p of players) {
+      const history = this.recentPlayerCharacters.get(p.id);
+      if (history?.length) {
+        recentByPlayer.set(p.id, new Set(history));
+      }
+    }
 
     try {
       const engine = new GameEngine(roomId, engineCards, engineEvents, {
@@ -704,8 +786,28 @@ export class GameSessionManager {
           enableCharacterSelect: true,
           expansions,
           enable3PlayerVariant: is3PVariant,
+          recentCharacterIdsByPlayer: recentByPlayer,
+          remainingCharacterIds: remainingIds,
         }
       );
+
+      const simState = engine.getState();
+      const dealtThisMatch = new Set<string>();
+      for (const p of players) {
+        const dealt =
+          simState.pendingCharacterSelect.get(p.id)?.candidates.map((c) => c.id) ||
+          simState.players.get(p.id)?.characters.map((c) => c.id) ||
+          [];
+        for (const cid of dealt) dealtThisMatch.add(cid);
+        this.recordRecentPlayerCharacters(p.id, dealt, activeChars.length);
+      }
+      let nextShoe = Array.from(remainingIds).filter((id) => !dealtThisMatch.has(id));
+      if (nextShoe.length === 0) {
+        nextShoe = activeChars
+          .map((c) => c.id)
+          .filter((id) => !dealtThisMatch.has(id));
+      }
+      this.roomCharacterShoes.set(roomId, nextShoe);
 
       this.clearInactivityTimer(roomId);
       this.clearArenaTimer(roomId);

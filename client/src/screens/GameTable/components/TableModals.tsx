@@ -136,9 +136,11 @@ export const TableModals: React.FC<TableModalsProps> = ({
     ? state.myPendingReaction
     : mockScenarioReaction;
 
-  // Delay GeneralStoreModal & GameOverModal & TurnPromptModal until Card Arena finishes clearing
+  // Open store once card lands
   const isGeneralStoreOpen = !isMock
-    ? Boolean(state.generalStore && state.generalStore.pool.length > 0) && !isArenaLocked
+    ? Boolean(state.generalStore && state.generalStore.pool.length > 0) &&
+      !isArenaSettling &&
+      (!isStepAnimating || (state.generalStore?.currentPickerIndex ?? 0) > 0)
     : forcedModal === "general_store" && Boolean(mockScenarioGeneralStore);
   const effectiveGeneralStore = !isMock
     ? state.generalStore

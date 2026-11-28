@@ -134,12 +134,9 @@ export const OpponentSeat: React.FC<OpponentSeatProps> = ({
               return (
                 <DebouncedPopover
                   key={hero.id}
-                  title={charLoc.primary.name}
                   content={
                     <CardTooltipContent
-                      typeLabel={t("popover.type.character")}
                       primaryDesc={charLoc.primary.desc}
-                      secondaryTitle={charLoc.secondary?.name}
                       secondaryDesc={charLoc.secondary?.desc}
                     />
                   }

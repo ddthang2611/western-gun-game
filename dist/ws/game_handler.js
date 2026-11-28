@@ -16,6 +16,7 @@ const database_1 = require("../db/database");
 const expansion_config_1 = require("../engine/events/expansion_config");
 const combat_log_formatter_1 = require("./combat_log_formatter");
 const table_state_presenter_1 = require("./table_state_presenter");
+const setup_dealer_1 = require("../engine/deck/setup_dealer");
 const bot_runner_1 = require("./bot_runner");
 class GameSessionManager {
     static instance;
@@ -28,6 +29,8 @@ class GameSessionManager {
     inactivityTimers = new Map();
     arenaTimers = new Map();
     botRunners = new Map();
+    recentPlayerCharacters = new Map();
+    roomCharacterShoes = new Map();
     static getInstance() {
         if (!GameSessionManager.instance) {
             GameSessionManager.instance = new GameSessionManager();
@@ -47,6 +50,22 @@ class GameSessionManager {
             clearTimeout(existing);
             this.inactivityTimers.delete(roomId);
         }
+    }
+    // Track dealt candidates symmetrically to avoid immediate repeats
+    recordRecentPlayerCharacters(playerId, dealtIds, poolSize) {
+        if (dealtIds.length === 0)
+            return;
+        const prev = this.recentPlayerCharacters.get(playerId) || [];
+        const seen = new Set(prev);
+        const merged = [...prev];
+        for (const id of dealtIds) {
+            if (!seen.has(id)) {
+                seen.add(id);
+                merged.push(id);
+            }
+        }
+        const maxHistory = Math.max(dealtIds.length, Math.min(poolSize - dealtIds.length, dealtIds.length * 2));
+        this.recentPlayerCharacters.set(playerId, merged.slice(-maxHistory));
     }
     // Stop and remove room bot runner
     clearBotRunner(roomId) {
@@ -511,6 +530,7 @@ class GameSessionManager {
         const maxSeq = recentEvents.reduce((max, row) => Math.max(max, row.seq), 0);
         this.matchEventSeqs.set(roomId, maxSeq);
         const restoredLogs = [];
+        const restoredEvents = [];
         for (const row of recentEvents) {
             let payload = {};
             try {
@@ -520,14 +540,42 @@ class GameSessionManager {
                 console.error("[GameSessionManager] Failed to parse match event JSON:", err);
                 payload = {};
             }
+            const timestamp = Date.parse(row.created_at) || Date.now();
             const entry = (0, combat_log_formatter_1.formatEventToLog)({
                 type: row.event_type,
                 payload,
-                timestamp: Date.parse(row.created_at) || Date.now(),
+                timestamp,
             }, engine.getState().players);
             if (entry)
                 restoredLogs.push(entry);
+            // Scope private restored events
+            let visibleTo;
+            let maskedPayload;
+            if ((row.event_type === "CARDS_DRAWN" ||
+                (row.event_type === "PHASE_CHANGED" && Array.isArray(payload.drawnCards))) &&
+                typeof payload.playerId === "string") {
+                visibleTo = [payload.playerId];
+                const { cards: _c, drawnCards: _d, ...rest } = payload;
+                maskedPayload = rest;
+            }
+            else if (row.event_type === "EL_GRINGO_STOLEN" &&
+                typeof payload.victimId === "string" &&
+                typeof payload.attackerId === "string") {
+                visibleTo = [payload.victimId, payload.attackerId];
+                maskedPayload = {
+                    ...payload,
+                    card: { id: "SECRET", name: "Card from hand", suit: "UNKNOWN", rank: "UNKNOWN" },
+                };
+            }
+            restoredEvents.push({
+                type: row.event_type,
+                payload,
+                timestamp,
+                visibleTo,
+                maskedPayload,
+            });
         }
+        restoredEvents.reverse();
         this.combatLogs.set(roomId, restoredLogs.slice(0, GameSessionManager.MAX_RESTORED_EVENTS));
         if (lobbyManager) {
             this.clearBotRunner(roomId);
@@ -535,7 +583,9 @@ class GameSessionManager {
                 .getBotIds()
                 .filter((id) => engine.getState().players.has(id));
             if (botIds.length > 0) {
-                this.botRunners.set(roomId, new bot_runner_1.BotRunner(botIds));
+                const runner = new bot_runner_1.BotRunner(botIds);
+                this.botRunners.set(roomId, runner);
+                runner.observeEvents(restoredEvents, engine);
             }
             this.syncArenaTimer(roomId, engine, lobbyManager);
             this.refreshInactivityTimer(roomId, engine, lobbyManager);
@@ -596,6 +646,20 @@ class GameSessionManager {
         const expansions = (0, expansion_config_1.filterActiveExpansions)(settings.expansions);
         const is3PVariant = players.length === 3;
         const playerList = players.map((p) => ({ id: p.id, name: p.name }));
+        const filteredChars = setup_dealer_1.SetupDealer.filterByExpansions(allCharacters, expansions);
+        const activeChars = filteredChars.length >= players.length * (settings.dualCharacterEnabled ? 2 : 1)
+            ? filteredChars
+            : allCharacters;
+        const activeCharIds = new Set(activeChars.map((c) => c.id));
+        const currentShoe = (this.roomCharacterShoes.get(roomId) || []).filter((id) => activeCharIds.has(id));
+        const remainingIds = new Set(currentShoe.length > 0 ? currentShoe : activeChars.map((c) => c.id));
+        const recentByPlayer = new Map();
+        for (const p of players) {
+            const history = this.recentPlayerCharacters.get(p.id);
+            if (history?.length) {
+                recentByPlayer.set(p.id, new Set(history));
+            }
+        }
         try {
             const engine = new game_engine_1.GameEngine(roomId, engineCards, engineEvents, {
                 defaultEnableCharacterSelect: true,
@@ -607,7 +671,26 @@ class GameSessionManager {
                 enableCharacterSelect: true,
                 expansions,
                 enable3PlayerVariant: is3PVariant,
+                recentCharacterIdsByPlayer: recentByPlayer,
+                remainingCharacterIds: remainingIds,
             });
+            const simState = engine.getState();
+            const dealtThisMatch = new Set();
+            for (const p of players) {
+                const dealt = simState.pendingCharacterSelect.get(p.id)?.candidates.map((c) => c.id) ||
+                    simState.players.get(p.id)?.characters.map((c) => c.id) ||
+                    [];
+                for (const cid of dealt)
+                    dealtThisMatch.add(cid);
+                this.recordRecentPlayerCharacters(p.id, dealt, activeChars.length);
+            }
+            let nextShoe = Array.from(remainingIds).filter((id) => !dealtThisMatch.has(id));
+            if (nextShoe.length === 0) {
+                nextShoe = activeChars
+                    .map((c) => c.id)
+                    .filter((id) => !dealtThisMatch.has(id));
+            }
+            this.roomCharacterShoes.set(roomId, nextShoe);
             this.clearInactivityTimer(roomId);
             this.clearArenaTimer(roomId);
             this.clearBotRunner(roomId);

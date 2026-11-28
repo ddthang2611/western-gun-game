@@ -24,8 +24,8 @@
 
   &__grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(195px, 1fr));
+    gap: 14px;
 
     .ui-popover {
       display: block;
@@ -40,7 +40,7 @@
     outline: 2px solid $western-border-wood;
     outline-offset: -2px;
     border-radius: 8px;
-    padding: 4px;
+    padding: 6px;
     cursor: pointer;
     display: flex;
     flex-direction: column;
@@ -66,35 +66,11 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    font-style: normal;
   }
 
   &__preview-hp-label {
     font-size: 12px;
     color: $western-text-muted;
-  }
-
-  &__preview-grid {
-    display: flex;
-    gap: 12px;
-    flex-wrap: wrap;
-    padding-top: 4px;
-  }
-
-  &__preview-card {
-    flex: 0 0 116px;
-    width: 116px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: $western-bg-surface;
-    border: 1px solid $western-border-gold;
-    border-radius: 6px;
-    padding: 6px;
-  }
-
-  &__empty-text {
-    color: $western-text-dim;
-    font-size: 12px;
-    font-style: italic;
   }
 }

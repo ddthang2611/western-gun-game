@@ -38,9 +38,9 @@ const MY_HAND_ANCHOR =
 const MY_EQUIP_ANCHOR = '[data-flight-anchor="my-equip"], .game-table__console-equipments';
 const MY_GREEN_ANCHOR = '[data-flight-anchor="my-green"], .game-table__console-green';
 
-const DRAW_FLIGHT_MS = 560;
-const DRAW_STAGGER_MS = 140;
-const STEAL_FLIGHT_MS = 680;
+const DRAW_FLIGHT_MS = 850;
+const DRAW_STAGGER_MS = 280;
+const STEAL_FLIGHT_MS = 950;
 
 function normImg(img?: unknown): string | undefined {
   if (typeof img !== "string" || !img) return undefined;
@@ -86,12 +86,13 @@ function isKnownSecretCard(card?: RawCard): card is RawCard & { image: string } 
 const handleCardsDrawn: EventHandler = (p, ctx) => {
   const playerId = asStr(p.playerId);
   if (!playerId) return;
-  const targetAnchor = playerHandAnchor(ctx.getMyPlayerId(), playerId);
-  const count = Math.max(
-    1,
-    Math.min(5, Number(p.drawnCount || p.count || p.pickedCount || 1))
+  const rawCount = Number(
+    p.deckDrawnCount ?? p.drawnCount ?? p.count ?? p.pickedCount ?? 0
   );
-  // Wait for triggering card (e.g., Stagecoach / Pony Express / Bible) to land in Card Arena first
+  if (!Number.isFinite(rawCount) || rawCount <= 0) return;
+  const targetAnchor = playerHandAnchor(ctx.getMyPlayerId(), playerId);
+  const count = Math.min(5, Math.floor(rawCount));
+  // Wait for triggering card to land in Card Arena first
   const baseDelay = p.sourceCard ? ARENA_FLIGHT_MS + 60 : 40;
   for (let i = 0; i < count; i++) {
     ctx.scheduleTimeout(() => {
@@ -108,9 +109,12 @@ const handleCardsDrawn: EventHandler = (p, ctx) => {
 
 const handlePhaseChanged: EventHandler = (p, ctx) => {
   const playerId = asStr(p.playerId);
-  if (p.phase !== 1 || Number(p.drawnCount ?? 0) <= 0 || !playerId) return;
+  const rawCount = Number(p.deckDrawnCount ?? p.drawnCount ?? 0);
+  if (p.phase !== 1 || !Number.isFinite(rawCount) || rawCount <= 0 || !playerId) {
+    return;
+  }
   const targetAnchor = playerHandAnchor(ctx.getMyPlayerId(), playerId);
-  const count = Math.max(1, Math.min(5, Number(p.drawnCount || 1)));
+  const count = Math.min(5, Math.floor(rawCount));
   for (let i = 0; i < count; i++) {
     ctx.scheduleTimeout(() => {
       ctx.enqueueFlight(DRAW_PILE_ANCHOR, targetAnchor, {
@@ -170,13 +174,42 @@ const GAME_EVENT_HANDLERS: Record<string, EventHandler> = {
   SUZY_LAFAYETTE_TRIGGERED: handleCardsDrawn,
   MOLLY_STARK_TRIGGERED: handleCardsDrawn,
   HERB_HUNTER_DRAW: handleCardsDrawn,
-  KIT_CARLSON_PICKED: handleCardsDrawn,
-  EVENT_TRAIN_ARRIVAL_DRAW: handleCardsDrawn,
-  ABANDONED_MINE_DRAW: handleCardsDrawn,
+  EVENT_RANCH_EXCHANGE: (p, ctx) => {
+    const playerId = asStr(p.playerId);
+    const drawnCount = Number(p.drawnCount ?? 0);
+    if (!playerId || !Number.isFinite(drawnCount) || drawnCount <= 0) return;
+    handleCardsDrawn(
+      {
+        playerId,
+        deckDrawnCount: drawnCount,
+        sourceCard: Number(p.discardedCount ?? 0) > 0 ? { id: "ranch" } : undefined,
+      },
+      ctx
+    );
+  },
+  ABANDONED_MINE_DRAW: (p, ctx) => {
+    const playerId = asStr(p.playerId);
+    if (!playerId) return;
+    const card = asCard(p.card);
+    const hasKnownArt = isKnownSecretCard(card);
+    const targetAnchor = playerHandAnchor(ctx.getMyPlayerId(), playerId);
+    ctx.scheduleTimeout(() => {
+      ctx.enqueueFlight(DISCARD_PILE_ANCHOR, targetAnchor, {
+        faceDown: !hasKnownArt,
+        cardImage: hasKnownArt ? normImg(card.image) : undefined,
+        label: hasKnownArt ? card.name : undefined,
+        durationMs: STEAL_FLIGHT_MS,
+        startScale: 0.72,
+        endScale: 0.9,
+        fadeOutAtEnd: true,
+      });
+    }, 60);
+  },
   OUTLAW_BOUNTY_REWARD: (p, ctx) => {
     const killerId = asStr(p.killerId);
-    if (!killerId) return;
-    handleCardsDrawn({ playerId: killerId, count: p.rewardCount || 3 }, ctx);
+    const rewardCount = Number(p.rewardCount ?? 0);
+    if (!killerId || !Number.isFinite(rewardCount) || rewardCount <= 0) return;
+    handleCardsDrawn({ playerId: killerId, deckDrawnCount: rewardCount }, ctx);
   },
 
   PEDRO_RAMIREZ_DRAW: (p, ctx) => {
@@ -211,24 +244,6 @@ const GAME_EVENT_HANDLERS: Record<string, EventHandler> = {
       endScale: 0.9,
       fadeOutAtEnd: true,
     });
-  },
-
-  JESSE_JONES_STEAL: (p, ctx) => {
-    const playerId = asStr(p.playerId);
-    const targetPlayerId = asStr(p.targetPlayerId);
-    if (!playerId || !targetPlayerId) return;
-    const myId = ctx.getMyPlayerId();
-    ctx.enqueueFlight(
-      playerHandAnchor(myId, targetPlayerId),
-      playerHandAnchor(myId, playerId),
-      {
-        faceDown: true,
-        durationMs: STEAL_FLIGHT_MS,
-        startScale: 0.85,
-        endScale: 0.9,
-        fadeOutAtEnd: true,
-      }
-    );
   },
 
   EL_GRINGO_STOLEN: (p, ctx) => {
@@ -286,19 +301,23 @@ const GAME_EVENT_HANDLERS: Record<string, EventHandler> = {
 
   VULTURE_SAM_SCAVENGED: (p, ctx) => {
     const scavengerId = asStr(p.scavengerId);
-    if (!scavengerId) return;
+    const rawCount = Number(p.cardsCount ?? p.cardCount ?? 0);
+    if (!scavengerId || !Number.isFinite(rawCount) || rawCount <= 0) return;
+    const count = Math.min(5, Math.floor(rawCount));
     const myId = ctx.getMyPlayerId();
     const victimId = asStr(p.victimId);
     const fromAnchor = victimId ? playerHandAnchor(myId, victimId) : ARENA_ANCHOR;
-    ctx.scheduleTimeout(() => {
-      ctx.enqueueFlight(fromAnchor, playerHandAnchor(myId, scavengerId), {
-        faceDown: true,
-        durationMs: STEAL_FLIGHT_MS,
-        startScale: 0.8,
-        endScale: 0.9,
-        fadeOutAtEnd: true,
-      });
-    }, 200);
+    for (let i = 0; i < count; i++) {
+      ctx.scheduleTimeout(() => {
+        ctx.enqueueFlight(fromAnchor, playerHandAnchor(myId, scavengerId), {
+          faceDown: true,
+          durationMs: STEAL_FLIGHT_MS,
+          startScale: 0.8,
+          endScale: 0.9,
+          fadeOutAtEnd: true,
+        });
+      }, 200 + i * DRAW_STAGGER_MS);
+    }
   },
 };
 

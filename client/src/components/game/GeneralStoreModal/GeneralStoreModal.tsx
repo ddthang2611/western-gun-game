@@ -23,16 +23,19 @@ export const GeneralStoreModal: React.FC<GeneralStoreModalProps> = ({
   onPickCard,
 }) => {
   const { t } = useI18n();
+  const isMyPick = store.currentPickerId === myPlayerId;
+  const canPick = isMyPick && !disabled;
+  // Auto-select sole remaining card
+  const defaultCardId =
+    isMyPick && store.pool.length === 1 ? store.pool[0].id : null;
   const selectionKey = `${store.currentPickerId}:${store.pool.length}`;
   const [selectionState, setSelectionState] = useState<{
     key: string;
     cardId: string | null;
-  }>({ key: selectionKey, cardId: null });
+  }>({ key: selectionKey, cardId: defaultCardId });
 
-  const selectedCardId = selectionState.key === selectionKey ? selectionState.cardId : null;
-
-  const isMyPick = store.currentPickerId === myPlayerId;
-  const canPick = isMyPick && !disabled;
+  const selectedCardId =
+    selectionState.key === selectionKey ? selectionState.cardId : defaultCardId;
   const pickerPlayer = players.find((p) => p.id === store.currentPickerId);
   const remainingOrderNames = store.draftOrder
     .slice(store.currentPickerIndex)

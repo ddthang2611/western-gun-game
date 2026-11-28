@@ -15,17 +15,14 @@ export const CharacterCandidateCard: React.FC<CharacterCandidateCardProps> = ({
   isSelected,
   onToggle,
 }) => {
-  const { t, tChar } = useI18n();
+  const { tChar } = useI18n();
   const charLoc = tChar(character);
 
   return (
     <DebouncedPopover
-      title={`${charLoc.primary.name} (${character.baseHp} HP)`}
       content={
         <CardTooltipContent
-          typeLabel={t("popover.type.character")}
           primaryDesc={charLoc.primary.desc}
-          secondaryTitle={charLoc.secondary?.name}
           secondaryDesc={charLoc.secondary?.desc}
         />
       }

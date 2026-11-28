@@ -107,6 +107,8 @@ class GameEngine {
             enableCharacterSelect: enableCharSelect,
             expansions,
             is3PlayerVariant: enable3PVariant,
+            recentCharacterIdsByPlayer: options?.recentCharacterIdsByPlayer,
+            remainingCharacterIds: options?.remainingCharacterIds,
         });
         this.state.players = players;
         this.state.sheriffId = sheriffId;

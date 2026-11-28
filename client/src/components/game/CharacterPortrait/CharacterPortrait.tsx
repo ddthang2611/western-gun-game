@@ -31,7 +31,7 @@ export const CharacterPortrait: React.FC<CharacterPortraitProps> = ({
     .join(" ");
 
   return (
-    <div className={rootClasses} title={character.name}>
+    <div className={rootClasses}>
       <div className="char-portrait__frame">
         <img
           src={imgSrc}

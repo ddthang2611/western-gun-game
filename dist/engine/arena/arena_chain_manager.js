@@ -3,13 +3,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.ArenaChainManager = exports.ARENA_PLACEMENT_RETURN_MS = exports.ARENA_HOLD_NO_NEW_CARD_MS = exports.ARENA_HOLD_CHAIN_MS = exports.ARENA_HOLD_SIMPLE_MS = exports.ARENA_STEP_BUFFER_MS = exports.ARENA_BATCH_STAGGER_MS = exports.ARENA_FLIGHT_MS = void 0;
 const inventory_1 = require("../utils/inventory");
 const card_registry_1 = require("../cards/card_registry");
-exports.ARENA_FLIGHT_MS = 420;
-exports.ARENA_BATCH_STAGGER_MS = 340;
-exports.ARENA_STEP_BUFFER_MS = 100;
-exports.ARENA_HOLD_SIMPLE_MS = 950;
-exports.ARENA_HOLD_CHAIN_MS = 1450;
-exports.ARENA_HOLD_NO_NEW_CARD_MS = 750;
-exports.ARENA_PLACEMENT_RETURN_MS = 420;
+exports.ARENA_FLIGHT_MS = 720;
+exports.ARENA_BATCH_STAGGER_MS = 480;
+exports.ARENA_STEP_BUFFER_MS = 120;
+exports.ARENA_HOLD_SIMPLE_MS = 1200;
+exports.ARENA_HOLD_CHAIN_MS = 1700;
+exports.ARENA_HOLD_NO_NEW_CARD_MS = 850;
+exports.ARENA_PLACEMENT_RETURN_MS = 680;
 class ArenaChainManager {
     static createIdleChain() {
         return {

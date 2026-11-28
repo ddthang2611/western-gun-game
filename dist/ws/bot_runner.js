@@ -3,7 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BotRunner = void 0;
 const index_1 = require("../engine/bot/index");
 class BotRunner {
-    static DELAY_THINK_MS = 1000;
+    static DELAY_THINK_MS = 1350;
     static MAX_RETRIES_PER_SEQ = 3;
     bots = new Map();
     timer = null;
@@ -130,6 +130,90 @@ class BotRunner {
                 return { playerId: botId, type: "SELECT_CHARACTERS", characterIds };
             }
         }
+        // Handle activeChain card picks first
+        if (snap.pendingLuckyDukePick) {
+            if (snap.pendingLuckyDukePick.playerId !== botId)
+                return null;
+            const drawn = snap.pendingLuckyDukePick.drawnCards || [];
+            const chosen = drawn.find((c) => c.matches) || drawn[0];
+            if (chosen) {
+                return { playerId: botId, type: "SELECT_STOLEN_CARD", cardId: chosen.id };
+            }
+            return null;
+        }
+        if (snap.pendingElGringoPick) {
+            if (snap.pendingElGringoPick.victimId !== botId)
+                return null;
+            return {
+                playerId: botId,
+                type: "SELECT_STOLEN_CARD",
+                targetPlayerId: snap.pendingElGringoPick.attackerId,
+                targetArea: "HAND",
+            };
+        }
+        if (snap.pendingBrawlPick) {
+            if (snap.pendingBrawlPick.actorPlayerId !== botId)
+                return null;
+            const target = snap.players.find((p) => p.id === snap.pendingBrawlPick.currentTargetId);
+            if (!target)
+                return null;
+            if (target.handCount > 0) {
+                return {
+                    playerId: botId,
+                    type: "SELECT_STOLEN_CARD",
+                    targetPlayerId: target.id,
+                    targetArea: "HAND",
+                };
+            }
+            const eq = target.equipments;
+            const firstEquip = eq?.weapon ||
+                eq?.barrel ||
+                eq?.horseDef ||
+                eq?.horseOff ||
+                eq?.extra ||
+                eq?.extras?.[0];
+            if (firstEquip) {
+                return {
+                    playerId: botId,
+                    type: "SELECT_STOLEN_CARD",
+                    targetPlayerId: target.id,
+                    targetArea: "EQUIPMENT",
+                    targetCardId: firstEquip.id,
+                };
+            }
+            if (target.greenCards?.length > 0) {
+                return {
+                    playerId: botId,
+                    type: "SELECT_STOLEN_CARD",
+                    targetPlayerId: target.id,
+                    targetArea: "GREEN",
+                    targetCardId: target.greenCards[0].card.id,
+                };
+            }
+            if (target.judgements?.length > 0) {
+                return {
+                    playerId: botId,
+                    type: "SELECT_STOLEN_CARD",
+                    targetPlayerId: target.id,
+                    targetArea: "JUDGEMENT",
+                    targetCardId: target.judgements[0].card.id,
+                };
+            }
+            return null;
+        }
+        if (snap.generalStore) {
+            if (snap.generalStore.currentPickerId !== botId)
+                return null;
+            const firstPoolCard = snap.generalStore.pool?.[0];
+            if (firstPoolCard) {
+                return {
+                    playerId: botId,
+                    type: "SELECT_STOLEN_CARD",
+                    cardId: firstPoolCard.id,
+                };
+            }
+            return null;
+        }
         if (snap.myPendingReaction?.targetPlayerId === botId) {
             if (snap.myPendingReaction.type === "EVENT_DALTONS_DISCARD") {
                 const me = snap.players.find((p) => p.id === botId);
@@ -152,6 +236,9 @@ class BotRunner {
                 type: "RESOLVE_REACTION",
                 payload: { action },
             };
+        }
+        if ((snap.pendingReactionTargets?.length ?? 0) > 0) {
+            return null;
         }
         if (snap.pendingTurnStartChoice?.playerId === botId) {
             if (snap.pendingTurnStartChoice.type === "VERA_CUSTER_COPY") {
@@ -189,9 +276,14 @@ class BotRunner {
         if (snap.turnPlayerId === botId) {
             if (snap.currentPhase === 3) {
                 const me = snap.players.find((p) => p.id === botId);
-                const handLimit = me?.characters?.some((c) => c.id === "sean_mallory")
-                    ? 10
-                    : me?.hp ?? 0;
+                const hangover = snap.activeEvent?.effectCode === "EVENT_HN_HANGOVER";
+                const isSean = (c) => Boolean(c &&
+                    (c.id === "char_sean_mallory" ||
+                        c.id === "sean_mallory" ||
+                        c.name?.trim().toLowerCase() === "sean mallory"));
+                const hasSeanMallory = !hangover &&
+                    Boolean(me?.characters?.some(isSean) || isSean(me?.copiedCharacter));
+                const handLimit = hasSeanMallory ? 10 : Math.max(0, me?.hp ?? 0);
                 const excess = Math.max(0, (snap.myState?.handCards.length || 0) - handLimit);
                 const discardIds = (snap.myState?.handCards || []).slice(0, excess).map((c) => c.id);
                 return { playerId: botId, type: "END_TURN", discardCardIds: discardIds };

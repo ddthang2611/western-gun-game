@@ -19,6 +19,8 @@ export interface InitializePlayerOptions {
   enableCharacterSelect?: boolean;
   expansions?: string[];
   is3PlayerVariant?: boolean;
+  recentCharacterIdsByPlayer?: ReadonlyMap<string, ReadonlySet<string>>;
+  remainingCharacterIds?: ReadonlySet<string>;
 }
 
 export interface SetupOptions {
@@ -30,6 +32,8 @@ export interface SetupOptions {
   enableCharacterSelect?: boolean;
   expansions?: string[];
   is3PlayerVariant?: boolean;
+  recentCharacterIdsByPlayer?: ReadonlyMap<string, ReadonlySet<string>>;
+  remainingCharacterIds?: ReadonlySet<string>;
   state?: SimulationState;
 }
 
@@ -114,14 +118,26 @@ export class SetupDealer {
     return list;
   }
 
-  // Draw unique characters from pool
+  // Draw unique characters avoiding recent repeats
   private static drawCharacters(
     pool: EngineCharacter[],
     fallbackSource: EngineCharacter[],
-    count: number
+    count: number,
+    avoidIds?: ReadonlySet<string>
   ): EngineCharacter[] {
     const picked: EngineCharacter[] = [];
     const usedIds = new Set<string>();
+
+    if (avoidIds && avoidIds.size > 0) {
+      for (let i = pool.length - 1; i >= 0 && picked.length < count; i--) {
+        const char = pool[i];
+        if (!usedIds.has(char.id) && !avoidIds.has(char.id)) {
+          pool.splice(i, 1);
+          usedIds.add(char.id);
+          picked.push(char);
+        }
+      }
+    }
 
     while (picked.length < count && pool.length > 0) {
       const char = pool.pop()!;
@@ -133,7 +149,13 @@ export class SetupDealer {
 
     if (picked.length < count && fallbackSource.length > 0) {
       const extraPool = this.shuffleArray(fallbackSource);
-      for (const char of extraPool) {
+      const ordered = avoidIds?.size
+        ? [
+            ...extraPool.filter((c) => !avoidIds.has(c.id)),
+            ...extraPool.filter((c) => avoidIds.has(c.id)),
+          ]
+        : extraPool;
+      for (const char of ordered) {
         if (picked.length >= count) break;
         if (!usedIds.has(char.id)) {
           usedIds.add(char.id);
@@ -182,6 +204,8 @@ export class SetupDealer {
     let enableCharacterSelect = false;
     let expansions: string[] | undefined;
     let is3PlayerVariant = false;
+    let recentCharacterIdsByPlayer: ReadonlyMap<string, ReadonlySet<string>> | undefined;
+    let remainingCharacterIds: ReadonlySet<string> | undefined;
 
     if ("playerIds" in stateOrOptions) {
       state = stateOrOptions.state;
@@ -193,6 +217,8 @@ export class SetupDealer {
       enableCharacterSelect = Boolean(stateOrOptions.enableCharacterSelect);
       expansions = stateOrOptions.expansions ?? state?.expansions;
       is3PlayerVariant = Boolean(stateOrOptions.is3PlayerVariant ?? state?.is3PlayerVariant);
+      recentCharacterIdsByPlayer = stateOrOptions.recentCharacterIdsByPlayer;
+      remainingCharacterIds = stateOrOptions.remainingCharacterIds;
     } else {
       state = stateOrOptions;
       playerInfos = playerInfosArg || [];
@@ -202,25 +228,48 @@ export class SetupDealer {
       enableCharacterSelect = Boolean(optionsArg?.enableCharacterSelect);
       expansions = optionsArg?.expansions ?? state.expansions;
       is3PlayerVariant = Boolean(optionsArg?.is3PlayerVariant ?? state.is3PlayerVariant);
+      recentCharacterIdsByPlayer = optionsArg?.recentCharacterIdsByPlayer;
+      remainingCharacterIds = optionsArg?.remainingCharacterIds;
     }
 
     const use3PVariant = playerInfos.length === 3 && is3PlayerVariant;
     const roles = this.shuffleArray(this.getRoleDistribution(playerInfos.length, use3PVariant));
 
     const requiredCount = dualCharacterMode ? 2 : 1;
-    const candidateCount = requiredCount === 2 ? 4 : 3;
-    const neededChars =
-      playerInfos.length * (enableCharacterSelect ? candidateCount : requiredCount);
-
+    const desiredCandidateCount = requiredCount === 2 ? 4 : 3;
     const filteredChars = this.filterByExpansions(allCharacters, expansions);
-    const charSource = filteredChars.length >= neededChars ? filteredChars : allCharacters;
-    const characterPool = this.shuffleArray(charSource);
+    const minRequired = playerInfos.length * requiredCount;
+    const charSource = filteredChars.length >= minRequired ? filteredChars : allCharacters;
+    const maxDisjointPerPlayer = Math.max(
+      requiredCount,
+      Math.floor(charSource.length / Math.max(1, playerInfos.length))
+    );
+    const candidateCount = Math.min(desiredCandidateCount, maxDisjointPerPlayer);
+    // Draw from unseen room shoe first before reshuffled used characters
+    const characterPool = remainingCharacterIds?.size
+      ? [
+          ...this.shuffleArray(charSource.filter((c) => !remainingCharacterIds!.has(c.id))),
+          ...this.shuffleArray(charSource.filter((c) => remainingCharacterIds!.has(c.id))),
+        ]
+      : this.shuffleArray(charSource);
 
     if (state) {
       state.dualCharacterMode = dualCharacterMode;
       state.hpRule = hpRule;
       state.is3PlayerVariant = use3PVariant;
       state.pendingCharacterSelect.clear();
+    }
+
+    const dealOrder = this.shuffleArray(playerInfos);
+    const perPlayerDrawCount = enableCharacterSelect && state ? candidateCount : requiredCount;
+    const dealtByPlayer = new Map<string, EngineCharacter[]>();
+
+    for (const user of dealOrder) {
+      const avoidIds = recentCharacterIdsByPlayer?.get(user.id);
+      dealtByPlayer.set(
+        user.id,
+        this.drawCharacters(characterPool, charSource, perPlayerDrawCount, avoidIds)
+      );
     }
 
     const players = new Map<string, EnginePlayer>();
@@ -234,7 +283,7 @@ export class SetupDealer {
       if (role === "deputy" && !deputyId) deputyId = user.id;
 
       if (enableCharacterSelect && state) {
-        const candidates = this.drawCharacters(characterPool, charSource, candidateCount);
+        const candidates = dealtByPlayer.get(user.id) || [];
         state.pendingCharacterSelect.set(user.id, {
           playerId: user.id,
           candidates,
@@ -262,7 +311,7 @@ export class SetupDealer {
         return;
       }
 
-      const assignedChars = this.drawCharacters(characterPool, charSource, requiredCount);
+      const assignedChars = dealtByPlayer.get(user.id) || [];
       const maxHp = this.calculateMaxHp(assignedChars, isSheriff, hpRule);
 
       let initialHand: EngineCard[] = [];

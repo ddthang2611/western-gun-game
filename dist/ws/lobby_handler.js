@@ -365,11 +365,16 @@ class LobbyManager {
                     name: session.name,
                 });
                 this.broadcastLobbyState();
-                // If game is in progress, sync game state immediately
+                // Broadcast snapshot on member reconnect
                 const gameManager = game_handler_1.GameSessionManager.getInstance();
                 const activeEngine = gameManager.getSession(this.state.roomId);
                 if (activeEngine) {
-                    gameManager.sendPlayerSnapshot(activeEngine, session.playerId, this.state.roomId, this);
+                    if (this.state.players.some((p) => p.id === session.playerId)) {
+                        gameManager.broadcastGameSnapshot(this.state.roomId, activeEngine, this);
+                    }
+                    else {
+                        gameManager.sendPlayerSnapshot(activeEngine, session.playerId, this.state.roomId, this);
+                    }
                 }
                 return currentToken;
             }
@@ -413,11 +418,11 @@ class LobbyManager {
                     name: player.player_name,
                 });
                 this.broadcastLobbyState();
-                // Sync active match snapshot
+                // Broadcast snapshot to all participants
                 const gameManager = game_handler_1.GameSessionManager.getInstance();
                 const activeEngine = gameManager.getSession(this.state.roomId);
                 if (activeEngine && this.state.players.some((p) => p.id === player.player_id)) {
-                    gameManager.sendPlayerSnapshot(activeEngine, player.player_id, this.state.roomId, this);
+                    gameManager.broadcastGameSnapshot(this.state.roomId, activeEngine, this);
                 }
                 return currentToken;
             }
@@ -490,7 +495,7 @@ class LobbyManager {
                 const gameManager = game_handler_1.GameSessionManager.getInstance();
                 const activeEngine = gameManager.getSession(this.state.roomId);
                 if (activeEngine && existingMember) {
-                    gameManager.sendPlayerSnapshot(activeEngine, playerId, this.state.roomId, this);
+                    gameManager.broadcastGameSnapshot(this.state.roomId, activeEngine, this);
                 }
                 return currentToken;
             }

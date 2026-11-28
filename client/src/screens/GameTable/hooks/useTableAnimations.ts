@@ -17,10 +17,10 @@ export interface VfxBeam {
   type: "bullet" | "heal" | "jail" | "dynamite" | "draw";
 }
 
-export const ARENA_FLIGHT_MS = 420;
-export const ARENA_BATCH_STAGGER_MS = 340;
-export const ARENA_EXIT_MS = 220;
-export const PLACEMENT_RETURN_MS = 420;
+export const ARENA_FLIGHT_MS = 720;
+export const ARENA_BATCH_STAGGER_MS = 480;
+export const ARENA_EXIT_MS = 260;
+export const PLACEMENT_RETURN_MS = 680;
 
 const ARENA_ANCHOR = '[data-flight-anchor="card-arena"], .inflight-chain';
 const DRAW_PILE_ANCHOR = '[data-flight-anchor="draw-pile"], .game-table__pile-card--stack';
@@ -262,15 +262,23 @@ export function useTableAnimations(
       const idSet = new Set(cardIds);
       setConcealedHandCardIds((prev) => Array.from(new Set([...prev, ...cardIds])));
 
-      // Reveal once draw/steal flight to hand lands
-      scheduleTimeout(() => {
-        const now = Date.now();
-        const remaining = Math.max(0, myHandFlightEndAtRef.current - now);
-        const waitMs = remaining > 50 ? Math.min(remaining, 2200) : 700;
-        scheduleTimeout(() => {
-          setConcealedHandCardIds((prev) => prev.filter((id) => !idSet.has(id)));
-        }, waitMs);
-      }, 80);
+      // Reveal once hand flight lands
+      let retriedForArena = false;
+      const revealWhenLanded = () => {
+        const remaining = myHandFlightEndAtRef.current - Date.now();
+        if (remaining > 40) {
+          retriedForArena = true;
+          scheduleTimeout(revealWhenLanded, Math.min(remaining + 30, 1600));
+          return;
+        }
+        if (!retriedForArena) {
+          retriedForArena = true;
+          scheduleTimeout(revealWhenLanded, ARENA_FLIGHT_MS + 120);
+          return;
+        }
+        setConcealedHandCardIds((prev) => prev.filter((id) => !idSet.has(id)));
+      };
+      scheduleTimeout(revealWhenLanded, 120);
     },
     [scheduleTimeout]
   );
@@ -364,6 +372,11 @@ export function useTableAnimations(
     const myId = myPlayerIdRef.current;
 
     if (!prev.initialized) {
+      if (nextEntries.length > 0) {
+        scheduleTimeout(() => {
+          setLandedEntryIds(nextEntries.map((e) => e.id));
+        }, 0);
+      }
       prevArenaRef.current = {
         initialized: true,
         chainId: nextChainId,
@@ -497,6 +510,17 @@ export function useTableAnimations(
           }, readPauseMs);
         }, launchDelay + ARENA_FLIGHT_MS);
       });
+    } else if ((arenaChain?.stepLockRemainingMs ?? 0) === 0) {
+      // Reconcile landed arena entries
+      scheduleTimeout(() => {
+        const allIds = nextEntries.map((e) => e.id);
+        setLandedEntryIds((curr) =>
+          allIds.every((id) => curr.includes(id))
+            ? curr
+            : Array.from(new Set([...curr, ...allIds]))
+        );
+        setPendingReadPauseCount(0);
+      }, 0);
     }
 
     prevArenaRef.current = {

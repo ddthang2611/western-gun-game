@@ -102,6 +102,8 @@ export class GameEngine {
       enableCharacterSelect?: boolean;
       expansions?: string[];
       enable3PlayerVariant?: boolean;
+      recentCharacterIdsByPlayer?: ReadonlyMap<string, ReadonlySet<string>>;
+      remainingCharacterIds?: ReadonlySet<string>;
     }
   ): CommandResult & { initialSnapshot?: FilteredWorldSnapshot } {
     const expansions = options?.expansions
@@ -155,6 +157,8 @@ export class GameEngine {
         enableCharacterSelect: enableCharSelect,
         expansions,
         is3PlayerVariant: enable3PVariant,
+        recentCharacterIdsByPlayer: options?.recentCharacterIdsByPlayer,
+        remainingCharacterIds: options?.remainingCharacterIds,
       }
     );
 

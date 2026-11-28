@@ -15,13 +15,13 @@ import { PlayerCommand } from "../types/actions";
 import { getAllEquippedCards, normalizeEquipName } from "../utils/inventory";
 import { CardRegistry } from "../cards/card_registry";
 
-export const ARENA_FLIGHT_MS = 420;
-export const ARENA_BATCH_STAGGER_MS = 340;
-export const ARENA_STEP_BUFFER_MS = 100;
-export const ARENA_HOLD_SIMPLE_MS = 950;
-export const ARENA_HOLD_CHAIN_MS = 1450;
-export const ARENA_HOLD_NO_NEW_CARD_MS = 750;
-export const ARENA_PLACEMENT_RETURN_MS = 420;
+export const ARENA_FLIGHT_MS = 720;
+export const ARENA_BATCH_STAGGER_MS = 480;
+export const ARENA_STEP_BUFFER_MS = 120;
+export const ARENA_HOLD_SIMPLE_MS = 1200;
+export const ARENA_HOLD_CHAIN_MS = 1700;
+export const ARENA_HOLD_NO_NEW_CARD_MS = 850;
+export const ARENA_PLACEMENT_RETURN_MS = 680;
 
 export interface ArenaEntryDraft {
   kind: ArenaEntryKind;

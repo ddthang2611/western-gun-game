@@ -3,10 +3,8 @@ import type { Character } from "../../../types/game";
 import { useI18n } from "../../../i18n";
 import { BulletMeter } from "../BulletMeter/BulletMeter";
 import { Modal } from "../../ui/Modal/Modal";
-import { Panel } from "../../ui/Panel/Panel";
 import { Button } from "../../ui/Button/Button";
 import { CharacterCandidateCard } from "./CharacterCandidateCard";
-import { CharacterPreviewItem } from "./CharacterPreviewItem";
 import "./CharacterSelectModal.scss";
 
 export type HpRuleType = "strict" | "balanced" | "juggernaut";
@@ -164,34 +162,26 @@ export const CharacterSelectModal: React.FC<CharacterSelectModalProps> = ({
             />
           ))}
         </div>
-
-        <Panel
-          headerExtra={
-            <div className="char-select__preview-hp">
-              <span className="char-select__preview-hp-label">
-                {t("modals.charSelect.maxHp", {
-                  bonus: isSheriff
-                    ? t("modals.charSelect.sheriffBonus")
-                    : t("modals.charSelect.baseBonus"),
-                })}
-              </span>
-              <BulletMeter
-                currentHp={calculatedHp}
-                maxHp={calculatedHp}
-                size="medium"
-              />
-            </div>
-          }
-        >
-          <div className="char-select__preview-grid">
-            {selectedChars.map((c) => (
-              <CharacterPreviewItem key={c.id} character={c} />
-            ))}
-          </div>
-        </Panel>
       </Modal.Body>
 
-      <Modal.Footer>
+      <Modal.Footer
+        hint={
+          <div className="char-select__preview-hp">
+            <span className="char-select__preview-hp-label">
+              {t("modals.charSelect.maxHp", {
+                bonus: isSheriff
+                  ? t("modals.charSelect.sheriffBonus")
+                  : t("modals.charSelect.baseBonus"),
+              })}
+            </span>
+            <BulletMeter
+              currentHp={calculatedHp}
+              maxHp={calculatedHp}
+              size="medium"
+            />
+          </div>
+        }
+      >
         {onCancel && (
           <Button variant="secondary" onClick={onCancel}>
             {t("common.close")}
